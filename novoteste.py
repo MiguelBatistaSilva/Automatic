@@ -78,13 +78,12 @@ def testar_base_conhecimento_windows():
             EC.presence_of_element_located((By.ID, "NONE_knowledgeProcedure_lookup_query"))
         )
         campo_bk.clear() 
-        campo_bk.send_keys("windowspe")  # 🎯 TESTE: Palavra-chave 'windowspe'
+        campo_bk.send_keys("microcomputador")  # 🎯 TESTE: Palavra-chave
         
         print("✅ Campo 'Palavra-chave' preenchido com 'windowspe'.")
     except Exception as e:
         print(f"❌ Erro ao preencher 'Palavra-chave BK': {e}")
         return
-
 
     # -- LUPA --
     try:    
@@ -98,12 +97,30 @@ def testar_base_conhecimento_windows():
     except Exception as e:
         print(f"❌ Erro ao clicar no botão 'Pesquisar': {e}")
         return
+    
+    time.sleep(2)
+    
+    # -- PROCURANDO... --
+    try:
+        cabecalho_classificacao = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.ID, "knowledgeSearch_shownValues_gridHdr1"))
+        )
+        
+        actions = ActionChains(driver)
+        actions.double_click(cabecalho_classificacao).perform()
+        
+        print("✅ Reordenação da tabela concluída.")
+        
+    except Exception as e:
+        print(f"❌ Erro ao reordenar a tabela: {e}")
+
+    time.sleep(1)
 
     # -- BOTÃO DIREITO (SELEÇÃO DO SEGUNDO ARTIGO) -- 
     try:
         # 🎯 TESTE: Usando 'rowId2' para selecionar o segundo artigo
         linha_artigo = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'dojoxGridRow') and contains(@class, 'rowId2')]")) 
+            EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'dojoxGridRow') and contains(@class, 'rowId1')]")) 
         )
         actions = ActionChains(driver)
         actions.context_click(linha_artigo).perform()

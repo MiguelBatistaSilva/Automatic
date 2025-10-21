@@ -27,7 +27,7 @@ def knowledgebase(driver):
         )
         
         campo_bk.clear() 
-        campo_bk.send_keys("itom") 
+        campo_bk.send_keys("microcomputador") 
         
         print("✅ Campo 'Palavra-chave' preenchido e limpo.")
 
@@ -47,7 +47,7 @@ def knowledgebase(driver):
     except Exception as e:
         print(f"❌ Erro ao clicar no botão 'Pesquisar': {e}")
 
-    time.sleep(4)
+    time.sleep(3)
 
     # -- PROCURANDO... --
     try:
@@ -63,7 +63,7 @@ def knowledgebase(driver):
     except Exception as e:
         print(f"❌ Erro ao reordenar a tabela: {e}")
 
-    time.sleep(1)
+    time.sleep(0.9)
 
     # -- BOTÃO DIREITO -- 
     try:

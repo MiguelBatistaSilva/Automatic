@@ -47,7 +47,7 @@ def knowledgebase(driver):
     except Exception as e:
         print(f"❌ Erro ao clicar no botão 'Pesquisar': {e}")
 
-    time.sleep(4)
+    time.sleep(3)
 
     # -- PROCURANDO... --
     try:

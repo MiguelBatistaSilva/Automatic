@@ -1,6 +1,6 @@
 from interface import open_screen
 import windows
-from cables import flow_cables
+import cables
 from Kaspersky import flow_kaspersky
 import itom
 from Nomenclature import flow_nomenclature
@@ -24,7 +24,7 @@ if __name__ == "__main__":
     if chamado == "WINDOWS":
         windows.flow_windows(df, secretaria, link_site, log)
     elif chamado == "CABOS":
-        flow_cables(df, secretaria, log)
+        cables.flow_cables(df, secretaria, link_site, log)
     elif chamado == "ANTIVÍRUS":
         flow_kaspersky(df, secretaria, log)
     elif chamado == "ITOM":

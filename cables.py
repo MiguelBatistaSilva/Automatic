@@ -9,38 +9,30 @@ import bk_cables
 import pandas as pd
 import time
 
-def flow_cables(df, secretaria, log):
+def flow_cables(df, secretaria, link_site, log):
 
     log("Criando Requisição de Serviço...", tipo="status")
 
     # --- Configuração do Chrome ---
     chrome_options = Options()
     chrome_options.add_argument("--start-maximized")
-    service = Service("/home/velta-int-sys/Projects/Automatic/chromedriver-linux64/chromedriver")  # coloque o caminho se necessário
+    service = Service("/home/velta-int-sys/Projects/Automatic/chromedriver-linux64/chromedriver") 
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     # --- Acessa o Assyst ---
-    driver.get("https://cati.tjce.jus.br/assystweb/application.do")
+    driver.get(link_site)
+    log(f"Acessando: {link_site}", "info")
+    log("Aguardando login manual no Assyst...", "info")
 
     print("⚙️ Faça login manualmente no Assyst...")
 
-    WebDriverWait(driver, 600).until(
-        EC.presence_of_element_located((By.XPATH, "//span[contains(@class,'dijitTreeLabel') and text()='Requisição de Serviço']"))
+    # Espera até o botão "Salvar" aparecer, indicando que o chamado carregou
+    WebDriverWait(driver, 60).until(
+        EC.presence_of_element_located((By.ID, "btlogEvent")) 
     )
-    print("✅ Login detectado!")
+    log("✅ Chamado Pai carregado com sucesso! Iniciando aplicação da Base de Conhecimento.")
 
-    # 3. Expande possíveis menus pais antes do clique
-    try:
-        menu_element = driver.find_element(By.XPATH, "//span[contains(@class,'dijitTreeLabel') and text()='Requisição de Serviço']")
-        driver.execute_script("arguments[0].scrollIntoView(true);", menu_element)
-        driver.execute_script("arguments[0].click();", menu_element)
-        
-        print("✅ Clicou em 'Requisição de Serviço'")
-        
-    except Exception as e:
-        print("❌ Erro ao clicar:", e)
-
-    bk_cables.knowledgebase(driver)
+    bk_windows.knowledgebase(driver, log)
 
     # -----------------------------------------------------------
     # FLUXO DO SUPER-LOOP
@@ -48,10 +40,10 @@ def flow_cables(df, secretaria, log):
 
     # -- LOOOPING --
 
-    log("Criando chamados remanescentes...", tipo="status")
+    log("--- INICIANDO CRIAÇÃO DOS CHAMADOS FILHOS ---", tipo="status")
 
     for index, row in df.iterrows():
-        description_son = (f"Solicito instalação do Itom no micro da {secretaria}:\n\n"
+        description_son = (f"Solicito atualização do sistema para Windows 11 no micro da {secretaria}:\n\n"
                         f"{row['MARCA/MODELO']} | Tombo: {row['TOMBO ANTIGO']}/{row['TOMBO NOVO']} | Nome: {row['NOME']}")
         
         log(f"Inserindo micro {row['MARCA/MODELO']} - Tombo: {row['TOMBO NOVO']}")
@@ -128,4 +120,4 @@ def flow_cables(df, secretaria, log):
 
         log(f"Adicionando Base de Conhecimento", tipo="status")
 
-        bk_cables.knowledgebase(driver)
+        bk_windows.knowledgebase(driver)
