@@ -1,9 +1,8 @@
 from interface import open_screen
-from Windows import flow_windows
+import windows
 from cables import flow_cables
 from Kaspersky import flow_kaspersky
 import itom
-# import novoteste
 from Nomenclature import flow_nomenclature
 from Printer import flow_printer
 import pandas as pd
@@ -23,7 +22,7 @@ if __name__ == "__main__":
 
     # ⚠️ CORREÇÃO: Chama a função principal de cada fluxo
     if chamado == "WINDOWS":
-        flow_windows(df, secretaria, log)
+        windows.flow_windows(df, secretaria, link_site, log)
     elif chamado == "CABOS":
         flow_cables(df, secretaria, log)
     elif chamado == "ANTIVÍRUS":

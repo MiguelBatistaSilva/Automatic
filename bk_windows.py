@@ -27,7 +27,7 @@ def knowledgebase(driver):
         )
         
         campo_bk.clear() 
-        campo_bk.send_keys("itom") 
+        campo_bk.send_keys("windowspe") 
         
         print("✅ Campo 'Palavra-chave' preenchido e limpo.")
 
@@ -47,28 +47,12 @@ def knowledgebase(driver):
     except Exception as e:
         print(f"❌ Erro ao clicar no botão 'Pesquisar': {e}")
 
-    time.sleep(4)
-
-    # -- PROCURANDO... --
-    try:
-        cabecalho_classificacao = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.ID, "knowledgeSearch_shownValues_gridHdr1"))
-        )
-        
-        actions = ActionChains(driver)
-        actions.double_click(cabecalho_classificacao).perform()
-        
-        print("✅ Reordenação da tabela concluída.")
-        
-    except Exception as e:
-        print(f"❌ Erro ao reordenar a tabela: {e}")
-
-    time.sleep(1)
+    time.sleep(2)
 
     # -- BOTÃO DIREITO -- 
     try:
         linha_artigo = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'dojoxGridRow') and contains(@class, 'rowId1')]")) 
+            EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'dojoxGridRow') and contains(@class, 'rowId2')]")) 
         )
         
         actions = ActionChains(driver)
@@ -127,3 +111,5 @@ def knowledgebase(driver):
 
     except Exception as e:
         print(f"❌ Erro ao clicar no botão 'Voltar ao evento' (XPATH): {e}")
+
+    
