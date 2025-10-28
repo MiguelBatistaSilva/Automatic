@@ -3,7 +3,7 @@ import windows
 import cables
 from Kaspersky import flow_kaspersky
 import itom
-from Nomenclature import flow_nomenclature
+import nomenclature
 import printer
 import pandas as pd
 
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     elif chamado == "ITOM":
         itom.flow_itom(df, secretaria, link_site, usuario_atribuido, log)
     elif chamado == "NOMENCLATURA":
-        flow_nomenclature(df, secretaria, log)
+        nomenclature.flow_nomenclature(df, secretaria, log)
     elif chamado == "IMPRESSORA":
         printer.flow_printer(df, secretaria, log)
         
