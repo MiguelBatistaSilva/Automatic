@@ -4,9 +4,8 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains
+from webdriver_manager.chrome import ChromeDriverManager
 import bk_cables
-import pandas as pd
 import time
 
 def flow_cables(df, secretaria, link_site, log):
@@ -16,8 +15,12 @@ def flow_cables(df, secretaria, link_site, log):
     # --- Configuração do Chrome ---
     chrome_options = Options()
     chrome_options.add_argument("--start-maximized")
-    service = Service("/home/velta-int-sys/Projects/Automatic/chromedriver-linux64/chromedriver") 
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+    except Exception as e:
+        log(f"❌ Erro ao iniciar o ChromeDriver. Verifique se o Chrome está instalado. Detalhe: {e}", "error")
+        return
 
     # --- Acessa o Assyst ---
     driver.get(link_site)
@@ -32,7 +35,7 @@ def flow_cables(df, secretaria, link_site, log):
     )
     log("✅ Chamado Pai carregado com sucesso! Iniciando aplicação da Base de Conhecimento.")
 
-    bk_windows.knowledgebase(driver, log)
+    bk_cables.knowledgebase(driver)
 
     # -----------------------------------------------------------
     # FLUXO DO SUPER-LOOP
@@ -120,4 +123,4 @@ def flow_cables(df, secretaria, link_site, log):
 
         log(f"Adicionando Base de Conhecimento", tipo="status")
 
-        bk_windows.knowledgebase(driver)
+        bk_cables.knowledgebase(driver)

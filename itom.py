@@ -4,6 +4,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 import bk_itom
 import time
 
@@ -14,8 +15,12 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
     # --- Configuração do Chrome ---
     chrome_options = Options()
     chrome_options.add_argument("--start-maximized")
-    service = Service(r"C:\Users\migue\Python\Automatic\chromedriver-win64\chromedriver.exe")
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+    except Exception as e:
+        log(f"❌ Erro ao iniciar o ChromeDriver. Verifique se o Chrome está instalado. Detalhe: {e}", "error")
+        return
 
     # --- Acessa o Assyst ---
     driver.get(link_site)
@@ -34,9 +39,9 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
         menu_element = driver.find_element(By.XPATH, "//span[contains(@class,'dijitTreeLabel') and text()='Requisição de Serviço']")
         driver.execute_script("arguments[0].scrollIntoView(true);", menu_element)
         driver.execute_script("arguments[0].click();", menu_element)
-        
+
         print("✅ Clicou em 'Requisição de Serviço'")
-        
+
     except Exception as e:
         print("❌ Erro ao clicar:", e)
 
@@ -114,9 +119,9 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
         produto.click()
         produto.clear()
         produto.send_keys("Software")
-        time.sleep(0.8) 
-        produto.send_keys(u'\ue015')  
-        produto.send_keys(u'\ue007')  
+        time.sleep(0.8)
+        produto.send_keys(u'\ue015')
+        produto.send_keys(u'\ue007')
         print("✅ Campo 'Produto' preenchido com 'Software'")
     except Exception as e:
         print("❌ Erro ao preencher 'Produto':", e)
@@ -130,8 +135,8 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
         )
         item.click()
         item.send_keys("Software e Aplicativos")
-        time.sleep(0.8)  
-        item.send_keys(u'\ue015') 
+        time.sleep(0.8)
+        item.send_keys(u'\ue015')
         item.send_keys(u'\ue007')
         print("✅ Campo 'Item' preenchido com 'Software e Aplicativos'")
     except Exception as e:
@@ -145,10 +150,10 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
             EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemBProduct_textNode"))
         )
         item.click()
-        item.send_keys("A ser definido") 
-        time.sleep(0.8)  
-        item.send_keys(u'\ue015') 
-        item.send_keys(u'\ue007') 
+        item.send_keys("A ser definido")
+        time.sleep(0.8)
+        item.send_keys(u'\ue015')
+        item.send_keys(u'\ue007')
         print("✅ Campo 'Produto B' preenchido com 'A ser definido'")
 
     except Exception as e:
@@ -162,10 +167,10 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
             EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemB_textNode"))
         )
         item.click()
-        item.send_keys("IC NÃO LOCALIZADO") 
-        time.sleep(0.8)  
-        item.send_keys(u'\ue015') 
-        item.send_keys(u'\ue007') 
+        item.send_keys("IC NÃO LOCALIZADO")
+        time.sleep(0.8)
+        item.send_keys(u'\ue015')
+        item.send_keys(u'\ue007')
         print("✅ Campo 'Item B' preenchido com 'IC NÃO LOCALIZADO'")
 
     except Exception as e:
@@ -179,10 +184,10 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
             EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_eventBuilder_textNode"))
         )
         item.click()
-        item.send_keys("Instalação") 
-        time.sleep(0.8)  
-        item.send_keys(u'\ue015') 
-        item.send_keys(u'\ue007') 
+        item.send_keys("Instalação")
+        time.sleep(0.8)
+        item.send_keys(u'\ue015')
+        item.send_keys(u'\ue007')
         print("✅ Campo 'Categoria' preenchido com 'Instalação'")
 
     except Exception as e:
@@ -196,13 +201,13 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
             EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_assignedServDept_textNode"))
         )
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", service_group)
-        
-        service_group.clear() 
+
+        service_group.clear()
         service_group.send_keys("2N CATI FCB")
-        time.sleep(0.8) 
+        time.sleep(0.8)
         service_group.send_keys(u'\ue015')  # Seta para Baixo (Down Arrow)
         service_group.send_keys(u'\ue007')  # Enter
-        
+
         print("✅ Campo 'Grupo de Serv. Atribuído' limpo e selecionado com sucesso.")
 
     except Exception as e:
@@ -215,13 +220,13 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
         usuario_atribuido_element = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_assignee_textNode"))
         )
-    
+
         usuario_atribuido_element.clear()
         usuario_atribuido_element.send_keys(usuario_atribuido)
         time.sleep(0.9)
         usuario_atribuido_element.send_keys(u'\ue015') # Seta para Baixo
         usuario_atribuido_element.send_keys(u'\ue007') # Enter
-        
+
         print("✅ Campo 'Usuário Atribuído' preenchido e selecionado.")
 
     except Exception as e:
@@ -232,14 +237,14 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
     # -- SALVAR --
     try:
         botao_salvar = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.ID, "btlogEvent")) 
+            EC.element_to_be_clickable((By.ID, "btlogEvent"))
         )
-        
+
         botao_salvar.click()
-        
+
         print("✅ Chamado salvo com sucesso (clique no disquete)")
-        time.sleep(4) 
-        
+        time.sleep(4)
+
     except Exception as e:
         print(f"❌ Erro ao clicar no botão Salvar: {e}")
 
@@ -258,19 +263,19 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
     for index, row in df.iterrows():
         description_son = (f"Solicito instalação do Itom no micro da {secretaria}:\n\n"
                         f"{row['MARCA/MODELO']} | Tombo: {row['TOMBO ANTIGO']}/{row['TOMBO NOVO']} | Nome: {row['NOME']}")
-        
+
         log(f"Inserindo micro {row['MARCA/MODELO']} - Tombo: {row['TOMBO NOVO']}")
 
         # -- DUPLICAR --
         try:
             botao_duplicar = WebDriverWait(driver, 15).until(
-                EC.element_to_be_clickable((By.ID, "btlogAsNewEvent")) 
+                EC.element_to_be_clickable((By.ID, "btlogAsNewEvent"))
             )
-            
+
             botao_duplicar.click()
-            
-            print("✅ Clicado em 'Salvar como novo'.") 
-            
+
+            print("✅ Clicado em 'Salvar como novo'.")
+
         except Exception as e:
             print(f"❌ Erro ao clicar no botão 'Salvar como novo': {e}")
 
@@ -281,7 +286,7 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
 
             xpath_continuar_flexivel = "//span[text()='Continuar']/ancestor::span[contains(@role, 'button')]"
             time.sleep(0.5)
-            
+
             botao_continuar = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, xpath_continuar_flexivel)))
 
@@ -289,7 +294,7 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
 
             print("✅ Clicado em 'Continuar' (XPath Global Flexível). Novo chamado filho carregado.")
             time.sleep(2)
-            
+
         except Exception as e:
             print(f"❌ Erro TOTAL ao clicar no botão 'Continuar' (Falha na Flexibilidade): {e}")
             raise Exception(f"Falha fatal ao clicar em 'Continuar': {e}") # Interrompe o loop
@@ -322,12 +327,12 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
         try:
             botao_salvar = WebDriverWait(driver, 20).until(
                 EC.element_to_be_clickable((By.ID, "btlogEvent")))
-            
+
             botao_salvar.click()
-            
+
             print("✅ Chamado salvo com sucesso (clique no disquete)")
-            time.sleep(2) 
-            
+            time.sleep(2)
+
         except Exception as e:
             print(f"❌ Erro ao clicar no botão Salvar: {e}")
 

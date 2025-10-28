@@ -4,6 +4,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 import bk_windows
 import time
 
@@ -14,8 +15,12 @@ def flow_windows(df, secretaria, link_site, log):
     # --- Configuração do Chrome ---
     chrome_options = Options()
     chrome_options.add_argument("--start-maximized")
-    service = Service(r"C:\Users\migue\Python\Automatic\chromedriver-win64\chromedriver.exe")
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+    except Exception as e:
+        log(f"❌ Erro ao iniciar o ChromeDriver: Verifique a instalação do Chrome. Detalhe: {e}", "error")
+        return
 
     # --- Acessa o Assyst ---
     driver.get(link_site)
