@@ -1,0 +1,341 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+import bk_kaspersky
+import time
+
+def flow_kaspersky(df, secretaria, link_site, usuario_atribuido, log):
+
+    log("Criando Requisição de Serviço...", tipo="status")
+
+    # --- Configuração do Chrome ---
+    chrome_options = Options()
+    chrome_options.add_argument("--start-maximized")
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+    except Exception as e:
+        log(f"❌ Erro ao iniciar o ChromeDriver. Verifique se o Chrome está instalado. Detalhe: {e}", "error")
+        return
+
+    # --- Acessa o Assyst ---
+    driver.get(link_site)
+    log(f"Acessando: {link_site}", "info")
+    log("Aguardando login manual no Assyst...", "info")
+
+    print("⚙️ Faça login manualmente no Assyst...")
+
+    WebDriverWait(driver, 600).until(
+        EC.presence_of_element_located((By.XPATH, "//span[contains(@class,'dijitTreeLabel') and text()='Requisição de Serviço']"))
+    )
+    print("✅ Login detectado!")
+
+    # 3. Expande possíveis menus pais antes do clique
+    try:
+        menu_element = driver.find_element(By.XPATH, "//span[contains(@class,'dijitTreeLabel') and text()='Requisição de Serviço']")
+        driver.execute_script("arguments[0].scrollIntoView(true);", menu_element)
+        driver.execute_script("arguments[0].click();", menu_element)
+
+        print("✅ Clicou em 'Requisição de Serviço'")
+
+    except Exception as e:
+        print("❌ Erro ao clicar:", e)
+
+    # === USUÁRIO ===
+
+    try:
+        usuario = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_affectedUser_textNode"))
+        )
+        usuario.click()
+        usuario.send_keys("400566")
+        time.sleep(1)
+
+        # Pressiona seta para baixo + enter
+        usuario.send_keys(u'\ue015')  # ↓
+        usuario.send_keys(u'\ue007')  # Enter
+        print("✅ Campo 'Usuário Afetado' preenchido com sucesso!")
+
+    except Exception as e:
+        print("❌ Erro ao preencher 'Usuário Afetado':", e)
+
+    time.sleep(0.8)
+
+    # === RESUMO ===
+
+    try:
+        resumo = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.ID,"ManageEventForm_ES3_shortDescription"))
+        )
+        resumo.send_keys("Instalação do Kaspersky")
+        print("✅ Campo 'Título do Chamado' preenchido com sucesso.")
+
+    except Exception as e:
+        print("❌ Erro ao preencher o título do chamado:", e)
+
+    # --- DESCRIÇÃO ---
+    descricao = f"Solicito instalação e atualização do Kaspersky nos micros da {secretaria}:\n\n"
+
+    for _, row in df.iterrows():
+        descricao += f"- {row['MARCA/MODELO']} | Tombo: {row['TOMBO ANTIGO']}/{row['TOMBO NOVO']} | Nome: {row['NOME']}\n"
+
+    try:
+        # Espera o iframe do CKEditor aparecer
+        iframe = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.XPATH, "//iframe[contains(@title, 'rtES3_formattedRemarks')]"))
+        )
+
+        # Entra no iframe do editor
+        driver.switch_to.frame(iframe)
+
+        # Localiza o corpo editável
+        corpo_editor = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "body.cke_editable"))
+        )
+
+        # Insere o texto no campo
+        corpo_editor.clear()
+        corpo_editor.send_keys(descricao)
+
+        # Volta ao contexto principal
+        driver.switch_to.default_content()
+
+        print(f"✅ Campo 'Descrição' preenchido com traços ({len(df)} micros).")
+
+    except Exception as e:
+        print("❌ Erro ao preencher a descrição:", e)
+
+    time.sleep(0.8)
+
+    # --- PRODUTO ---
+    try:
+        produto = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemAProduct_textNode"))
+        )
+        produto.click()
+        produto.clear()
+        produto.send_keys("Software")
+        time.sleep(0.8)
+        produto.send_keys(u'\ue015')
+        produto.send_keys(u'\ue007')
+        print("✅ Campo 'Produto' preenchido com 'Softwares'")
+    except Exception as e:
+        print("❌ Erro ao preencher 'Produto':", e)
+
+    time.sleep(0.8)
+
+    # --- ITEM ---
+    try:
+        item = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemA_textNode"))
+        )
+        item.click()
+        item.send_keys("Software e Aplicativos")
+        time.sleep(0.8)
+        item.send_keys(u'\ue015')
+        item.send_keys(u'\ue007')
+        print("✅ Campo 'Item' preenchido com 'Software e Aplicativos'")
+    except Exception as e:
+        print("❌ Erro ao preencher 'Item':", e)
+
+    time.sleep(0.8)
+
+    # --- PRODUTO B ---
+    try:
+        item = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemBProduct_textNode"))
+        )
+        item.click()
+        item.send_keys("A ser definido")
+        time.sleep(0.8)
+        item.send_keys(u'\ue015')
+        item.send_keys(u'\ue007')
+        print("✅ Campo 'Produto B' preenchido com 'A ser definido'")
+
+    except Exception as e:
+        print("❌ Erro ao preencher 'Produto B':", e)
+
+    time.sleep(0.9)
+
+    # --- ITEM B ---
+    try:
+        item = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemB_textNode"))
+        )
+        item.click()
+        item.send_keys("IC NÃO LOCALIZADO")
+        time.sleep(0.8)
+        item.send_keys(u'\ue015')
+        item.send_keys(u'\ue007')
+        print("✅ Campo 'Item B' preenchido com 'IC NÃO LOCALIZADO'")
+
+    except Exception as e:
+        print("❌ Erro ao preencher 'Item B':", e)
+
+    time.sleep(0.8)
+
+    # --- CATEGORIA ---
+    try:
+        item = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_eventBuilder_textNode"))
+        )
+        item.click()
+        item.send_keys("Instalação")
+        time.sleep(0.8)
+        item.send_keys(u'\ue015')
+        item.send_keys(u'\ue007')
+        print("✅ Campo 'Categoria' preenchido com 'Instalação'")
+
+    except Exception as e:
+        print("❌ Erro ao preencher 'Categoria':", e)
+
+    time.sleep(0.8)
+
+    # -- Grupo de Serv. Atribuído --
+    try:
+        service_group = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_assignedServDept_textNode"))
+        )
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", service_group)
+
+        service_group.clear()
+        service_group.send_keys("2N CATI FCB")
+        time.sleep(0.8)
+        service_group.send_keys(u'\ue015')  # Seta para Baixo (Down Arrow)
+        service_group.send_keys(u'\ue007')  # Enter
+
+        print("✅ Campo 'Grupo de Serv. Atribuído' limpo e selecionado com sucesso.")
+
+    except Exception as e:
+        print(f"❌ Erro ao rolar ou limpar 'Grupo de Serv. Atribuído': {e}")
+
+    time.sleep(1)
+
+    # --- USUÁRIO ATRIBUÍDO ---
+    try:
+        usuario_atribuido_element = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_assignee_textNode"))
+        )
+
+        usuario_atribuido_element.clear()
+        usuario_atribuido_element.send_keys(usuario_atribuido)
+        time.sleep(0.9)
+        usuario_atribuido_element.send_keys(u'\ue015') # Seta para Baixo
+        usuario_atribuido_element.send_keys(u'\ue007') # Enter
+
+        print("✅ Campo 'Usuário Atribuído' preenchido e selecionado.")
+
+    except Exception as e:
+        print(f"❌ Erro ao preencher 'Usuário Atribuído': {e}")
+
+    time.sleep(0.8)
+
+    # -- SALVAR --
+    try:
+        botao_salvar = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.ID, "btlogEvent"))
+        )
+
+        botao_salvar.click()
+
+        print("✅ Chamado salvo com sucesso (clique no disquete)")
+        time.sleep(4)
+
+    except Exception as e:
+        print(f"❌ Erro ao clicar no botão Salvar: {e}")
+
+    log(f"Adicionando Base de Conhecimento", tipo="status")
+
+    bk_kaspersky.knowledgebase(driver)
+
+    # -----------------------------------------------------------
+    # FLUXO DO SUPER-LOOP
+    # -----------------------------------------------------------
+
+    # -- LOOOPING --
+
+    log("Criando chamados remanescentes...", tipo="status")
+
+    for index, row in df.iterrows():
+        description_son = (f"Solicito correção de nomenclatura no micro da {secretaria}:\n\n"
+                        f"{row['MARCA/MODELO']} | Tombo: {row['TOMBO ANTIGO']}/{row['TOMBO NOVO']} | Nome: {row['NOME']}")
+
+        log(f"Inserindo micro {row['MARCA/MODELO']} - Tombo: {row['TOMBO NOVO']}")
+
+        # -- DUPLICAR --
+        try:
+            botao_duplicar = WebDriverWait(driver, 15).until(
+                EC.element_to_be_clickable((By.ID, "btlogAsNewEvent"))
+            )
+
+            botao_duplicar.click()
+
+            print("✅ Clicado em 'Salvar como novo'.")
+
+        except Exception as e:
+            print(f"❌ Erro ao clicar no botão 'Salvar como novo': {e}")
+
+        time.sleep(0.8)
+
+        # -- CONTINUAR --
+        try:
+
+            xpath_continuar_flexivel = "//span[text()='Continuar']/ancestor::span[contains(@role, 'button')]"
+            time.sleep(0.5)
+
+            botao_continuar = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, xpath_continuar_flexivel)))
+
+            driver.execute_script("arguments[0].click();", botao_continuar)
+
+            print("✅ Clicado em 'Continuar' (XPath Global Flexível). Novo chamado filho carregado.")
+            time.sleep(2)
+
+        except Exception as e:
+            print(f"❌ Erro TOTAL ao clicar no botão 'Continuar' (Falha na Flexibilidade): {e}")
+            raise Exception(f"Falha fatal ao clicar em 'Continuar': {e}") # Interrompe o loop
+
+        try:
+            # Espera o iframe do CKEditor aparecer
+            iframe = WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.XPATH, "//iframe[contains(@title, 'rtES3_formattedRemarks')]"))
+            )
+
+            # Entra no iframe do editor
+            driver.switch_to.frame(iframe)
+
+            # Localiza o corpo editável
+            corpo_editor = WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "body.cke_editable"))
+            )
+
+            # Insere o texto no campo
+            corpo_editor.clear()
+            corpo_editor.send_keys(description_son)
+
+            # Volta ao contexto principal
+            driver.switch_to.default_content()
+
+        except Exception as e:
+            print("❌ Erro ao preencher a descrição:", e)
+
+        # -- SALVAR --
+        try:
+            botao_salvar = WebDriverWait(driver, 20).until(
+                EC.element_to_be_clickable((By.ID, "btlogEvent")))
+
+            botao_salvar.click()
+
+            print("✅ Chamado salvo com sucesso (clique no disquete)")
+            time.sleep(2)
+
+        except Exception as e:
+            print(f"❌ Erro ao clicar no botão Salvar: {e}")
+
+        log(f"Adicionando Base de Conhecimento", tipo="status")
+
+        bk_kaspersky.knowledgebase(driver)

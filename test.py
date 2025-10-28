@@ -13,8 +13,8 @@ import time
 
 # Palavra-chave e texto esperado para TESTE
 # ⚠️ Substitua 'itom' e o texto do artigo para cada cenário que você quer testar!
-PALAVRA_CHAVE_TESTE = "nomenclatura"
-TEXTO_ESPERADO_NO_ARTIGO = "BC - Nomenclaturas dos Microcomputadores do Tribunal de Justiça do Estado do Ceará"
+PALAVRA_CHAVE_TESTE = "kaspersky"
+TEXTO_ESPERADO_NO_ARTIGO = "BC - Verificar a Versão do kaspersky no Computador"
 ID_CABECALHO_CLASSIFICACAO = "knowledgeSearch_shownValues_gridHdr1"
 
 # ----------------------------------------------------------------------
@@ -93,27 +93,13 @@ def testar_base_conhecimento_com_validacao():
         print(f"❌ FALHA na B: Erro na pesquisa da BK: {e}")
         return
 
-    # -- C. REORDENAR A TABELA (Double Click no Cabeçalho) --
-    try:
-        cabecalho_classificacao = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.ID, "knowledgeSearch_shownValues_gridHdr1"))
-        )
-
-        actions = ActionChains(driver)
-        actions.double_click(cabecalho_classificacao).perform()
-
-        print("✅ Reordenação da tabela concluída.")
-
-    except Exception as e:
-        print(f"❌ Erro ao reordenar a tabela: {e}")
-
     # -- C. VALIDAÇÃO DO ARTIGO (NOVO PASSO CRÍTICO) --
     try:
         # XPATH para pegar o texto da célula na coluna do título/resumo da linha rowId1 (Segundo Artigo)
         # O seletor exato da coluna pode variar (geralmente é a segunda ou terceira célula)
         # Vamos tentar o XPath genérico para a linha e pegar o texto da linha inteira
         # rowId2 é a terceira
-        xpath_linha_validacao = "//div[contains(@class, 'dojoxGridRow') and contains(@class, 'rowId1')]"
+        xpath_linha_validacao = "//div[contains(@class, 'dojoxGridRow') and contains(@class, 'rowId5')]"
         linha_artigo_element = driver.find_element(By.XPATH, xpath_linha_validacao)
 
         # Pega o texto de TODAS as colunas da linha
