@@ -4,9 +4,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains
 import bk_itom
-import pandas as pd
 import time
 
 def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
@@ -16,7 +14,7 @@ def flow_itom(df, secretaria, link_site, usuario_atribuido, log):
     # --- Configuração do Chrome ---
     chrome_options = Options()
     chrome_options.add_argument("--start-maximized")
-    service = Service("/home/velta-int-sys/Projects/Automatic/chromedriver-linux64/chromedriver")  # coloque o caminho se necessário
+    service = Service(r"C:\Users\migue\Python\Automatic\chromedriver-win64\chromedriver.exe")
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     # --- Acessa o Assyst ---

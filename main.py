@@ -4,7 +4,7 @@ import cables
 from Kaspersky import flow_kaspersky
 import itom
 from Nomenclature import flow_nomenclature
-from Printer import flow_printer
+import printer
 import pandas as pd
 
 if __name__ == "__main__":
@@ -32,5 +32,5 @@ if __name__ == "__main__":
     elif chamado == "NOMENCLATURA":
         flow_nomenclature(df, secretaria, log)
     elif chamado == "IMPRESSORA":
-        flow_printer(df, secretaria, log)
+        printer.flow_printer(df, secretaria, log)
         

@@ -4,9 +4,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains
 import bk_windows
-import pandas as pd
 import time
 
 def flow_windows(df, secretaria, link_site, log):
@@ -16,7 +14,7 @@ def flow_windows(df, secretaria, link_site, log):
     # --- Configuração do Chrome ---
     chrome_options = Options()
     chrome_options.add_argument("--start-maximized")
-    service = Service("/home/velta-int-sys/Projects/Automatic/chromedriver-linux64/chromedriver") 
+    service = Service(r"C:\Users\migue\Python\Automatic\chromedriver-win64\chromedriver.exe")
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     # --- Acessa o Assyst ---
@@ -32,7 +30,7 @@ def flow_windows(df, secretaria, link_site, log):
     )
     log("✅ Chamado Pai carregado com sucesso! Iniciando aplicação da Base de Conhecimento.")
 
-    bk_windows.knowledgebase(driver, log)
+    bk_windows.knowledgebase(driver)
 
     # -----------------------------------------------------------
     # FLUXO DO SUPER-LOOP

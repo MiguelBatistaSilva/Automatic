@@ -1,14 +1,14 @@
 import tkinter as tk
 from tkinter import filedialog, ttk, scrolledtext
 from ttkthemes import ThemedTk
-from placeholder import setup_placeholder, create_input_line
+from placeholder import create_input_line
 
 def open_screen():
 
     # --- Janela principal ---
     root = ThemedTk(theme="breeze")
     root.title("AUTOMATIC")
-    root.geometry("1200x650") # Aumentado o tamanho para os novos campos
+    root.geometry("1350x800")
     root.resizable(False, False)
 
     # --- Variáveis ---
@@ -38,16 +38,27 @@ def open_screen():
     entry_secretaria, line_secretaria = create_input_line(
         frame, secretaria, "SECRETARIA", root
     )
-    entry_secretaria.grid(row=current_row, column=0, pady=(15, 0), sticky="ew") # Padding superior maior
+    entry_secretaria.grid(row=current_row, column=0, pady=(15, 0), sticky="ew")
     current_row += 1
-    line_secretaria.grid(row=current_row, column=0, sticky="ew") # A linha fica logo abaixo
+    line_secretaria.grid(row=current_row, column=0, sticky="ew", pady=(0, 25))
     current_row += 1
 
     # --- 2. Tipo de Chamado (Manter Combobox, mas ajustar margem) ---
+    ttk.Label(
+        frame,
+        text="Selecione o fluxo de automação que será executado.",
+        # Você pode usar fg='gray' se quiser que a cor seja diferente (depende do tema ttkthemes)
+        anchor="w"  # Alinha o texto à esquerda (West)
+    ).grid(row=current_row, column=0, sticky="w", padx=5, pady=(15, 1))
+    current_row += 1
+
     opcoes = ["WINDOWS", "CABOS", "ANTIVÍRUS", "ITOM", "NOMENCLATURA", "IMPRESSORA"]
+
     combo = ttk.Combobox(frame, textvariable=chamado, values=opcoes, state="readonly", width=47)
     combo.current(0)
-    combo.grid(row=1, column=0, columnspan=2, pady=15, sticky="ew")
+
+    combo.grid(row=current_row, column=0, pady=(2, 18), sticky="ew")
+    current_row += 1
 
     # --- 3. Link do Site ---
     entry_link, line_link = create_input_line(
