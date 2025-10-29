@@ -26,11 +26,11 @@ if __name__ == "__main__":
     elif chamado == "CABOS":
         cables.flow_cables(df, secretaria, link_site, log)
     elif chamado == "ANTIVÍRUS":
-        kaspersky.flow_kaspersky(df, secretaria, log)
+        kaspersky.flow_kaspersky(df, secretaria, link_site, usuario_atribuido, log)
     elif chamado == "ITOM":
         itom.flow_itom(df, secretaria, link_site, usuario_atribuido, log)
     elif chamado == "NOMENCLATURA":
-        nomenclature.flow_nomenclature(df, secretaria, log)
+        nomenclature.flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log)
     elif chamado == "IMPRESSORA":
-        printer.flow_printer(df, secretaria, log)
+        printer.flow_printer(df, secretaria, link_site, usuario_atribuido, log)
         
