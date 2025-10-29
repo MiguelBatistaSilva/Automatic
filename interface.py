@@ -8,7 +8,7 @@ def open_screen():
     # --- Janela principal ---
     root = ThemedTk(theme="breeze")
     root.title("AUTOMATIC")
-    root.geometry("1350x800")
+    root.geometry("1200x700")
     root.resizable(False, False)
 
     # --- Variáveis ---
