@@ -1,10 +1,9 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+from driver_manager import iniciar_driver_e_navegar
+from selectors import *
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
+from selenium.common.exceptions import TimeoutException
 import bk_nomenclature
 import time
 
@@ -12,44 +11,37 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
 
     log("Criando Requisição de Serviço...", tipo="status")
 
-    # --- Configuração do Chrome ---
-    chrome_options = Options()
-    chrome_options.add_argument("--start-maximized")
-    try:
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-    except Exception as e:
-        log(f"❌ Erro ao iniciar o ChromeDriver. Verifique se o Chrome está instalado. Detalhe: {e}", "error")
+    # 1. --- INICIALIZAÇÃO E NAVEGAÇÃO CENTRALIZADA ---
+
+    driver = iniciar_driver_e_navegar()
+    if driver is None:
+        log("❌ Falha na inicialização do Driver. Encerrando.", "error")
         return
 
-    # --- Acessa o Assyst ---
-    driver.get(link_site)
-    log(f"Acessando: {link_site}", "info")
     log("Aguardando login manual no Assyst...", "info")
-
     print("⚙️ Faça login manualmente no Assyst...")
 
-    WebDriverWait(driver, 600).until(
-        EC.presence_of_element_located((By.XPATH, "//span[contains(@class,'dijitTreeLabel') and text()='Requisição de Serviço']"))
-    )
-    print("✅ Login detectado!")
-
-    # 3. Expande possíveis menus pais antes do clique
+    # 2. --- ESPERA PELA PÁGINA FINAL (Usando seletor centralizado) ---
     try:
-        menu_element = driver.find_element(By.XPATH, "//span[contains(@class,'dijitTreeLabel') and text()='Requisição de Serviço']")
-        driver.execute_script("arguments[0].scrollIntoView(true);", menu_element)
-        driver.execute_script("arguments[0].click();", menu_element)
+        # Esperamos pelo campo USUARIO_AFETADO, que agora é a nossa chave de sincronização
+        WebDriverWait(driver, 600).until(
+            EC.presence_of_element_located(usuario_afetado)
+        )
+        print("✅ Login e Formulário detectados e carregados!")
 
-        print("✅ Clicou em 'Requisição de Serviço'")
-
+    except TimeoutException:
+        log("❌ Tempo esgotado (10 minutos). Login/Carregamento falhou.", "error")
+        driver.quit()
+        return
     except Exception as e:
-        print("❌ Erro ao clicar:", e)
+        log(f"❌ Erro na detecção do formulário: {e}", "error")
+        driver.quit()
+        return
 
     # === USUÁRIO ===
-
     try:
         usuario = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_affectedUser_textNode"))
+            EC.presence_of_element_located(usuario_afetado)
         )
         usuario.click()
         usuario.send_keys("400566")
@@ -66,10 +58,9 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
     time.sleep(0.8)
 
     # === RESUMO ===
-
     try:
         resumo = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.ID,"ManageEventForm_ES3_shortDescription"))
+            EC.presence_of_element_located(resumo_selector)
         )
         resumo.send_keys("Correção de Nomenclatura")
         print("✅ Campo 'Título do Chamado' preenchido com sucesso.")
@@ -86,7 +77,7 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
     try:
         # Espera o iframe do CKEditor aparecer
         iframe = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.XPATH, "//iframe[contains(@title, 'rtES3_formattedRemarks')]"))
+            EC.presence_of_element_located(descricao_iframe)
         )
 
         # Entra no iframe do editor
@@ -94,7 +85,7 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
 
         # Localiza o corpo editável
         corpo_editor = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "body.cke_editable"))
+            EC.presence_of_element_located(descricao_body)
         )
 
         # Insere o texto no campo
@@ -109,12 +100,12 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
     except Exception as e:
         print("❌ Erro ao preencher a descrição:", e)
 
-    time.sleep(0.8)
+    time.sleep(1)
 
     # --- PRODUTO ---
     try:
         produto = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemAProduct_textNode"))
+            EC.presence_of_element_located(produto_selector)
         )
         produto.click()
         produto.clear()
@@ -131,7 +122,7 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
     # --- ITEM ---
     try:
         item = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemA_textNode"))
+            EC.presence_of_element_located(item_selector)
         )
         item.click()
         item.send_keys("Computador")
@@ -147,7 +138,7 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
     # --- PRODUTO B ---
     try:
         item = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemBProduct_textNode"))
+            EC.presence_of_element_located(produto_b)
         )
         item.click()
         item.send_keys("A ser definido")
@@ -164,7 +155,7 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
     # --- ITEM B ---
     try:
         item = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemB_textNode"))
+            EC.presence_of_element_located(item_b)
         )
         item.click()
         item.send_keys("IC NÃO LOCALIZADO")
@@ -181,7 +172,7 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
     # --- CATEGORIA ---
     try:
         item = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_eventBuilder_textNode"))
+            EC.presence_of_element_located(categoria_selector)
         )
         item.click()
         item.send_keys("Configuração")
@@ -198,7 +189,7 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
     # -- Grupo de Serv. Atribuído --
     try:
         service_group = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_assignedServDept_textNode"))
+            EC.presence_of_element_located(grupo_atribuido)
         )
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", service_group)
 
@@ -218,7 +209,7 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
     # --- USUÁRIO ATRIBUÍDO ---
     try:
         usuario_atribuido_element = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_assignee_textNode"))
+            EC.presence_of_element_located(usuario_atribuido_selector)
         )
 
         usuario_atribuido_element.clear()
@@ -237,11 +228,10 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
     # -- SALVAR --
     try:
         botao_salvar = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.ID, "btlogEvent"))
+            EC.element_to_be_clickable(disquete)
         )
 
         botao_salvar.click()
-
         print("✅ Chamado salvo com sucesso (clique no disquete)")
         time.sleep(4)
 
@@ -269,7 +259,7 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
         # -- DUPLICAR --
         try:
             botao_duplicar = WebDriverWait(driver, 15).until(
-                EC.element_to_be_clickable((By.ID, "btlogAsNewEvent"))
+                EC.element_to_be_clickable(duplicar)
             )
 
             botao_duplicar.click()
@@ -302,7 +292,7 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
         try:
             # Espera o iframe do CKEditor aparecer
             iframe = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.XPATH, "//iframe[contains(@title, 'rtES3_formattedRemarks')]"))
+                EC.presence_of_element_located(descricao_iframe)
             )
 
             # Entra no iframe do editor
@@ -310,7 +300,7 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
 
             # Localiza o corpo editável
             corpo_editor = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "body.cke_editable"))
+                EC.presence_of_element_located(descricao_body)
             )
 
             # Insere o texto no campo
@@ -326,7 +316,7 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
         # -- SALVAR --
         try:
             botao_salvar = WebDriverWait(driver, 20).until(
-                EC.element_to_be_clickable((By.ID, "btlogEvent")))
+                EC.element_to_be_clickable(disquete))
 
             botao_salvar.click()
 
