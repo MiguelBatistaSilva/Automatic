@@ -41,7 +41,7 @@ def open_screen():
     entry_secretaria.grid(row=current_row, column=0, pady=(15, 0), sticky="ew")
     current_row += 1
     line_secretaria.grid(row=current_row, column=0, sticky="ew", pady=(0, 25))
-    current_row += 1
+    #current_row += 1
 
     # --- 2. Tipo de Chamado (Manter Combobox, mas ajustar margem) ---
     ttk.Label(
