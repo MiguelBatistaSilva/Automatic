@@ -1,53 +1,47 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+from driver_manager import iniciar_driver_e_navegar
+from selectors import *
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 import bk_printer
 import time
 
-
 def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
+
     log("Criando Requisição de Serviço...", tipo="status")
 
-    # --- Configuração do Chrome ---
-    chrome_options = Options()
-    chrome_options.add_argument("--start-maximized")
-    service = Service(
-        "/home/velta-int-sys/Projects/Automatic/chromedriver-linux64/chromedriver")  # coloque o caminho se necessário
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    # 1. --- INICIALIZAÇÃO E NAVEGAÇÃO CENTRALIZADA ---
 
-    # --- Acessa o Assyst ---
-    driver.get(link_site)
-    log(f"Acessando: {link_site}", "info")
+    driver = iniciar_driver_e_navegar()
+    if driver is None:
+        log("❌ Falha na inicialização do Driver. Encerrando.", "error")
+        return
+
     log("Aguardando login manual no Assyst...", "info")
-
     print("⚙️ Faça login manualmente no Assyst...")
 
-    WebDriverWait(driver, 600).until(
-        EC.presence_of_element_located(
-            (By.XPATH, "//span[contains(@class,'dijitTreeLabel') and text()='Requisição de Serviço']"))
-    )
-    print("✅ Login detectado!")
-
-    # 3. Expande possíveis menus pais antes do clique
+    # 2. --- ESPERA PELA PÁGINA FINAL (Usando seletor centralizado) ---
     try:
-        menu_element = driver.find_element(By.XPATH,
-                                           "//span[contains(@class,'dijitTreeLabel') and text()='Requisição de Serviço']")
-        driver.execute_script("arguments[0].scrollIntoView(true);", menu_element)
-        driver.execute_script("arguments[0].click();", menu_element)
+        # Esperamos pelo campo USUARIO_AFETADO, que agora é a nossa chave de sincronização
+        WebDriverWait(driver, 600).until(
+            EC.presence_of_element_located(usuario_afetado)
+        )
+        print("✅ Login e Formulário detectados e carregados!")
 
-        print("✅ Clicou em 'Requisição de Serviço'")
-
+    except TimeoutException:
+        log("❌ Tempo esgotado (10 minutos). Login/Carregamento falhou.", "error")
+        driver.quit()
+        return
     except Exception as e:
-        print("❌ Erro ao clicar:", e)
+        log(f"❌ Erro na detecção do formulário: {e}", "error")
+        driver.quit()
+        return
 
     # === USUÁRIO ===
-
     try:
         usuario = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_affectedUser_textNode"))
+            EC.presence_of_element_located(usuario_afetado)
         )
         usuario.click()
         usuario.send_keys("400566")
@@ -64,19 +58,18 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
     time.sleep(0.8)
 
     # === RESUMO ===
-
     try:
         resumo = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_shortDescription"))
+            EC.presence_of_element_located(resumo_selector)
         )
-        resumo.send_keys("Instalação do Itom")
+        resumo.send_keys("Instalação de Impressora")
         print("✅ Campo 'Título do Chamado' preenchido com sucesso.")
 
     except Exception as e:
         print("❌ Erro ao preencher o título do chamado:", e)
 
     # --- DESCRIÇÃO ---
-    descricao = f"Solicito instalação do Itom nos micros da {secretaria}:\n\n"
+    descricao = f"Solicito instalação de Impressora nos micros da {secretaria}:\n\n"
 
     for _, row in df.iterrows():
         descricao += f"- {row['MARCA/MODELO']} | Tombo: {row['TOMBO ANTIGO']}/{row['TOMBO NOVO']} | Nome: {row['NOME']}\n"
@@ -84,7 +77,7 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
     try:
         # Espera o iframe do CKEditor aparecer
         iframe = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.XPATH, "//iframe[contains(@title, 'rtES3_formattedRemarks')]"))
+            EC.presence_of_element_located(descricao_iframe)
         )
 
         # Entra no iframe do editor
@@ -92,7 +85,7 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
 
         # Localiza o corpo editável
         corpo_editor = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "body.cke_editable"))
+            EC.presence_of_element_located(descricao_body)
         )
 
         # Insere o texto no campo
@@ -107,20 +100,20 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
     except Exception as e:
         print("❌ Erro ao preencher a descrição:", e)
 
-    time.sleep(0.8)
+    time.sleep(1)
 
-    # --- PPRODUTO ---
+    # --- PRODUTO ---
     try:
         produto = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemAProduct_textNode"))
+            EC.presence_of_element_located(produto_selector)
         )
         produto.click()
         produto.clear()
-        produto.send_keys("Software")
+        produto.send_keys("Serviço de Impressão e Digitalização")
         time.sleep(0.8)
         produto.send_keys(u'\ue015')
         produto.send_keys(u'\ue007')
-        print("✅ Campo 'Produto' preenchido com 'Software'")
+        print("✅ Campo 'Produto' preenchido com 'Serviço de Impressão e Digitalização'")
     except Exception as e:
         print("❌ Erro ao preencher 'Produto':", e)
 
@@ -129,14 +122,14 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
     # --- ITEM ---
     try:
         item = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemA_textNode"))
+            EC.presence_of_element_located(item_selector)
         )
         item.click()
-        item.send_keys("Software e Aplicativos")
+        item.send_keys("Serviço de Impressão")
         time.sleep(0.8)
         item.send_keys(u'\ue015')
         item.send_keys(u'\ue007')
-        print("✅ Campo 'Item' preenchido com 'Software e Aplicativos'")
+        print("✅ Campo 'Item' preenchido com 'Serviço de Impressão'")
     except Exception as e:
         print("❌ Erro ao preencher 'Item':", e)
 
@@ -145,14 +138,14 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
     # --- PRODUTO B ---
     try:
         item = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemBProduct_textNode"))
+            EC.presence_of_element_located(produto_b)
         )
         item.click()
-        item.send_keys("A ser definido")
+        item.send_keys("Digitalização e Impressão")
         time.sleep(0.8)
         item.send_keys(u'\ue015')
         item.send_keys(u'\ue007')
-        print("✅ Campo 'Produto B' preenchido com 'A ser definido'")
+        print("✅ Campo 'Produto B' preenchido com 'Digitalização e Impressão'")
 
     except Exception as e:
         print("❌ Erro ao preencher 'Produto B':", e)
@@ -162,14 +155,14 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
     # --- ITEM B ---
     try:
         item = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_itemB_textNode"))
+            EC.presence_of_element_located(item_b)
         )
         item.click()
-        item.send_keys("IC NÃO LOCALIZADO")
+        item.send_keys("Impressoras")
         time.sleep(0.8)
         item.send_keys(u'\ue015')
         item.send_keys(u'\ue007')
-        print("✅ Campo 'Item B' preenchido com 'IC NÃO LOCALIZADO'")
+        print("✅ Campo 'Item B' preenchido com 'Impressoras'")
 
     except Exception as e:
         print("❌ Erro ao preencher 'Item B':", e)
@@ -179,10 +172,10 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
     # --- CATEGORIA ---
     try:
         item = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_eventBuilder_textNode"))
+            EC.presence_of_element_located(categoria_selector)
         )
         item.click()
-        item.send_keys("Instalação")
+        item.send_keys("Configuração")
         time.sleep(0.8)
         item.send_keys(u'\ue015')
         item.send_keys(u'\ue007')
@@ -196,7 +189,7 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
     # -- Grupo de Serv. Atribuído --
     try:
         service_group = WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_assignedServDept_textNode"))
+            EC.presence_of_element_located(grupo_atribuido)
         )
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", service_group)
 
@@ -216,14 +209,14 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
     # --- USUÁRIO ATRIBUÍDO ---
     try:
         usuario_atribuido_element = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "ManageEventForm_ES3_assignee_textNode"))
+            EC.presence_of_element_located(usuario_atribuido_selector)
         )
 
         usuario_atribuido_element.clear()
         usuario_atribuido_element.send_keys(usuario_atribuido)
         time.sleep(0.9)
-        usuario_atribuido_element.send_keys(u'\ue015')  # Seta para Baixo
-        usuario_atribuido_element.send_keys(u'\ue007')  # Enter
+        usuario_atribuido_element.send_keys(u'\ue015') # Seta para Baixo
+        usuario_atribuido_element.send_keys(u'\ue007') # Enter
 
         print("✅ Campo 'Usuário Atribuído' preenchido e selecionado.")
 
@@ -235,11 +228,10 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
     # -- SALVAR --
     try:
         botao_salvar = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.ID, "btlogEvent"))
+            EC.element_to_be_clickable(disquete)
         )
 
         botao_salvar.click()
-
         print("✅ Chamado salvo com sucesso (clique no disquete)")
         time.sleep(4)
 
@@ -259,15 +251,15 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
     log("Criando chamados remanescentes...", tipo="status")
 
     for index, row in df.iterrows():
-        description_son = (f"Solicito instalação do Itom no micro da {secretaria}:\n\n"
-                           f"{row['MARCA/MODELO']} | Tombo: {row['TOMBO ANTIGO']}/{row['TOMBO NOVO']} | Nome: {row['NOME']}")
+        description_son = (f"Solicito instalação da impressora no micro da {secretaria}:\n\n"
+                        f"{row['MARCA/MODELO']} | Tombo: {row['TOMBO ANTIGO']}/{row['TOMBO NOVO']} | Nome: {row['NOME']}")
 
         log(f"Inserindo micro {row['MARCA/MODELO']} - Tombo: {row['TOMBO NOVO']}")
 
         # -- DUPLICAR --
         try:
             botao_duplicar = WebDriverWait(driver, 15).until(
-                EC.element_to_be_clickable((By.ID, "btlogAsNewEvent"))
+                EC.element_to_be_clickable(duplicar)
             )
 
             botao_duplicar.click()
@@ -286,7 +278,7 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
             time.sleep(0.5)
 
             botao_continuar = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, xpath_continuar_flexivel)))
+            EC.presence_of_element_located((By.XPATH, xpath_continuar_flexivel)))
 
             driver.execute_script("arguments[0].click();", botao_continuar)
 
@@ -295,12 +287,12 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
 
         except Exception as e:
             print(f"❌ Erro TOTAL ao clicar no botão 'Continuar' (Falha na Flexibilidade): {e}")
-            raise Exception(f"Falha fatal ao clicar em 'Continuar': {e}")  # Interrompe o loop
+            raise Exception(f"Falha fatal ao clicar em 'Continuar': {e}") # Interrompe o loop
 
         try:
             # Espera o iframe do CKEditor aparecer
             iframe = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.XPATH, "//iframe[contains(@title, 'rtES3_formattedRemarks')]"))
+                EC.presence_of_element_located(descricao_iframe)
             )
 
             # Entra no iframe do editor
@@ -308,7 +300,7 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
 
             # Localiza o corpo editável
             corpo_editor = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "body.cke_editable"))
+                EC.presence_of_element_located(descricao_body)
             )
 
             # Insere o texto no campo
@@ -324,7 +316,7 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
         # -- SALVAR --
         try:
             botao_salvar = WebDriverWait(driver, 20).until(
-                EC.element_to_be_clickable((By.ID, "btlogEvent")))
+                EC.element_to_be_clickable(disquete))
 
             botao_salvar.click()
 

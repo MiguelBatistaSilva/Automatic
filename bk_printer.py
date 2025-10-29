@@ -27,7 +27,7 @@ def knowledgebase(driver):
         )
         
         campo_bk.clear() 
-        campo_bk.send_keys("microcomputador") 
+        campo_bk.send_keys("impressora")
         
         print("✅ Campo 'Palavra-chave' preenchido e limpo.")
 
@@ -68,7 +68,7 @@ def knowledgebase(driver):
     # -- BOTÃO DIREITO -- 
     try:
         linha_artigo = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'dojoxGridRow') and contains(@class, 'rowId1')]")) 
+            EC.element_to_be_clickable((By.XPATH, "//div[contains(@class, 'dojoxGridRow') and contains(@class, 'rowId0')]"))
         )
         
         actions = ActionChains(driver)
