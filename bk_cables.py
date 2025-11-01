@@ -109,15 +109,21 @@ def knowledgebase(driver):
     except Exception as e:
         print(f"❌ Erro ao clicar no botão 'Salvar ação': {e}")
 
-    # -- SAIR --
-    try:    
+        # -- SAIR --
+        xpath_voltar = "//span[text()='Voltar ao evento']/ancestor::span[contains(@role, 'button')]"
+
+    try:
         botao_voltar = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.ID, "dijit_form_Button_5")) 
+            EC.element_to_be_clickable((By.XPATH, xpath_voltar))
         )
-        
-        botao_voltar.click()
-        
-        print("✅ Retorno à tela do Chamado concluído.")
+
+        # Tenta clicar com o Selenium, e se falhar, usa JS como fallback
+        try:
+            botao_voltar.click()
+        except:
+            driver.execute_script("arguments[0].click();", botao_voltar)
+
+        print("✅ Retorno à tela do Chamado concluído (usando texto 'Voltar ao evento').")
 
     except Exception as e:
-        print(f"❌ Erro ao clicar no botão 'Voltar ao evento': {e}")
+        print(f"❌ Erro ao clicar no botão 'Voltar ao evento' (XPATH): {e}")
