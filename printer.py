@@ -19,7 +19,6 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
         return
 
     log("Aguardando login manual no Assyst...", "info")
-    print("⚙️ Faça login manualmente no Assyst...")
 
     # 2. --- ESPERA PELA PÁGINA FINAL (Usando seletor centralizado) ---
     try:
@@ -69,7 +68,7 @@ def flow_printer(df, secretaria, link_site, usuario_atribuido, log):
         print("❌ Erro ao preencher o título do chamado:", e)
 
     # --- DESCRIÇÃO ---
-    descricao = f"Solicito instalação de Impressora nos micros da {secretaria}:\n\n"
+    descricao = f"Solicito instalação de impressora nos micros da {secretaria}:\n\n"
 
     for _, row in df.iterrows():
         descricao += f"- {row['MARCA/MODELO']} | Tombo: {row['TOMBO ANTIGO']}/{row['TOMBO NOVO']} | Nome: {row['NOME']}\n"

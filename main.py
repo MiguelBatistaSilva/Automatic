@@ -6,6 +6,7 @@ import itom
 import nomenclature
 import printer
 import pandas as pd
+import threading
 
 # 1. FUNÇÃO DE EXECUÇÃO
 def executar_fluxo(dados_interface):
@@ -53,7 +54,24 @@ def executar_fluxo(dados_interface):
         log(f"❌ A execução do fluxo FALHOU: {e}", "error")
         # O programa NÃO ENCERRA AQUI, apenas registra o erro e o mainloop da GUI continua rodando.
 
-# 5. FUNÇÃO MAIN QUE INICIA TUDO
+
+def iniciar_automacao_em_thread(dados_interface):
+    """
+    Inicia o processo de automação (executar_fluxo) em um thread separado.
+    """
+
+    # Adiciona uma mensagem de status enquanto o thread está sendo criado
+    log = dados_interface['log']
+    log("Iniciando thread de automação...", "status")
+
+    # 1. Cria o thread, apontando para a função 'executar_fluxo' e passando os dados como argumentos
+    thread = threading.Thread(
+        target=executar_fluxo,
+        args=(dados_interface,)  # O argumento deve ser passado como uma tupla
+    )
+
+    thread.start()
+
 if __name__ == "__main__":
-    resultado_interface = open_screen(callback_executar=executar_fluxo)
+    resultado_interface = open_screen(callback_executar=iniciar_automacao_em_thread)
         
