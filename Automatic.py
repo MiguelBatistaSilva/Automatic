@@ -11,7 +11,6 @@ import threading
 # 1. FUNÇÃO DE EXECUÇÃO
 def executar_fluxo(dados_interface):
 
-    # Extrai os dados necessários
     secretaria = dados_interface['secretaria']
     chamado = dados_interface['chamado']
     arquivo = dados_interface['arquivo']
@@ -62,9 +61,7 @@ def iniciar_automacao_em_thread(dados_interface):
 
     # Adiciona uma mensagem de status enquanto o thread está sendo criado
     log = dados_interface['log']
-    log("Iniciando thread de automação...", "status")
 
-    # 1. Cria o thread, apontando para a função 'executar_fluxo' e passando os dados como argumentos
     thread = threading.Thread(
         target=executar_fluxo,
         args=(dados_interface,)  # O argumento deve ser passado como uma tupla

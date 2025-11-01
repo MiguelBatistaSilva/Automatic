@@ -137,7 +137,7 @@ def open_screen(callback_executar):
     def confirmar():
         # 1. VERIFICAÇÕES (Mantém o return para ficar na tela)
         if not arquivo.get() or not secretaria.get() or not link_site.get() or not usuario_atribuido.get():
-            log("Erro: Preencha todos os campos obrigatórios!", tipo="error")
+            log("\n" + "="*50 + "\nNOVA EXECUÇÃO INICIADA", tipo="status")
             return
 
             # 2. ARMAZENAR DADOS
