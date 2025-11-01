@@ -19,7 +19,6 @@ def flow_kaspersky(df, secretaria, link_site, usuario_atribuido, log):
         return
 
     log("Aguardando login manual no Assyst...", "info")
-    print("⚙️ Faça login manualmente no Assyst...")
 
     # 2. --- ESPERA PELA PÁGINA FINAL (Usando seletor centralizado) ---
     try:

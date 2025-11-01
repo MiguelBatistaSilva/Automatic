@@ -27,8 +27,6 @@ def flow_cables(df, secretaria, link_site, log):
     log(f"Acessando: {link_site}", "info")
     log("Aguardando login manual no Assyst...", "info")
 
-    print("⚙️ Faça login manualmente no Assyst...")
-
     # Espera até o botão "Salvar" aparecer, indicando que o chamado carregou
     WebDriverWait(driver, 60).until(
         EC.presence_of_element_located((By.ID, "btlogEvent")) 
