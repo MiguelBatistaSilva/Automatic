@@ -3,7 +3,7 @@ from tkinter import filedialog, ttk, scrolledtext
 from ttkthemes import ThemedTk
 from placeholder import create_input_line
 
-def open_screen():
+def open_screen(callback_executar):
 
     # --- Janela principal ---
     root = ThemedTk(theme="breeze")
@@ -79,7 +79,6 @@ def open_screen():
     current_row += 1
     
     # 5. Escolher Arquivo
-    
     def escolher_arquivo():
         path = filedialog.askopenfilename(
             defaultextension=".xlsx",
@@ -136,18 +135,25 @@ def open_screen():
     botoes.grid(row=current_row, column=0, columnspan=3, pady=20, sticky="ew")
 
     def confirmar():
+        # 1. VERIFICAÇÕES (Mantém o return para ficar na tela)
         if not arquivo.get() or not secretaria.get() or not link_site.get() or not usuario_atribuido.get():
             log("Erro: Preencha todos os campos obrigatórios!", tipo="error")
             return
 
-        log("Iniciando automação...", tipo="status")
-        log(f"Secretaria: {secretaria.get()} | Chamado: {chamado.get()} | Usuário: {usuario_atribuido.get()}", tipo="status")
-        root.quit()
+            # 2. ARMAZENAR DADOS
+        dados_coletados = {
+            'secretaria': secretaria.get(),
+            'chamado': chamado.get(),
+            'arquivo': arquivo.get(),
+            'link_site': link_site.get(),
+            'usuario_atribuido': usuario_atribuido.get(),
+            'log': log,
+            'root': root
+        }
+        callback_executar(dados_coletados)
 
     ttk.Button(botoes, text="START", command=confirmar).pack(side="left", padx=20, expand=True, fill="x")
     ttk.Button(botoes, text="CANCEL", command=root.destroy).pack(side="right", padx=20, expand=True, fill="x")
 
     root.mainloop()
-    
-    # ⚠️ RETORNO FINAL: Adicionando as novas variáveis
-    return secretaria.get(), chamado.get(), arquivo.get(), link_site.get(), usuario_atribuido.get(), log, logs
+    return True
