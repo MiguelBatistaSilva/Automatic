@@ -11,6 +11,11 @@ def open_screen(callback_executar):
     root.geometry("1200x700")
     root.resizable(False, False)
 
+    try:
+        root.iconbitmap(r'C:\Users\migue\Python\Automatic\format_letter_matches_icon_136591.ico')
+    except tk.TclError:
+        print("Aviso: Não foi possível carregar o ícone. Verifique o caminho e o formato (.ico).")
+
     # --- Variáveis ---
     secretaria = tk.StringVar()
     chamado = tk.StringVar()
