@@ -109,8 +109,8 @@ def knowledgebase(driver):
     except Exception as e:
         print(f"❌ Erro ao clicar no botão 'Salvar ação': {e}")
 
-        # -- SAIR --
-        xpath_voltar = "//span[text()='Voltar ao evento']/ancestor::span[contains(@role, 'button')]"
+    # -- SAIR --
+    xpath_voltar = "//span[text()='Voltar ao evento']/ancestor::span[contains(@role, 'button')]"
 
     try:
         botao_voltar = WebDriverWait(driver, 15).until(
