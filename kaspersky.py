@@ -9,10 +9,6 @@ import time
 
 def flow_kaspersky(df, secretaria, link_site, usuario_atribuido, log):
 
-    log("Criando Requisição de Serviço...", tipo="status")
-
-    # 1. --- INICIALIZAÇÃO E NAVEGAÇÃO CENTRALIZADA ---
-
     driver = iniciar_driver_e_navegar()
     if driver is None:
         log("❌ Falha na inicialização do Driver. Encerrando.", "error")
@@ -36,6 +32,8 @@ def flow_kaspersky(df, secretaria, link_site, usuario_atribuido, log):
         log(f"❌ Erro na detecção do formulário: {e}", "error")
         driver.quit()
         return
+
+    log("Criando Requisição de Serviço...", tipo="status")
 
     # === USUÁRIO ===
     try:

@@ -10,8 +10,6 @@ import time
 
 def flow_windows(df, secretaria, link_site, log):
 
-    log("Criando Requisição de Serviço...", tipo="status")
-
     # --- Configuração do Chrome ---
     chrome_options = Options()
     chrome_options.add_argument("--start-maximized")

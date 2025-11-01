@@ -9,7 +9,7 @@ import time
 
 def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
 
-    log("Criando Requisição de Serviço...", tipo="status")
+
 
     # 1. --- INICIALIZAÇÃO E NAVEGAÇÃO CENTRALIZADA ---
 
@@ -36,6 +36,8 @@ def flow_nomenclature(df, secretaria, link_site, usuario_atribuido, log):
         log(f"❌ Erro na detecção do formulário: {e}", "error")
         driver.quit()
         return
+
+    log("Criando Requisição de Serviço...", tipo="status")
 
     # === USUÁRIO ===
     try:
