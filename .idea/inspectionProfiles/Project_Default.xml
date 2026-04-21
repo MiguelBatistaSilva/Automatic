@@ -1,0 +1,98 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="false" level="WARNING" enabled_by_default="false">
+      <option name="ignoredPackages">
+        <list>
+          <option value="greenlet" />
+          <option value="psycopg2-binary" />
+          <option value="SQLAlchemy" />
+          <option value="fpdf" />
+          <option value="fpdf2" />
+          <option value="git-filter-repo" />
+          <option value="unzip" />
+          <option value="alembic" />
+          <option value="annotated-doc" />
+          <option value="annotated-types" />
+          <option value="anyio" />
+          <option value="async-timeout" />
+          <option value="backports.tarfile" />
+          <option value="bidict" />
+          <option value="build" />
+          <option value="certifi" />
+          <option value="charset-normalizer" />
+          <option value="click" />
+          <option value="colorama" />
+          <option value="docutils" />
+          <option value="exceptiongroup" />
+          <option value="fastapi" />
+          <option value="gunicorn" />
+          <option value="h11" />
+          <option value="httpcore" />
+          <option value="httpx" />
+          <option value="id" />
+          <option value="idna" />
+          <option value="importlib_metadata" />
+          <option value="jaraco.classes" />
+          <option value="jaraco.context" />
+          <option value="jaraco.functools" />
+          <option value="Jinja2" />
+          <option value="keyring" />
+          <option value="lazy-loader" />
+          <option value="Mako" />
+          <option value="markdown-it-py" />
+          <option value="MarkupSafe" />
+          <option value="mdurl" />
+          <option value="more-itertools" />
+          <option value="nh3" />
+          <option value="packaging" />
+          <option value="platformdirs" />
+          <option value="psutil" />
+          <option value="pydantic" />
+          <option value="pydantic_core" />
+          <option value="Pygments" />
+          <option value="PyJWT" />
+          <option value="pyproject_hooks" />
+          <option value="python-engineio" />
+          <option value="python-multipart" />
+          <option value="python-socketio" />
+          <option value="pywin32-ctypes" />
+          <option value="PyYAML" />
+          <option value="readme_renderer" />
+          <option value="redis" />
+          <option value="reflex" />
+          <option value="reflex-chakra" />
+          <option value="reflex-hosting-cli" />
+          <option value="requests" />
+          <option value="requests-toolbelt" />
+          <option value="rfc3986" />
+          <option value="rich" />
+          <option value="shellingham" />
+          <option value="simple-websocket" />
+          <option value="sqlmodel" />
+          <option value="starlette" />
+          <option value="starlette-admin" />
+          <option value="tabulate" />
+          <option value="tomli" />
+          <option value="tomlkit" />
+          <option value="twine" />
+          <option value="typer" />
+          <option value="typing-inspection" />
+          <option value="typing_extensions" />
+          <option value="urllib3" />
+          <option value="uvicorn" />
+          <option value="wrapt" />
+          <option value="wsproto" />
+          <option value="zipp" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyStubPackagesAdvertiser" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="pandas" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
