@@ -1,13 +1,13 @@
 # Automatic v6.0
 
-Ferramenta de automação para desmembramentos de chamados do sistema Assyst/TJCE.
+Ferramenta de automação para o Assyst/TJCE.
 
 ---
 
 ## Requisitos
 
 - Windows 10/11 64-bit;
-- Python 3.11 ou superior instalado (acesse a pasta Instalar_Python, você encontrará o executável);
+- Python 3.11 ou superior instalado;
 - Google Chrome instalado;
 - `chromedriver.exe` compatível com sua versão do Chrome;
 
@@ -16,8 +16,10 @@ Ferramenta de automação para desmembramentos de chamados do sistema Assyst/TJC
 ## Instalação
 
 1. Copie a pasta `Automatic v6.0` para seu computador (ex: `C:\Automatic v6.0`);
-2. Coloque o `chromedriver.exe` dentro de `services\driver\`;
-3. Clique duas vezes em `iniciar_automacao.bat`;
+2. Instale o python (você encontrará o executável na pasta Instalar_Python);
+   - Selecione a opção Add python.exe to PATH na hora da instalação.
+3. Coloque o `chromedriver.exe` dentro de `services\driver\`;
+4. Clique duas vezes em `iniciar_automatic.bat`;
    - Na primeira execução, instala as dependências automaticamente,
    - Aguarde alguns minutos.
 
@@ -43,7 +45,7 @@ Extraia e coloque o `chromedriver.exe` em `services\driver\`.
 
 ### Aba Automatic
 
-1. **Chamado PAI** — informe o número do chamado que será desmembrado;
+1. **Referência PAI** — informe o número do chamado que será desmembrado;
 2. **Matrícula e Senha** — suas credenciais do sistema Assyst;
 3. **Descrição** — texto que sera inserido em cada chamado filho;
 4. **Base de Conhecimento** — selecione a BC que será vinculada;
