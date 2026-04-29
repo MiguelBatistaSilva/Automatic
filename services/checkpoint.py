@@ -1,0 +1,148 @@
+"""
+services/checkpoint.py — Gerencia o progresso linha a linha com 3 estados:
+  pendente  → ainda nao processada
+  salvo     → chamado criado mas BC ainda nao adicionada
+  concluido → chamado criado + BC adicionada
+"""
+import json
+from pathlib import Path
+from datetime import datetime
+
+_CHECKPOINT_PATH = Path(__file__).parent.parent / "data" / "checkpoint.json"
+
+STATUS_PENDENTE  = "pendente"
+STATUS_SALVO     = "salvo"
+STATUS_CONCLUIDO = "concluido"
+
+
+def _agora() -> str:
+    return datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+
+def inicializar(numero_chamado: str, total: int) -> None:
+    """Cria um checkpoint novo com todas as linhas como pendente."""
+    _CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    dados = {
+        "numero_chamado": numero_chamado,
+        "total":          total,
+        "criado_em":      _agora(),
+        "atualizado_em":  _agora(),
+        "concluido":      False,
+        "linhas": [
+            {"index": i, "status": STATUS_PENDENTE}
+            for i in range(total)
+        ],
+    }
+    _salvar_dados(dados)
+
+
+def marcar_salvo(numero_chamado: str, index: int, numero_filho: str = "") -> None:
+    """Marca linha como salva (chamado criado, BC pendente). Salva o numero do filho."""
+    dados = _carregar_dados()
+    if not dados or dados.get("numero_chamado") != numero_chamado:
+        return
+    for linha in dados["linhas"]:
+        if linha["index"] == index:
+            linha["status"] = STATUS_SALVO
+            linha["salvo_em"] = _agora()
+            linha["numero_filho"] = numero_filho
+            break
+    dados["atualizado_em"] = _agora()
+    _salvar_dados(dados)
+
+
+def numero_filho(numero_chamado: str, index: int) -> str:
+    """Retorna o numero do chamado filho para uma linha salva."""
+    for l in status_linhas(numero_chamado):
+        if l["index"] == index:
+            return l.get("numero_filho", "")
+    return ""
+
+
+def marcar_concluido_linha(numero_chamado: str, index: int) -> None:
+    """Marca linha como concluida (chamado + BC adicionados)."""
+    dados = _carregar_dados()
+    if not dados or dados.get("numero_chamado") != numero_chamado:
+        return
+    for linha in dados["linhas"]:
+        if linha["index"] == index:
+            linha["status"] = STATUS_CONCLUIDO
+            linha["concluido_em"] = _agora()
+            break
+    # Verificar se todas estao concluidas
+    todas = all(l["status"] == STATUS_CONCLUIDO for l in dados["linhas"])
+    dados["concluido"]     = todas
+    dados["atualizado_em"] = _agora()
+    _salvar_dados(dados)
+
+
+def carregar() -> dict | None:
+    return _carregar_dados()
+
+
+def existe_pendente(numero_chamado: str) -> bool:
+    """Verifica se existe checkpoint com linhas nao concluidas para esse chamado."""
+    dados = _carregar_dados()
+    if not dados:
+        return False
+    if dados.get("numero_chamado") != numero_chamado:
+        return False
+    if dados.get("concluido", False):
+        return False
+    return any(
+        l["status"] in [STATUS_PENDENTE, STATUS_SALVO]
+        for l in dados.get("linhas", [])
+    )
+
+
+def status_linhas(numero_chamado: str) -> list[dict]:
+    """Retorna a lista de status de cada linha."""
+    dados = _carregar_dados()
+    if not dados or dados.get("numero_chamado") != numero_chamado:
+        return []
+    return dados.get("linhas", [])
+
+
+def status_linha(numero_chamado: str, index: int) -> str:
+    """Retorna o status de uma linha especifica."""
+    for l in status_linhas(numero_chamado):
+        if l["index"] == index:
+            return l["status"]
+    return STATUS_PENDENTE
+
+
+def resumo(numero_chamado: str) -> str:
+    """Retorna string resumindo o progresso."""
+    dados = _carregar_dados()
+    if not dados or dados.get("numero_chamado") != numero_chamado:
+        return ""
+    linhas    = dados.get("linhas", [])
+    total     = len(linhas)
+    concluidos = sum(1 for l in linhas if l["status"] == STATUS_CONCLUIDO)
+    salvos     = sum(1 for l in linhas if l["status"] == STATUS_SALVO)
+    data       = dados.get("atualizado_em", "")
+    partes = [f"{concluidos} de {total} concluidas"]
+    if salvos:
+        partes.append(f"{salvos} salvas sem BC")
+    return f"{' | '.join(partes)} — {data}"
+
+
+def limpar() -> None:
+    if _CHECKPOINT_PATH.exists():
+        _CHECKPOINT_PATH.unlink()
+
+
+def _carregar_dados() -> dict | None:
+    if not _CHECKPOINT_PATH.exists():
+        return None
+    try:
+        with open(_CHECKPOINT_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _salvar_dados(dados: dict) -> None:
+    _CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(_CHECKPOINT_PATH, "w", encoding="utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=2)

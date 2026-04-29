@@ -1,15 +1,16 @@
 """
-ui/tema_qt.py — Estilos globais do PyQt6 (Light Mode)
+ui/tema.py — Estilos globais do PyQt6
 """
 
-COR_FUNDO        = "#F0F2F5"
+COR_FUNDO        = "#F5F7FA"
 COR_PAINEL       = "#FFFFFF"
 COR_BORDA        = "#D1D5DB"
 COR_PRIMARIA     = "#2563EB"
 COR_SUCESSO      = "#16A34A"
 COR_ERRO         = "#DC2626"
-COR_STATUS       = "#1D4ED8"
+COR_STATUS       = "#0891B2"
 COR_INFO         = "#6B7280"
+COR_AVISO        = "#D97706"
 COR_TEXTO        = "#111827"
 COR_TEXTO_MUTED  = "#6B7280"
 COR_INPUT_BG     = "#FFFFFF"
@@ -44,7 +45,6 @@ ESTILO_GLOBAL = f"""
         background: {COR_PAINEL};
         color: {COR_TEXTO};
         font-weight: bold;
-        border-bottom: 2px solid {COR_PRIMARIA};
     }}
     QLineEdit, QTextEdit, QPlainTextEdit {{
         background-color: {COR_INPUT_BG};
@@ -65,27 +65,16 @@ ESTILO_GLOBAL = f"""
         padding: 6px 10px;
         font-size: 13px;
     }}
-    QComboBox:focus {{
-        border: 1px solid {COR_PRIMARIA};
-    }}
     QComboBox::drop-down {{
         border: none;
         width: 24px;
-    }}
-    QComboBox::down-arrow {{
-        image: none;
-        border-left: 4px solid transparent;
-        border-right: 4px solid transparent;
-        border-top: 6px solid {COR_TEXTO_MUTED};
-        margin-right: 6px;
     }}
     QComboBox QAbstractItemView {{
         background-color: {COR_PAINEL};
         color: {COR_TEXTO};
         border: 1px solid {COR_BORDA};
-        selection-background-color: {COR_PRIMARIA};
-        selection-color: white;
-        outline: none;
+        selection-background-color: #DBEAFE;
+        selection-color: #1E3A8A;
     }}
     QPushButton {{
         border-radius: 5px;
@@ -103,7 +92,7 @@ ESTILO_GLOBAL = f"""
     }}
     QPushButton#btn_iniciar:disabled {{
         background-color: #93C5FD;
-        color: #FFFFFF;
+        color: white;
     }}
     QPushButton#btn_secundario {{
         background-color: {COR_BTN_LIMPAR};
@@ -116,11 +105,11 @@ ESTILO_GLOBAL = f"""
     QPushButton#btn_perigo {{
         background-color: transparent;
         color: {COR_ERRO};
-        border: 1px solid {COR_BORDA};
+        border: 1px solid {COR_ERRO};
     }}
     QPushButton#btn_perigo:hover {{
-        background-color: #FFF0F0;
-        border-color: {COR_ERRO};
+        background-color: {COR_ERRO};
+        color: white;
     }}
     QPushButton#btn_sucesso {{
         background-color: transparent;
@@ -130,6 +119,36 @@ ESTILO_GLOBAL = f"""
     QPushButton#btn_sucesso:hover {{
         background-color: {COR_SUCESSO};
         color: white;
+    }}
+    QToolButton {{
+        background-color: {COR_BTN_LIMPAR};
+        color: {COR_TEXTO};
+        border: 1px solid {COR_BORDA};
+        border-radius: 5px;
+        padding: 5px 12px;
+        font-size: 13px;
+        font-weight: bold;
+    }}
+    QToolButton:hover {{
+        background-color: #D1D5DB;
+    }}
+    QToolButton::menu-indicator {{
+        image: none;
+    }}
+    QMenu {{
+        background-color: {COR_PAINEL};
+        color: {COR_TEXTO};
+        border: 1px solid {COR_BORDA};
+        border-radius: 6px;
+        padding: 4px;
+    }}
+    QMenu::item {{
+        padding: 8px 20px;
+        border-radius: 4px;
+    }}
+    QMenu::item:selected {{
+        background-color: #DBEAFE;
+        color: #1E3A8A;
     }}
     QLabel {{
         color: {COR_TEXTO};
@@ -142,9 +161,9 @@ ESTILO_GLOBAL = f"""
         text-transform: uppercase;
         letter-spacing: 1px;
     }}
-    QScrollArea {{
-        border: none;
+    QScrollArea, QScrollBar {{
         background: transparent;
+        border: none;
     }}
     QScrollBar:vertical {{
         background: {COR_FUNDO};
@@ -154,37 +173,27 @@ ESTILO_GLOBAL = f"""
     QScrollBar::handle:vertical {{
         background: {COR_BORDA};
         border-radius: 4px;
-        min-height: 20px;
-    }}
-    QScrollBar::handle:vertical:hover {{
-        background: #9CA3AF;
-    }}
-    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-        height: 0px;
     }}
     QGroupBox {{
         border: 1px solid {COR_BORDA};
         border-radius: 6px;
-        margin-top: 4px;
-        padding: 22px 12px 12px 12px;
+        margin-top: 12px;
+        padding: 12px;
         font-weight: bold;
         background-color: {COR_PAINEL};
     }}
     QGroupBox::title {{
-        subcontrol-origin: padding;
-        subcontrol-position: top left;
+        subcontrol-origin: margin;
         left: 10px;
-        top: 5px;
-        padding: 0 4px;
+        padding: 0 6px;
         color: {COR_TEXTO_MUTED};
-        background-color: transparent;
     }}
     QListWidget {{
         background-color: {COR_INPUT_BG};
         border: 1px solid {COR_BORDA};
         border-radius: 5px;
         padding: 4px;
-        outline: none;
+        color: {COR_TEXTO};
     }}
     QListWidget::item {{
         padding: 8px;
@@ -192,28 +201,18 @@ ESTILO_GLOBAL = f"""
         color: {COR_TEXTO};
     }}
     QListWidget::item:selected {{
-        background-color: {COR_PRIMARIA};
-        color: white;
+        background-color: #DBEAFE;
+        color: #1E3A8A;
     }}
     QListWidget::item:hover {{
-        background-color: #EFF6FF;
-    }}
-    QSplitter::handle {{
-        background: {COR_BORDA};
+        background-color: #F3F4F6;
     }}
     QStatusBar {{
-        background-color: {COR_PAINEL};
+        background-color: {COR_FUNDO};
         color: {COR_TEXTO_MUTED};
         border-top: 1px solid {COR_BORDA};
     }}
-    QMessageBox {{
-        background-color: {COR_PAINEL};
-        color: {COR_TEXTO};
-    }}
-    QMessageBox QPushButton {{
-        background-color: {COR_BTN_LIMPAR};
-        color: {COR_TEXTO};
-        border: 1px solid {COR_BORDA};
-        min-width: 70px;
+    QSplitter::handle {{
+        background: {COR_BORDA};
     }}
 """

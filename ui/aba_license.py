@@ -61,7 +61,7 @@ class LicenseWorker(QObject):
                 except Exception:
                     pass
 
-                time.sleep(1.5)
+                time.sleep(1)
 
                 # Credencial errada — para imediatamente
                 erro_cred = driver.find_elements(By.CSS_SELECTOR, "ol.errormsg")
@@ -123,7 +123,7 @@ class AbaLicense(QWidget):
         cred_layout.addWidget(_lbl("Senha"))
         self.input_senha = QLineEdit()
         self.input_senha.setEchoMode(QLineEdit.EchoMode.Password)
-        self.input_senha.setPlaceholderText("Senha")
+        self.input_senha.setPlaceholderText("Lanlink@")
         self.input_senha.setMinimumWidth(120)
         self.input_senha.setMaximumWidth(160)
         cred_layout.addWidget(self.input_senha)

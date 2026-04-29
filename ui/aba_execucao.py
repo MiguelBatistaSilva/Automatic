@@ -1,32 +1,40 @@
-import time
+"""
+ui/aba_execucao.py — Aba principal de execucao da automacao
+"""
 import csv
 import io
+import time
+
 import pandas as pd
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QTextEdit, QComboBox,
     QPushButton, QGroupBox, QSizePolicy, QPlainTextEdit,
+    QCheckBox, QFrame,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject
 from PyQt6.QtGui import QColor, QTextCharFormat, QFont
 
 from ui.tema_qt import (
-    COR_SUCESSO, COR_ERRO, COR_STATUS, COR_INFO, COR_TEXTO, FONTE_MONO
+    COR_SUCESSO, COR_ERRO, COR_STATUS, COR_INFO,
+    COR_TEXTO, COR_AVISO, FONTE_MONO
 )
+from services.checkpoint import existe_pendente, resumo as resumo_checkpoint
 
 
 # ---------------------------------------------------------------------------
-# Worker thread — roda o Selenium sem travar a UI
+# Worker thread
 # ---------------------------------------------------------------------------
 
 class AutomacaoWorker(QObject):
-    log_signal   = pyqtSignal(str, str)
-    fim_signal   = pyqtSignal(bool)
+    log_signal = pyqtSignal(str, str)
+    fim_signal = pyqtSignal(bool)
 
-    def __init__(self, dados: dict):
+    def __init__(self, dados: dict, iniciar_do_zero: bool):
         super().__init__()
         self.dados = dados
+        self.iniciar_do_zero = iniciar_do_zero
 
     def run(self):
         try:
@@ -36,7 +44,10 @@ class AutomacaoWorker(QObject):
                 self.log_signal.emit(msg, type_log)
 
             orchestrator = Automatic(log_func)
-            resultado = orchestrator.executar_fluxo(self.dados)
+            resultado = orchestrator.executar_fluxo(
+                self.dados,
+                iniciar_do_zero=self.iniciar_do_zero,
+            )
             self.fim_signal.emit(resultado)
         except Exception as e:
             self.log_signal.emit(f"Excecao inesperada: {e}", "error")
@@ -66,100 +77,83 @@ class AbaExecucao(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setSpacing(12)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        # --- Topo: duas colunas (config | csv) ---
-        top_layout = QHBoxLayout()
-        top_layout.setSpacing(20)
+        # --- Duas colunas: config (esq) | CSV (dir) ---
+        cols_layout = QHBoxLayout()
+        cols_layout.setSpacing(24)
 
-        # Coluna esquerda — campos de configuracao
-        grid = QGridLayout()
-        grid.setSpacing(10)
-        grid.setColumnStretch(1, 3)
-        grid.setColumnStretch(3, 2)
-        grid.setColumnStretch(5, 2)
+        # === Coluna Esquerda ===
+        col_esq = QVBoxLayout()
+        col_esq.setSpacing(6)
 
-        def _lbl(texto):
-            lbl = QLabel(texto)
-            lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            return lbl
-
-        grid.addWidget(_lbl("Referência"), 0, 0)
+        col_esq.addWidget(QLabel("Chamado PAI"))
         self.input_chamado = QLineEdit()
-        self.input_chamado.setPlaceholderText("Ex: S2123456 ou 2012380")
-        self.input_chamado.setMinimumWidth(160)
-        grid.addWidget(self.input_chamado, 0, 1)
+        self.input_chamado.setPlaceholderText("Ex: S2123456 ou 2007909")
+        self.input_chamado.textChanged.connect(self._verificar_checkpoint)
+        col_esq.addWidget(self.input_chamado)
 
-        grid.addWidget(_lbl("Matrícula"), 0, 2)
+        cred_row = QHBoxLayout()
+        cred_row.setSpacing(12)
+
+        mat_col = QVBoxLayout()
+        mat_col.setSpacing(4)
+        mat_col.addWidget(QLabel("Matrícula"))
         self.input_usuario = QLineEdit()
-        self.input_usuario.setPlaceholderText("400123")
-        self.input_usuario.setMinimumWidth(120)
-        grid.addWidget(self.input_usuario, 0, 3)
+        self.input_usuario.setPlaceholderText("Matrícula")
+        mat_col.addWidget(self.input_usuario)
+        cred_row.addLayout(mat_col)
 
-        grid.addWidget(_lbl("Senha"), 0, 4)
+        senha_col = QVBoxLayout()
+        senha_col.setSpacing(4)
+        senha_col.addWidget(QLabel("Senha"))
         self.input_senha = QLineEdit()
         self.input_senha.setEchoMode(QLineEdit.EchoMode.Password)
         self.input_senha.setPlaceholderText("Lanlink@")
-        self.input_senha.setMinimumWidth(120)
-        grid.addWidget(self.input_senha, 0, 5)
+        senha_col.addWidget(self.input_senha)
+        cred_row.addLayout(senha_col)
 
-        grid.addWidget(_lbl("Descrição"), 1, 0)
+        col_esq.addLayout(cred_row)
+
+        col_esq.addWidget(QLabel("Descrição"))
         self.input_descricao = QLineEdit()
         self.input_descricao.setText("Solicito atualização de sistema...")
-        grid.addWidget(self.input_descricao, 1, 1, 1, 5)
+        col_esq.addWidget(self.input_descricao)
 
-        grid.addWidget(_lbl("Base de Conhecimento"), 2, 0)
+        col_esq.addWidget(QLabel("Base de Conhecimento"))
         self.combo_kb = QComboBox()
         self.combo_kb.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         for e in self.kb_entries:
             self.combo_kb.addItem(e["nome_artigo"])
-        grid.addWidget(self.combo_kb, 2, 1, 1, 5)
+        col_esq.addWidget(self.combo_kb)
 
-        left_widget = QWidget()
-        left_widget.setLayout(grid)
-        top_layout.addWidget(left_widget, 2)
+        # Aviso de Checkpoint
+        self.frame_checkpoint = QFrame()
+        self.frame_checkpoint.setStyleSheet("""
+            QFrame {
+                background-color: #FEF9C3;
+                border: 1px solid #D97706;
+                border-radius: 6px;
+                padding: 4px;
+            }
+        """)
+        cp_layout = QVBoxLayout(self.frame_checkpoint)
+        cp_layout.setContentsMargins(10, 8, 10, 8)
+        cp_layout.setSpacing(6)
 
-        # Coluna direita — Dados de Iteracao
-        right_layout = QVBoxLayout()
-        right_layout.setSpacing(6)
-        right_layout.setContentsMargins(0, 0, 0, 0)
+        self.lbl_checkpoint = QLabel("")
+        self.lbl_checkpoint.setStyleSheet("color: #92400E; font-weight: bold; border: none;")
+        cp_layout.addWidget(self.lbl_checkpoint)
 
-        self.lbl_titulo_csv = QLabel("Dados de Iteração")
-        self.lbl_titulo_csv.setObjectName("label_secao")
-        self.lbl_titulo_csv.setStyleSheet("text-transform: none;")
-        right_layout.addWidget(self.lbl_titulo_csv)
+        self.chk_do_zero = QCheckBox("Ignorar checkpoint e comecar do zero")
+        self.chk_do_zero.setStyleSheet("color: #78350F; border: none;")
+        cp_layout.addWidget(self.chk_do_zero)
 
-        self.txt_csv = QPlainTextEdit()
-        self.txt_csv.setPlaceholderText(
-            "Marca/Modelo,Tombo\n"
-            "POSITIVO C6200,212150/323265\n"
-            "HP ProBook 450,198342/411280"
-        )
-        self.txt_csv.setFixedHeight(100)
-        self.txt_csv.setFont(QFont(FONTE_MONO, 11))
-        right_layout.addWidget(self.txt_csv)
+        self.frame_checkpoint.setVisible(False)
+        col_esq.addWidget(self.frame_checkpoint)
 
-        csv_btn_layout = QHBoxLayout()
-        self.btn_importar = QPushButton("Importar CSV")
-        self.btn_importar.setObjectName("btn_secundario")
-        self.btn_importar.clicked.connect(self._importar_csv)
-        csv_btn_layout.addWidget(self.btn_importar)
-
-        self.lbl_csv_status = QLabel("")
-        self.lbl_csv_status.setStyleSheet(f"color: {COR_SUCESSO};")
-        csv_btn_layout.addWidget(self.lbl_csv_status)
-        csv_btn_layout.addStretch()
-        right_layout.addLayout(csv_btn_layout)
-        right_layout.addStretch()
-
-        right_widget = QWidget()
-        right_widget.setLayout(right_layout)
-        top_layout.addWidget(right_widget, 1)
-
-        layout.addLayout(top_layout)
-
-        # --- Botoes de acao ---
+        # Botoes
         btn_layout = QHBoxLayout()
         self.btn_iniciar = QPushButton("▶  INICIAR")
         self.btn_iniciar.setObjectName("btn_iniciar")
@@ -172,16 +166,63 @@ class AbaExecucao(QWidget):
         self.btn_limpar.clicked.connect(self._limpar_logs)
         btn_layout.addWidget(self.btn_limpar)
         btn_layout.addStretch()
-        layout.addLayout(btn_layout)
+        col_esq.addLayout(btn_layout)
 
-        # --- Logs (stretch=1 para preencher o espaco restante) ---
-        grp_logs = QGroupBox("Registro de Execucao")
+        col_esq.addStretch()
+
+        # === Coluna Direita ===
+        col_dir = QVBoxLayout()
+        col_dir.setSpacing(6)
+
+        col_dir.addWidget(QLabel("Dados de Iteração"))
+        self.txt_csv = QPlainTextEdit()
+        self.txt_csv.setPlaceholderText(
+            "Marca/Modelo,Tombo\n"
+            "POSITIVO C6200,212150/323265\n"
+            "HP ProBook 450,198342/411280"
+        )
+        self.txt_csv.setFont(QFont(FONTE_MONO, 11))
+        col_dir.addWidget(self.txt_csv, 1)
+
+        csv_btn_layout = QHBoxLayout()
+        self.btn_importar = QPushButton("Importar dados")
+        self.btn_importar.setObjectName("btn_secundario")
+        self.btn_importar.clicked.connect(self._importar_csv)
+        csv_btn_layout.addWidget(self.btn_importar)
+
+        self.lbl_csv_status = QLabel("")
+        self.lbl_csv_status.setStyleSheet(f"color: {COR_SUCESSO};")
+        csv_btn_layout.addWidget(self.lbl_csv_status)
+        csv_btn_layout.addStretch()
+        col_dir.addLayout(csv_btn_layout)
+
+        cols_layout.addLayout(col_esq, 1)
+        cols_layout.addLayout(col_dir, 1)
+        layout.addLayout(cols_layout, 1)
+
+        # --- Logs (largura total) ---
+        grp_logs = QGroupBox("Registro de Execução")
         logs_layout = QVBoxLayout(grp_logs)
         self.txt_logs = QTextEdit()
         self.txt_logs.setReadOnly(True)
         self.txt_logs.setFont(QFont(FONTE_MONO, 11))
+        self.txt_logs.setMinimumHeight(200)
         logs_layout.addWidget(self.txt_logs)
         layout.addWidget(grp_logs, 1)
+
+    def _verificar_checkpoint(self, numero: str):
+        numero = numero.strip()
+        if not numero:
+            self.frame_checkpoint.setVisible(False)
+            return
+
+        if existe_pendente(numero):
+            info = resumo_checkpoint(numero)
+            self.lbl_checkpoint.setText(f"⏰  {info}")
+            self.chk_do_zero.setChecked(False)
+            self.frame_checkpoint.setVisible(True)
+        else:
+            self.frame_checkpoint.setVisible(False)
 
     def _importar_csv(self):
         texto = self.txt_csv.toPlainText().strip()
@@ -194,9 +235,15 @@ class AbaExecucao(QWidget):
             if not rows:
                 raise ValueError("Nenhuma linha encontrada.")
             self.colunas_csv = [c.strip() for c in rows[0]]
-            self.linhas_csv = [[v.strip() for v in row] for row in rows[1:] if any(v.strip() for v in row)]
+            self.linhas_csv  = [
+                [v.strip() for v in row]
+                for row in rows[1:]
+                if any(v.strip() for v in row)
+            ]
             self.lbl_csv_status.setStyleSheet(f"color: {COR_SUCESSO};")
-            self.lbl_csv_status.setText(f"✓ {len(self.linhas_csv)} linha(s), {len(self.colunas_csv)} coluna(s)")
+            self.lbl_csv_status.setText(
+                f"✓ {len(self.linhas_csv)} linha(s), {len(self.colunas_csv)} coluna(s)"
+            )
         except Exception as e:
             self.lbl_csv_status.setStyleSheet(f"color: {COR_ERRO};")
             self.lbl_csv_status.setText(f"Erro: {e}")
@@ -205,7 +252,7 @@ class AbaExecucao(QWidget):
         erros = []
         if not self.linhas_csv:
             erros.append("Importe o CSV antes de iniciar.")
-        if self.combo_kb.currentIndex() < 0 or not self.combo_kb.currentText():
+        if self.combo_kb.currentIndex() < 0:
             erros.append("Selecione uma Base de Conhecimento.")
         if not self.input_chamado.text().strip():
             erros.append("Preencha o numero do Chamado PAI.")
@@ -219,11 +266,13 @@ class AbaExecucao(QWidget):
                 self._append_log(e, "error")
             return
 
-        kb_nome = self.combo_kb.currentText()
+        kb_nome  = self.combo_kb.currentText()
         kb_entry = next((e for e in self.kb_entries if e["nome_artigo"] == kb_nome), None)
         if not kb_entry:
             self._append_log("Base de Conhecimento nao encontrada.", "error")
             return
+
+        iniciar_do_zero = self.chk_do_zero.isChecked()
 
         dados = {
             "descricao_base": self.input_descricao.text(),
@@ -235,7 +284,7 @@ class AbaExecucao(QWidget):
         }
 
         self._set_em_execucao(True)
-        self._worker = AutomacaoWorker(dados)
+        self._worker = AutomacaoWorker(dados, iniciar_do_zero)
         self._thread = QThread()
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
@@ -250,6 +299,8 @@ class AbaExecucao(QWidget):
         else:
             self._append_log("Fluxo encerrado com falha. Verifique os logs.", "error")
         self._set_em_execucao(False)
+        # Atualizar aviso de checkpoint
+        self._verificar_checkpoint(self.input_chamado.text())
 
     def _set_em_execucao(self, em_exec: bool):
         self.btn_iniciar.setEnabled(not em_exec)
@@ -259,15 +310,16 @@ class AbaExecucao(QWidget):
         self.input_senha.setEnabled(not em_exec)
         self.combo_kb.setEnabled(not em_exec)
         self.txt_csv.setEnabled(not em_exec)
+        self.chk_do_zero.setEnabled(not em_exec)
 
     def _limpar_logs(self):
         self.txt_logs.clear()
 
     def _append_log(self, mensagem: str, tipo: str = "info"):
-        ts = time.strftime("%H:%M:%S")
+        ts     = time.strftime("%H:%M:%S")
         labels = {"info": "INFO", "status": "STATUS", "success": "SUCESSO", "error": "ERRO"}
-        label = labels.get(tipo, tipo.upper())
-        linha = f"[{ts}] [{label}] {mensagem}"
+        label  = labels.get(tipo, tipo.upper())
+        linha  = f"[{ts}] [{label}] {mensagem}"
 
         cores = {
             "success": COR_SUCESSO,
@@ -275,9 +327,8 @@ class AbaExecucao(QWidget):
             "status":  COR_STATUS,
             "info":    COR_INFO,
         }
-        cor = cores.get(tipo, COR_INFO)
-
-        fmt = QTextCharFormat()
+        cor    = cores.get(tipo, COR_INFO)
+        fmt    = QTextCharFormat()
         fmt.setForeground(QColor(cor))
         cursor = self.txt_logs.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
