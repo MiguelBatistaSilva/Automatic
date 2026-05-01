@@ -1,5 +1,5 @@
 """
-ui/aba_execucao.py — Aba principal de execucao da automacao
+ui/aba_3n.py — Aba Automatic 3N: duplicacao de chamados sem Base de Conhecimento
 """
 import csv
 import io
@@ -11,30 +11,24 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QTextEdit, QComboBox,
     QPushButton, QGroupBox, QSizePolicy, QPlainTextEdit,
-    QDialog, QDialogButtonBox,
+    QDialog,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject
 from PyQt6.QtGui import QColor, QTextCharFormat, QFont
 
 from ui.tema_qt import (
-    COR_SUCESSO, COR_ERRO, COR_STATUS, COR_INFO,
-    COR_TEXTO, COR_AVISO, FONTE_MONO
+    COR_SUCESSO, COR_ERRO, COR_STATUS, COR_INFO, FONTE_MONO
 )
 from services.checkpoint import existe_pendente, resumo as resumo_checkpoint
 
 
 # ---------------------------------------------------------------------------
-# Dialog de Checkpoint
+# Dialog de Checkpoint (identico ao da aba principal)
 # ---------------------------------------------------------------------------
 
 class CheckpointDialog(QDialog):
-    """
-    Dialog nao-bloqueante que informa sobre checkpoint pendente e
-    permite ao usuario escolher entre Retomar ou Comecar do Zero.
-    """
-
-    RETOMAR    = 0
-    DO_ZERO    = 1
+    RETOMAR = 0
+    DO_ZERO = 1
 
     def __init__(self, numero_chamado: str, resumo: str, parent=None):
         super().__init__(parent)
@@ -50,17 +44,14 @@ class CheckpointDialog(QDialog):
         layout.setSpacing(14)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        # Icone + titulo
-        lbl_titulo = QLabel(f"⏰  Execução anterior incompleta")
+        lbl_titulo = QLabel("⏰  Execução anterior incompleta")
         lbl_titulo.setStyleSheet("font-size: 15px; font-weight: bold; color: #92400E;")
         layout.addWidget(lbl_titulo)
 
-        # Numero do chamado
         lbl_chamado = QLabel(f"Chamado: <b>{numero_chamado}</b>")
         lbl_chamado.setStyleSheet("font-size: 13px; color: #374151;")
         layout.addWidget(lbl_chamado)
 
-        # Resumo do progresso
         lbl_resumo = QLabel(resumo)
         lbl_resumo.setStyleSheet(
             "font-size: 12px; color: #6B7280;"
@@ -72,15 +63,12 @@ class CheckpointDialog(QDialog):
         lbl_resumo.setWordWrap(True)
         layout.addWidget(lbl_resumo)
 
-        # Botoes
-        btn_retomar  = QPushButton("▶  Retomar de onde parou")
-        btn_do_zero  = QPushButton("🔄  Começar do zero")
-
+        btn_retomar = QPushButton("▶  Retomar de onde parou")
+        btn_do_zero = QPushButton("🔄  Começar do zero")
         btn_retomar.setObjectName("btn_iniciar")
         btn_retomar.setFixedHeight(38)
         btn_do_zero.setObjectName("btn_secundario")
         btn_do_zero.setFixedHeight(38)
-
         btn_retomar.clicked.connect(self._retomar)
         btn_do_zero.clicked.connect(self._do_zero)
 
@@ -89,7 +77,7 @@ class CheckpointDialog(QDialog):
         btn_layout.addWidget(btn_do_zero)
         layout.addLayout(btn_layout)
 
-        self._escolha = self.RETOMAR  # padrao
+        self._escolha = self.RETOMAR
 
     def _retomar(self):
         self._escolha = self.RETOMAR
@@ -108,7 +96,7 @@ class CheckpointDialog(QDialog):
 # Worker thread
 # ---------------------------------------------------------------------------
 
-class AutomacaoWorker(QObject):
+class Worker3N(QObject):
     log_signal = pyqtSignal(str, str)
     fim_signal = pyqtSignal(bool)
 
@@ -119,42 +107,44 @@ class AutomacaoWorker(QObject):
 
     def run(self):
         try:
-            from services.automatic import Automatic
+            from services.automatic import _get_driver_manager
+            from services.flow_3n import execute_3n_flow
 
-            def log_func(msg, type_log="info"):
-                self.log_signal.emit(msg, type_log)
+            def log_func(msg, tipo="info"):
+                self.log_signal.emit(msg, tipo)
 
-            orchestrator = Automatic(log_func)
-            resultado = orchestrator.executar_fluxo(
-                self.dados,
-                iniciar_do_zero=self.iniciar_do_zero,
+            driver_manager = _get_driver_manager(log_func)
+            driver = driver_manager.iniciar_driver_e_navegar()
+
+            execute_3n_flow(
+                driver         = driver,
+                df             = self.dados["df"],
+                descricao_base = self.dados["descricao_base"],
+                numero_chamado = self.dados["numero_chamado"],
+                usuario        = self.dados["usuario"],
+                senha          = self.dados["senha"],
+                log            = log_func,
+                iniciar_do_zero= self.iniciar_do_zero,
             )
-            self.fim_signal.emit(resultado)
+            self.fim_signal.emit(True)
         except Exception as e:
             self.log_signal.emit(f"Excecao inesperada: {e}", "error")
             self.fim_signal.emit(False)
 
 
 # ---------------------------------------------------------------------------
-# Aba de Execucao
+# Aba 3N
 # ---------------------------------------------------------------------------
 
-class AbaExecucao(QWidget):
+class Aba3N(QWidget):
 
-    def __init__(self, kb_entries: list, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.kb_entries = kb_entries
         self.linhas_csv: list[list[str]] = []
         self.colunas_csv: list[str] = []
         self._thread = None
         self._worker = None
         self._setup_ui()
-
-    def atualizar_kbs(self, entries: list):
-        self.kb_entries = entries
-        self.combo_kb.clear()
-        for e in entries:
-            self.combo_kb.addItem(e["nome_artigo"])
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -200,13 +190,6 @@ class AbaExecucao(QWidget):
         self.input_descricao = QLineEdit()
         self.input_descricao.setText("Solicito atualização de sistema...")
         col_esq.addWidget(self.input_descricao)
-
-        col_esq.addWidget(QLabel("Base de Conhecimento"))
-        self.combo_kb = QComboBox()
-        self.combo_kb.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        for e in self.kb_entries:
-            self.combo_kb.addItem(e["nome_artigo"])
-        col_esq.addWidget(self.combo_kb)
 
         # Botoes
         btn_layout = QHBoxLayout()
@@ -255,7 +238,7 @@ class AbaExecucao(QWidget):
         cols_layout.addLayout(col_dir, 1)
         layout.addLayout(cols_layout, 1)
 
-        # --- Logs (largura total) ---
+        # --- Logs ---
         grp_logs = QGroupBox("Registro de Execução")
         logs_layout = QVBoxLayout(grp_logs)
         self.txt_logs = QTextEdit()
@@ -293,8 +276,6 @@ class AbaExecucao(QWidget):
         erros = []
         if not self.linhas_csv:
             erros.append("Importe o CSV antes de iniciar.")
-        if self.combo_kb.currentIndex() < 0:
-            erros.append("Selecione uma Base de Conhecimento.")
         if not self.input_chamado.text().strip():
             erros.append("Preencha o numero do Chamado PAI.")
         if not self.input_usuario.text().strip():
@@ -305,12 +286,6 @@ class AbaExecucao(QWidget):
         if erros:
             for e in erros:
                 self._append_log(e, "error")
-            return
-
-        kb_nome  = self.combo_kb.currentText()
-        kb_entry = next((e for e in self.kb_entries if e["nome_artigo"] == kb_nome), None)
-        if not kb_entry:
-            self._append_log("Base de Conhecimento nao encontrada.", "error")
             return
 
         numero_chamado = self.input_chamado.text().strip()
@@ -325,7 +300,6 @@ class AbaExecucao(QWidget):
 
         dados = {
             "descricao_base": self.input_descricao.text(),
-            "kb_config":      {"keyword": kb_entry["keyword"], "nome_artigo": kb_entry["nome_artigo"]},
             "df":             pd.DataFrame(self.linhas_csv, columns=self.colunas_csv),
             "numero_chamado": numero_chamado,
             "usuario":        self.input_usuario.text().strip(),
@@ -334,12 +308,11 @@ class AbaExecucao(QWidget):
 
         self._set_em_execucao(True)
 
-        # Encerrar thread anterior se ainda estiver ativa
         if self._thread and self._thread.isRunning():
             self._thread.quit()
             self._thread.wait()
 
-        self._worker = AutomacaoWorker(dados, iniciar_do_zero)
+        self._worker = Worker3N(dados, iniciar_do_zero)
         self._thread = QThread()
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
@@ -350,9 +323,9 @@ class AbaExecucao(QWidget):
 
     def _fim_execucao(self, sucesso: bool):
         if sucesso:
-            self._append_log("Fluxo concluido com sucesso.", "success")
+            self._append_log("Fluxo 3N concluido com sucesso.", "success")
         else:
-            self._append_log("Fluxo encerrado com falha. Verifique os logs.", "error")
+            self._append_log("Fluxo 3N encerrado com falha. Verifique os logs.", "error")
         self._set_em_execucao(False)
 
     def _set_em_execucao(self, em_exec: bool):
@@ -361,7 +334,6 @@ class AbaExecucao(QWidget):
         self.input_chamado.setEnabled(not em_exec)
         self.input_usuario.setEnabled(not em_exec)
         self.input_senha.setEnabled(not em_exec)
-        self.combo_kb.setEnabled(not em_exec)
         self.txt_csv.setEnabled(not em_exec)
 
     def _limpar_logs(self):
