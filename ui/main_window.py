@@ -5,7 +5,6 @@ from PyQt6.QtCore import QUrl
 from ui.aba_execucao import AbaExecucao
 from ui.aba_kb import AbaKB
 from ui.aba_license import AbaLicense
-from ui.aba_3n import Aba3N
 
 
 class MainWindow(QMainWindow):
@@ -31,12 +30,10 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
 
         self.aba_exec    = AbaExecucao(entries)
-        self.aba_3n      = Aba3N()
         self.aba_license = AbaLicense()
         self.aba_kb      = AbaKB(kb_store)
 
         self.tabs.addTab(self.aba_exec,    "🤖 Automatic")
-        self.tabs.addTab(self.aba_3n,      "📋 Automatic 3N")
         self.tabs.addTab(self.aba_license, "🔑 License")
         self.tabs.addTab(self.aba_kb,      "📚 Bases de Conhecimento")
 
