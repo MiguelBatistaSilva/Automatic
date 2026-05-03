@@ -1,7 +1,6 @@
 from PyQt6.QtWidgets import QMainWindow, QTabWidget, QStatusBar, QToolButton, QMenu
 from PyQt6.QtGui import QIcon, QGuiApplication, QDesktopServices
 from PyQt6.QtCore import QUrl
-
 from ui.aba_execucao import AbaExecucao
 from ui.aba_kb import AbaKB
 from ui.aba_license import AbaLicense
@@ -46,16 +45,10 @@ class MainWindow(QMainWindow):
         self.status.showMessage("Pronto.")
 
     def _criar_btn_links(self) -> QToolButton:
-        _URL_LINKEDIN  = "http://linkedin.com/in/miguel-batista-silva"
-        _URL_GITHUB    = "https://github.com/MiguelBatistaSilva"
-        _URL_HF        = "https://huggingface.co/MiguelBS"
-        _URL_CURRICULO = "https://recondite-frog-e5d.notion.site/Miguel-Batista-208e32b25a24808e9d79e8d347db3c30?source=copy_link"
+        _URL_LINKS  = "https://recondite-frog-e5d.notion.site/Bem-vindo-2e6e32b25a248027b36ef626bf484553?source=copy_link"
 
         menu = QMenu(self)
-        menu.addAction("🔗  LinkedIn",    lambda: QDesktopServices.openUrl(QUrl(_URL_LINKEDIN)))
-        menu.addAction("😺  GitHub",      lambda: QDesktopServices.openUrl(QUrl(_URL_GITHUB)))
-        menu.addAction("🤗  HuggingFace", lambda: QDesktopServices.openUrl(QUrl(_URL_HF)))
-        menu.addAction("📄  Currículo",   lambda: QDesktopServices.openUrl(QUrl(_URL_CURRICULO)))
+        menu.addAction("🔗  Sobre",    lambda: QDesktopServices.openUrl(QUrl(_URL_LINKS)))
 
         btn = QToolButton(self)
         btn.setText("ⓘ")
