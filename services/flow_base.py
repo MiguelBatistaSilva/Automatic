@@ -257,18 +257,28 @@ def execute_generic_flow(driver, df, descricao_base, numero_chamado,
                 continue
 
             # -- DESCRICAO --
+            # O titulo do iframe tem ID dinamico (rtEC119_, rtES3_, etc)
+            # Usamos a classe fixa cke_wysiwyg_frame e rebuscamos antes
+            # de switch_to para evitar stale element reference
             try:
-                iframe = WebDriverWait(driver, 20).until(
+                WebDriverWait(driver, 20).until(
                     EC.presence_of_element_located(
-                        (By.XPATH, "//iframe[contains(@title, 'rtES3_formattedRemarks')]")
+                        (By.CSS_SELECTOR, "iframe.cke_wysiwyg_frame")
                     )
                 )
+                time.sleep(0.5)
+                iframe = driver.find_element(By.CSS_SELECTOR, "iframe.cke_wysiwyg_frame")
                 driver.switch_to.frame(iframe)
-                corpo = WebDriverWait(driver, 20).until(
+                WebDriverWait(driver, 10).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, "body.cke_editable"))
                 )
-                corpo.clear()
-                corpo.send_keys(description_son)
+                # Converter quebras de linha para HTML antes de injetar
+                html_descricao = description_son.replace("\n\n", "</p><p>").replace("\n", "<br>")
+                html_descricao = "<p>" + html_descricao + "</p>"
+                driver.execute_script("""
+                    var body = document.querySelector('body.cke_editable');
+                    if (body) { body.innerHTML = arguments[0]; }
+                """, html_descricao)
                 driver.switch_to.default_content()
                 log("Descricao preenchida.", "success")
             except Exception as e:
