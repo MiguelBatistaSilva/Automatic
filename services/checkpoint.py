@@ -101,6 +101,14 @@ def existe_pendente(numero_chamado: str) -> bool:
     )
 
 
+def foi_concluido(numero_chamado: str) -> bool:
+    """Retorna True se o checkpoint existe e todas as linhas foram concluidas."""
+    dados = _carregar_dados(numero_chamado)
+    if not dados:
+        return False
+    return dados.get("concluido", False)
+
+
 def status_linhas(numero_chamado: str) -> list[dict]:
     """Retorna a lista de status de cada linha."""
     dados = _carregar_dados(numero_chamado)

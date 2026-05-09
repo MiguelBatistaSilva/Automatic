@@ -5,7 +5,7 @@ A chave do checkpoint e derivada do primeiro filho da lista.
 """
 from services.checkpoint import (
     inicializar, marcar_concluido_linha,
-    existe_pendente, status_linha,
+    existe_pendente, foi_concluido, status_linha,
     STATUS_PENDENTE, STATUS_CONCLUIDO,
 )
 from services.flow_utils import (

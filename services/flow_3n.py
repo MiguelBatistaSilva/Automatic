@@ -8,9 +8,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 from services.checkpoint import (
-    inicializar, marcar_salvo, marcar_concluido_linha,
-    existe_pendente, status_linha, numero_filho,
-    STATUS_PENDENTE, STATUS_SALVO, STATUS_CONCLUIDO,
+    inicializar, marcar_concluido_linha,
+    existe_pendente, foi_concluido, status_linha,
+    STATUS_PENDENTE, STATUS_CONCLUIDO,
 )
 from services.flow_utils import (
     _registrar_filho, _abrir_txt_filhos,
