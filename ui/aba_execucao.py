@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QTextEdit, QComboBox,
     QPushButton, QGroupBox, QSizePolicy, QPlainTextEdit,
-    QDialog, QStackedWidget,
+    QDialog, QStackedWidget, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject
 from PyQt6.QtGui import QColor, QTextCharFormat, QFont
@@ -23,7 +23,7 @@ from PyQt6.QtGui import QColor, QTextCharFormat, QFont
 from ui.tema_qt import (
     COR_SUCESSO, COR_ERRO, COR_STATUS, COR_INFO, FONTE_MONO,
 )
-from services.checkpoint import existe_pendente, resumo as resumo_checkpoint
+from services.checkpoint import existe_pendente, foi_concluido, resumo as resumo_checkpoint
 from services.flow_bc import _chave_checkpoint
 
 MODO_COMPLETO = 0
@@ -773,6 +773,17 @@ class AbaExecucao(QWidget):
         return entry
 
     def _verificar_checkpoint(self, chave: str, label: str = "") -> bool | None:
+        if foi_concluido(chave):
+            resp = QMessageBox.question(
+                self,
+                "Execução já concluída",
+                f"O chamado <b>{label or chave}</b> já foi totalmente processado.\n\n"
+                "Deseja executar novamente do zero?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if resp == QMessageBox.StandardButton.Yes:
+                return True
+            return None
         if not existe_pendente(chave):
             return False
         resumo = resumo_checkpoint(chave)

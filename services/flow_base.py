@@ -26,7 +26,7 @@ def execute_generic_flow(driver, df, descricao_base, numero_chamado,
     # -----------------------------------------------------------
     # CHECKPOINT — inicializar ou retomar
     # -----------------------------------------------------------
-    if iniciar_do_zero or not existe_pendente(numero_chamado):
+    if iniciar_do_zero or (not existe_pendente(numero_chamado) and not foi_concluido(numero_chamado)):
         log("Inicializando checkpoint...", "info")
         inicializar(numero_chamado, total)
     else:

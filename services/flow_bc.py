@@ -37,7 +37,7 @@ def execute_bc_flow(driver, filhos: list[str], usuario: str, senha: str,
     # -----------------------------------------------------------
     # CHECKPOINT
     # -----------------------------------------------------------
-    if iniciar_do_zero or not existe_pendente(chave):
+    if iniciar_do_zero or (not existe_pendente(chave) and not foi_concluido(chave)):
         log("Inicializando checkpoint BC...", "info")
         inicializar(chave, total)
     else:
