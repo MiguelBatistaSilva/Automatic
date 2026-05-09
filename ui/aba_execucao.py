@@ -336,6 +336,62 @@ class AbaExecucao(QWidget):
         row.addStretch()
         return row, btn_iniciar
 
+    def _mostrar_ajuda_marcadores(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Como usar os marcadores")
+        dlg.setMinimumWidth(460)
+        dlg.setWindowFlags(
+            Qt.WindowType.Dialog |
+            Qt.WindowType.WindowTitleHint |
+            Qt.WindowType.WindowCloseButtonHint
+        )
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(14)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        lbl = QLabel(
+            "<p>O campo <b>Descrição</b> aceita marcadores "
+            "<b><font face='Courier New'>{{COLUNA}}</font></b> que são substituídos "
+            "automaticamente pelos dados de cada linha do CSV.</p>"
+
+            "<p><b>📋 Dados de Iteração — formato CSV</b><br>"
+            "A primeira linha é o cabeçalho (nomes das colunas):</p>"
+            "<p><font face='Courier New'>"
+            "MARCA,TOMBO,SETOR<br>"
+            "LENOVO,262471,TI<br>"
+            "HP,198342,RH"
+            "</font></p>"
+
+            "<p><b>✏️ Descrição com marcadores</b></p>"
+            "<p><font face='Courier New'>"
+            "Solicito atualização do equipamento {{MARCA}},<br>"
+            "tombo {{TOMBO}}, setor {{SETOR}}."
+            "</font></p>"
+
+            "<p><b>✅ Resultado gerado no chamado (1ª linha)</b></p>"
+            "<p><font face='Courier New'>"
+            "Solicito atualização do equipamento LENOVO,<br>"
+            "tombo 262471, setor TI."
+            "</font></p>"
+
+            "<p><font color='#6B7280'>"
+            "• Marcador sem coluna correspondente fica em branco.<br>"
+            "• Coluna sem marcador é ignorada silenciosamente.<br>"
+            "• Os nomes são sensíveis a maiúsculas e minúsculas."
+            "</font></p>"
+        )
+        lbl.setTextFormat(Qt.TextFormat.RichText)
+        lbl.setWordWrap(True)
+        layout.addWidget(lbl)
+
+        btn_fechar = QPushButton("Fechar")
+        btn_fechar.setObjectName("btn_secundario")
+        btn_fechar.setFixedWidth(100)
+        btn_fechar.clicked.connect(dlg.accept)
+        layout.addWidget(btn_fechar, alignment=Qt.AlignmentFlag.AlignRight)
+
+        dlg.exec()
+
     # ------------------------------------------------------------------
     # Painel Criar + Base
     # ------------------------------------------------------------------
@@ -349,18 +405,51 @@ class AbaExecucao(QWidget):
         col_esq = QVBoxLayout()
         col_esq.setSpacing(6)
 
-        col_esq.addWidget(QLabel("Chamado PAI"))
+        topo_row = QHBoxLayout()
+        topo_row.setSpacing(12)
+
+        chamado_col = QVBoxLayout()
+        chamado_col.setSpacing(4)
+        chamado_col.addWidget(QLabel("Chamado PAI"))
         self.input_chamado = QLineEdit()
-        self.input_chamado.setPlaceholderText("Ex: S2123456 ou 2007909")
-        col_esq.addWidget(self.input_chamado)
+        self.input_chamado.setPlaceholderText("Ex: S2123456")
+        chamado_col.addWidget(self.input_chamado)
+        topo_row.addLayout(chamado_col)
 
-        cred_row, self.input_usuario, self.input_senha = self._campo_credenciais()
-        col_esq.addLayout(cred_row)
+        mat_col = QVBoxLayout()
+        mat_col.setSpacing(4)
+        mat_col.addWidget(QLabel("Matrícula"))
+        self.input_usuario = QLineEdit()
+        self.input_usuario.setPlaceholderText("Matrícula")
+        mat_col.addWidget(self.input_usuario)
+        topo_row.addLayout(mat_col)
 
-        col_esq.addWidget(QLabel("Descrição"))
-        self.input_descricao = QLineEdit()
-        self.input_descricao.setText("Solicito atualização de sistema...")
-        col_esq.addWidget(self.input_descricao)
+        senha_col = QVBoxLayout()
+        senha_col.setSpacing(4)
+        senha_col.addWidget(QLabel("Senha"))
+        self.input_senha = QLineEdit()
+        self.input_senha.setEchoMode(QLineEdit.EchoMode.Password)
+        self.input_senha.setPlaceholderText("Lanlink@")
+        senha_col.addWidget(self.input_senha)
+        topo_row.addLayout(senha_col)
+
+        col_esq.addLayout(topo_row)
+
+        desc_header = QHBoxLayout()
+        desc_header.setSpacing(6)
+        desc_header.addWidget(QLabel("Descrição"))
+        btn_ajuda_desc = QPushButton("?")
+        btn_ajuda_desc.setObjectName("btn_ajuda")
+        btn_ajuda_desc.setFixedSize(20, 20)
+        btn_ajuda_desc.setToolTip("Como usar marcadores")
+        btn_ajuda_desc.clicked.connect(self._mostrar_ajuda_marcadores)
+        desc_header.addWidget(btn_ajuda_desc)
+        desc_header.addStretch()
+        col_esq.addLayout(desc_header)
+        self.input_descricao = QPlainTextEdit()
+        self.input_descricao.setPlainText("Solicito atualização de sistema...")
+        self.input_descricao.setFont(QFont(FONTE_MONO, 11))
+        col_esq.addWidget(self.input_descricao, 1)
 
         col_esq.addWidget(QLabel("Base de Conhecimento"))
         self.combo_kb_completo = QComboBox()
@@ -394,18 +483,51 @@ class AbaExecucao(QWidget):
         col_esq = QVBoxLayout()
         col_esq.setSpacing(6)
 
-        col_esq.addWidget(QLabel("Chamado PAI"))
+        topo_row = QHBoxLayout()
+        topo_row.setSpacing(12)
+
+        chamado_col = QVBoxLayout()
+        chamado_col.setSpacing(4)
+        chamado_col.addWidget(QLabel("Chamado PAI"))
         self.input_chamado_criar = QLineEdit()
-        self.input_chamado_criar.setPlaceholderText("Ex: S2123456 ou 2007909")
-        col_esq.addWidget(self.input_chamado_criar)
+        self.input_chamado_criar.setPlaceholderText("Ex: S2123456")
+        chamado_col.addWidget(self.input_chamado_criar)
+        topo_row.addLayout(chamado_col)
 
-        cred_row, self.input_usuario_criar, self.input_senha_criar = self._campo_credenciais()
-        col_esq.addLayout(cred_row)
+        mat_col = QVBoxLayout()
+        mat_col.setSpacing(4)
+        mat_col.addWidget(QLabel("Matrícula"))
+        self.input_usuario_criar = QLineEdit()
+        self.input_usuario_criar.setPlaceholderText("Matrícula")
+        mat_col.addWidget(self.input_usuario_criar)
+        topo_row.addLayout(mat_col)
 
-        col_esq.addWidget(QLabel("Descrição"))
-        self.input_descricao_criar = QLineEdit()
-        self.input_descricao_criar.setText("Solicito atualização de sistema...")
-        col_esq.addWidget(self.input_descricao_criar)
+        senha_col = QVBoxLayout()
+        senha_col.setSpacing(4)
+        senha_col.addWidget(QLabel("Senha"))
+        self.input_senha_criar = QLineEdit()
+        self.input_senha_criar.setEchoMode(QLineEdit.EchoMode.Password)
+        self.input_senha_criar.setPlaceholderText("Lanlink@")
+        senha_col.addWidget(self.input_senha_criar)
+        topo_row.addLayout(senha_col)
+
+        col_esq.addLayout(topo_row)
+
+        desc_header = QHBoxLayout()
+        desc_header.setSpacing(6)
+        desc_header.addWidget(QLabel("Descrição"))
+        btn_ajuda_desc = QPushButton("?")
+        btn_ajuda_desc.setObjectName("btn_ajuda")
+        btn_ajuda_desc.setFixedSize(20, 20)
+        btn_ajuda_desc.setToolTip("Como usar marcadores")
+        btn_ajuda_desc.clicked.connect(self._mostrar_ajuda_marcadores)
+        desc_header.addWidget(btn_ajuda_desc)
+        desc_header.addStretch()
+        col_esq.addLayout(desc_header)
+        self.input_descricao_criar = QPlainTextEdit()
+        self.input_descricao_criar.setPlainText("Solicito atualização de sistema...")
+        self.input_descricao_criar.setFont(QFont(FONTE_MONO, 11))
+        col_esq.addWidget(self.input_descricao_criar, 1)
 
         lbl_info = QLabel("ℹ️  Nenhuma Base de Conhecimento será aplicada.")
         lbl_info.setStyleSheet("color: #6B7280; font-size: 12px;")
@@ -567,7 +689,7 @@ class AbaExecucao(QWidget):
             return
 
         dados = {
-            "descricao_base": self.input_descricao.text(),
+            "descricao_base": self.input_descricao.toPlainText(),
             "kb_config":      {"keyword": kb_entry["keyword"], "nome_artigo": kb_entry["nome_artigo"]},
             "df":             pd.DataFrame(self.linhas_csv, columns=self.colunas_csv),
             "numero_chamado": numero_chamado,
@@ -597,7 +719,7 @@ class AbaExecucao(QWidget):
             return
 
         dados = {
-            "descricao_base": self.input_descricao_criar.text(),
+            "descricao_base": self.input_descricao_criar.toPlainText(),
             "df":             pd.DataFrame(self.linhas_csv_criar, columns=self.colunas_csv_criar),
             "numero_chamado": numero_chamado,
             "usuario":        self.input_usuario_criar.text().strip(),

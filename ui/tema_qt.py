@@ -120,6 +120,19 @@ ESTILO_GLOBAL = f"""
         background-color: {COR_SUCESSO};
         color: white;
     }}
+    QPushButton#btn_ajuda {{
+        background-color: #F9FAFB;
+        color: #6B7280;
+        border: 1px solid #D1D5DB;
+        border-radius: 10px;
+        padding: 0px;
+        font-size: 12px;
+        font-weight: bold;
+    }}
+    QPushButton#btn_ajuda:hover {{
+        background-color: #F3F4F6;
+        color: #374151;
+    }}
     QToolButton {{
         background-color: {COR_BTN_LIMPAR};
         color: {COR_TEXTO};
