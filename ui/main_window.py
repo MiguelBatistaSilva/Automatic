@@ -10,7 +10,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, kb_store, icon_path: str = ""):
         super().__init__()
-        self.setWindowTitle("Automatic v6.0")
+        self.setWindowTitle("Automatic v6.2.1")
         self.setMinimumSize(900, 700)
         self.resize(1200, 700)
 
