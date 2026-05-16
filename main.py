@@ -11,6 +11,9 @@ from PyQt6.QtGui import QIcon
 from ui.main_window import MainWindow
 from ui.tema_qt import ESTILO_GLOBAL
 from services.kb_store import carregar, salvar
+from version import VERSION
+from services.updater import UpdateChecker
+from ui.update_dialog import UpdateDialog
 
 # Cria um objeto compativel com o kb_store
 class KBStore:
@@ -23,7 +26,7 @@ def main():
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("CATI.Automacao.6")
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Automatic v6.0")
+    app.setApplicationName("Automatic v6.2.1")
     app.setStyleSheet(ESTILO_GLOBAL)
 
     icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_icon.ico")
@@ -32,6 +35,10 @@ def main():
     kb_store = KBStore()
     window = MainWindow(kb_store, icon_path)
     window.show()
+
+    checker = UpdateChecker(VERSION)
+    checker.nova_versao.connect(lambda v, url: UpdateDialog(v, url, window).exec())
+    checker.start()
 
     sys.exit(app.exec())
 
