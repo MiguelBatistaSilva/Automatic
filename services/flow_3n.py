@@ -117,9 +117,6 @@ def execute_3n_flow(driver, df, descricao_base, numero_chamado,
             continue
 
         # -- DESCRICAO --
-        # O titulo do iframe tem ID dinamico (rtEC119_, rtES3_, etc)
-        # Usamos a classe fixa cke_wysiwyg_frame e rebuscamos antes
-        # de switch_to para evitar stale element reference
         try:
             WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located(
@@ -127,22 +124,14 @@ def execute_3n_flow(driver, df, descricao_base, numero_chamado,
                 )
             )
             time.sleep(0.5)
-            iframe = driver.find_element(By.CSS_SELECTOR, "iframe.cke_wysiwyg_frame")
-            driver.switch_to.frame(iframe)
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "body.cke_editable"))
-            )
-            # Converter quebras de linha para HTML antes de injetar
             html_descricao = description_son.replace("\n\n", "</p><p>").replace("\n", "<br>")
             html_descricao = "<p>" + html_descricao + "</p>"
-            driver.execute_script("""
-                var body = document.querySelector('body.cke_editable');
-                if (body) { body.innerHTML = arguments[0]; }
-            """, html_descricao)
-            driver.switch_to.default_content()
+            driver.execute_script(
+                "CKEDITOR.instances['rtES1_formattedRemarks'].setData(arguments[0]);",
+                html_descricao
+            )
             log("Descricao preenchida.", "success")
         except Exception as e:
-            driver.switch_to.default_content()
             log(f"Erro ao preencher descricao: {e}", "error")
 
         # -- SALVAR --

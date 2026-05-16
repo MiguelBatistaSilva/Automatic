@@ -185,21 +185,27 @@ Usa o mesmo `DriverManager` singleton dos fluxos.
 ## Preenchimento do CKEditor
 
 O `send_keys` não funciona de forma confiável no CKEditor.
-A solução é injetar via JavaScript após localizar o iframe pela classe fixa:
+A solução correta é usar a API `setData()` do CKEditor a partir do frame principal,
+sem entrar no iframe. O nome da instância é fixo: `rtES1_formattedRemarks`.
+
+O campo que o servidor recebe é o hidden `ES1_formattedRemarks`. O CKEditor sincroniza
+seu modelo interno com esse hidden no momento do save. Por isso `body.innerHTML` no
+iframe (camada visual apenas) não funciona — o modelo interno fica desatualizado.
 
 ```python
-# Iframe por classe fixa (título é dinâmico: rtEC119_, rtES3_, etc)
-iframe = driver.find_element(By.CSS_SELECTOR, "iframe.cke_wysiwyg_frame")
-driver.switch_to.frame(iframe)
+# Aguardar o CKEditor estar pronto (iframe visível = editor inicializado)
+WebDriverWait(driver, 20).until(
+    EC.presence_of_element_located((By.CSS_SELECTOR, "iframe.cke_wysiwyg_frame"))
+)
+time.sleep(0.5)
 
-# Injetar HTML diretamente
+# Injetar via API oficial — atualiza modelo interno e campo hidden
 html = description_son.replace("\n\n", "</p><p>").replace("\n", "<br>")
 html = "<p>" + html + "</p>"
-driver.execute_script("""
-    var body = document.querySelector('body.cke_editable');
-    if (body) { body.innerHTML = arguments[0]; }
-""", html)
-driver.switch_to.default_content()
+driver.execute_script(
+    "CKEDITOR.instances['rtES1_formattedRemarks'].setData(arguments[0]);",
+    html
+)
 ```
 
 ---
