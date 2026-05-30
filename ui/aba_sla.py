@@ -5,12 +5,12 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QTextEdit,
     QPushButton, QGroupBox, QFrame,
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QObject
+from PyQt6.QtCore import QThread, pyqtSignal, QObject
 from PyQt6.QtGui import QColor, QTextCharFormat, QFont
 
 from ui.tema_qt import (
     COR_SUCESSO, COR_ERRO, COR_STATUS, COR_INFO,
-    COR_BORDA, FONTE_MONO,
+    COR_BORDA, COR_TEXTO, FONTE_MONO,
 )
 
 
@@ -124,24 +124,33 @@ class AbaSLA(QWidget):
         topo_row.addStretch()
         layout.addLayout(topo_row)
 
-        # ── Cards de resultado ─────────────────────────────────────────────
-        cards_row = QHBoxLayout()
-        cards_row.setSpacing(0)
+        # ── Separador ─────────────────────────────────────────────────────
+        sep_topo = QFrame()
+        sep_topo.setFrameShape(QFrame.Shape.HLine)
+        sep_topo.setStyleSheet(f"color: {COR_BORDA};")
+        layout.addWidget(sep_topo)
 
+        # ── Dados do resultado ─────────────────────────────────────────────
         self._card_inicio = self._criar_card("Início", "--")
         self._card_gasto  = self._criar_card("Tempo de SLA", "--")
         self._card_status = self._criar_card("Status", "Aguardando análise")
         self._card_acoes  = self._criar_card("Total de Ações", "--")
 
-        cards_row.addWidget(self._card_inicio)
-        cards_row.addWidget(self._criar_separador())
-        cards_row.addWidget(self._card_gasto)
-        cards_row.addWidget(self._criar_separador())
-        cards_row.addWidget(self._card_status)
-        cards_row.addWidget(self._criar_separador())
-        cards_row.addWidget(self._card_acoes)
-        cards_row.addStretch()
-        layout.addLayout(cards_row)
+        dados_row = QHBoxLayout()
+        dados_row.setSpacing(40)
+        dados_row.setContentsMargins(4, 12, 4, 12)
+        dados_row.addWidget(self._card_inicio)
+        dados_row.addWidget(self._card_gasto)
+        dados_row.addWidget(self._card_status)
+        dados_row.addWidget(self._card_acoes)
+        dados_row.addStretch()
+        layout.addLayout(dados_row)
+
+        # ── Separador ─────────────────────────────────────────────────────
+        sep_baixo = QFrame()
+        sep_baixo.setFrameShape(QFrame.Shape.HLine)
+        sep_baixo.setStyleSheet(f"color: {COR_BORDA};")
+        layout.addWidget(sep_baixo)
 
         # ── Logs ───────────────────────────────────────────────────────────
         grp_logs = QGroupBox("Registro de Execução")
@@ -149,7 +158,7 @@ class AbaSLA(QWidget):
         self.txt_logs = QTextEdit()
         self.txt_logs.setReadOnly(True)
         self.txt_logs.setFont(QFont(FONTE_MONO, 11))
-        self.txt_logs.setMinimumHeight(200)
+        self.txt_logs.setMinimumHeight(100)
         logs_layout.addWidget(self.txt_logs)
         layout.addWidget(grp_logs, 1)
 
@@ -160,34 +169,26 @@ class AbaSLA(QWidget):
     def _criar_card(self, titulo: str, valor: str) -> QWidget:
         container = QWidget()
         col = QVBoxLayout(container)
-        col.setSpacing(4)
-        col.setContentsMargins(12, 8, 12, 8)
+        col.setSpacing(2)
+        col.setContentsMargins(0, 0, 0, 0)
 
-        lbl_titulo = QLabel(titulo.upper())
-        lbl_titulo.setStyleSheet(f"color: {COR_INFO}; font-size: 10px; font-weight: bold;")
+        lbl_titulo = QLabel(titulo)
+        lbl_titulo.setStyleSheet(f"color: {COR_INFO}; font-size: 11px;")
         col.addWidget(lbl_titulo)
 
         lbl_valor = QLabel(valor)
-        lbl_valor.setStyleSheet("font-size: 16px; font-weight: bold;")
+        lbl_valor.setStyleSheet(f"color: {COR_TEXTO}; font-size: 15px; font-weight: bold;")
+        lbl_valor.setWordWrap(False)
         col.addWidget(lbl_valor)
 
         container._lbl_valor = lbl_valor
         return container
 
-    def _criar_separador(self) -> QFrame:
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setFixedWidth(1)
-        sep.setStyleSheet(f"background-color: {COR_BORDA};")
-        return sep
-
     def _atualizar_card(self, card: QWidget, valor: str, cor: str = ""):
         lbl = card._lbl_valor
         lbl.setText(valor)
-        estilo = "font-size: 16px; font-weight: bold;"
-        if cor:
-            estilo += f" color: {cor};"
-        lbl.setStyleSheet(estilo)
+        cor_final = cor if cor else COR_TEXTO
+        lbl.setStyleSheet(f"color: {cor_final}; font-size: 15px; font-weight: bold;")
 
     # ------------------------------------------------------------------
     # Lógica de execução

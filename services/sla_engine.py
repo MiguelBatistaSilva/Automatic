@@ -87,7 +87,7 @@ def calcular_sla(historico: list) -> dict:
         "tempo_restante_str": _formatar_segundos(restante),
         "estourado": estourado,
         "mensagem": (
-            f"ESTOURADO ha {_formatar_segundos(tempo_total - LIMITE_SEGUNDOS)}"
+            f"ESTOURADO há {_formatar_segundos(tempo_total - LIMITE_SEGUNDOS)}"
             if estourado
             else f"RESTAM {_formatar_segundos(restante)}"
         ),
