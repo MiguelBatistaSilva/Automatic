@@ -16,7 +16,7 @@ from services.flow_utils import (
     _registrar_filho, _abrir_txt_filhos,
     _sessao_expirada, _fazer_login,
     _navegar_para_chamado, _relogin, _capturar_numero_filho,
-    _montar_descricao,
+    _montar_descricao, _preencher_descricao,
 )
 
 
@@ -117,22 +117,9 @@ def execute_3n_flow(driver, df, descricao_base, numero_chamado,
             continue
 
         # -- DESCRICAO --
-        try:
-            WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "iframe.cke_wysiwyg_frame")
-                )
-            )
-            time.sleep(0.5)
-            html_descricao = description_son.replace("\n\n", "</p><p>").replace("\n", "<br>")
-            html_descricao = "<p>" + html_descricao + "</p>"
-            driver.execute_script(
-                "CKEDITOR.instances['rtES1_formattedRemarks'].setData(arguments[0]);",
-                html_descricao
-            )
-            log("Descricao preenchida.", "success")
-        except Exception as e:
-            log(f"Erro ao preencher descricao: {e}", "error")
+        html_descricao = description_son.replace("\n\n", "</p><p>").replace("\n", "<br>")
+        html_descricao = "<p>" + html_descricao + "</p>"
+        _preencher_descricao(driver, log, html_descricao)
 
         # -- SALVAR --
         try:

@@ -2,6 +2,10 @@ import sys
 import os
 import ctypes
 
+# Deve ser chamado antes de qualquer import do Qt para garantir que o Windows
+# associe o icone correto na barra de tarefas desde o primeiro handle criado.
+ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("CATI.Automacao.6")
+
 # Garante que o diretorio raiz esta no path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -22,11 +26,8 @@ class KBStore:
 
 
 def main():
-    # Define o AppUserModelID para o Windows exibir o icone correto na barra de tarefas
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("CATI.Automacao.6")
-
     app = QApplication(sys.argv)
-    app.setApplicationName("Automatic v6.2.1")
+    app.setApplicationName("Automatic v6.2.2")
     app.setStyleSheet(ESTILO_GLOBAL)
 
     icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_icon.ico")

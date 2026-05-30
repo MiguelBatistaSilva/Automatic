@@ -4,13 +4,14 @@ from PyQt6.QtCore import QUrl
 from ui.aba_execucao import AbaExecucao
 from ui.aba_kb import AbaKB
 from ui.aba_license import AbaLicense
+from ui.aba_sla import AbaSLA
 
 
 class MainWindow(QMainWindow):
 
     def __init__(self, kb_store, icon_path: str = ""):
         super().__init__()
-        self.setWindowTitle("Automatic v6.2.1")
+        self.setWindowTitle("Automatic v6.2.2")
         self.setMinimumSize(900, 700)
         self.resize(1200, 700)
 
@@ -29,10 +30,12 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
 
         self.aba_exec    = AbaExecucao(entries)
+        self.aba_sla     = AbaSLA()
         self.aba_license = AbaLicense()
         self.aba_kb      = AbaKB(kb_store)
 
         self.tabs.addTab(self.aba_exec,    "🤖 Automatic")
+        self.tabs.addTab(self.aba_sla,     "⏱️ Análise de SLA")
         self.tabs.addTab(self.aba_license, "🔑 License")
         self.tabs.addTab(self.aba_kb,      "📚 Bases de Conhecimento")
 
