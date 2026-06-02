@@ -138,54 +138,29 @@ def _capturar_numero_filho(driver, log) -> str:
         return ""
 
 
-def _preencher_descricao(driver, log, html_descricao: str) -> bool:
+def _preencher_descricao(driver, log, descricao: str) -> bool:
     """
-    Insere o HTML no CKEditor da descrição, descobrindo o nome da instância
-    dinamicamente em vez de depender de um nome fixo que varia por sessão.
+    Insere o conteúdo no CKEditor via iframe, usando send_keys para disparar
+    os eventos nativos do browser e garantir que o textarea oculto seja atualizado.
     Retorna True se a inserção foi confirmada.
     """
     try:
-        WebDriverWait(driver, 20).until(
+        iframe = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "iframe.cke_wysiwyg_frame")
+                (By.XPATH, "//iframe[contains(@title, 'formattedRemarks')]")
             )
         )
-    except Exception as e:
-        log(f"iframe do CKEditor nao encontrado: {e}", "error")
-        return False
-
-    time.sleep(0.5)
-
-    # Descobre dinamicamente o nome da instancia que contem 'formattedRemarks'
-    nome_instancia = driver.execute_script(
-        "if (typeof CKEDITOR === 'undefined') return null;"
-        "var keys = Object.keys(CKEDITOR.instances);"
-        "return keys.find(function(k) { return k.indexOf('formattedRemarks') !== -1; }) || null;"
-    )
-
-    if nome_instancia:
-        try:
-            driver.execute_script(
-                "CKEDITOR.instances[arguments[0]].setData(arguments[1]);",
-                nome_instancia, html_descricao
-            )
-            log("Descricao preenchida.", "success")
-            return True
-        except Exception as e:
-            log(f"Erro ao usar instancia CKEditor '{nome_instancia}': {e}", "error")
-
-    # Fallback: injeta direto no body do iframe
-    log("Instancia CKEditor nao encontrada; usando fallback no iframe.", "error")
-    try:
-        iframe = driver.find_element(By.CSS_SELECTOR, "iframe.cke_wysiwyg_frame")
         driver.switch_to.frame(iframe)
-        body = driver.find_element(By.CSS_SELECTOR, "body.cke_editable")
-        driver.execute_script("arguments[0].innerHTML = arguments[1];", body, html_descricao)
+        corpo_editor = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "body.cke_editable"))
+        )
+        corpo_editor.clear()
+        corpo_editor.send_keys(descricao)
         driver.switch_to.default_content()
-        log("Fallback: descricao injetada no body do iframe.", "success")
+        log("Descricao preenchida.", "success")
         return True
     except Exception as e:
-        log(f"Fallback de descricao falhou: {e}", "error")
+        log(f"Erro ao preencher descricao: {e}", "error")
         try:
             driver.switch_to.default_content()
         except Exception:

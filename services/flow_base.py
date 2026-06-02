@@ -113,9 +113,10 @@ def execute_generic_flow(driver, df, descricao_base, numero_chamado,
                 continue
 
             # -- DESCRICAO --
-            html_descricao = description_son.replace("\n\n", "</p><p>").replace("\n", "<br>")
-            html_descricao = "<p>" + html_descricao + "</p>"
-            _preencher_descricao(driver, log, html_descricao)
+            if not _preencher_descricao(driver, log, description_son):
+                log(f"Descricao nao preenchida na linha {index + 1}; sera retentada.", "error")
+                _navegar_para_chamado(driver, numero_chamado, log)
+                continue
 
             # -- SALVAR --
             try:

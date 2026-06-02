@@ -90,3 +90,4 @@ def executar_kb_unica(driver, log, config):
 
     except Exception as e:
         log(f"❌ Erro na base {keyword}: {str(e)}", "error")
+        raise
