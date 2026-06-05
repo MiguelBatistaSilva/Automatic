@@ -11,7 +11,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, kb_store, icon_path: str = ""):
         super().__init__()
-        self.setWindowTitle("Automatic v6.2.2")
+        self.setWindowTitle("Automatic v6.2.3")
         self.setMinimumSize(900, 700)
         self.resize(1200, 700)
 
@@ -34,7 +34,7 @@ class MainWindow(QMainWindow):
         self.aba_license = AbaLicense()
         self.aba_kb      = AbaKB(kb_store)
 
-        self.tabs.addTab(self.aba_exec,    "🤖 Automatic")
+        self.tabs.addTab(self.aba_exec,    "🤖 Desmembramento")
         self.tabs.addTab(self.aba_sla,     "⏱️ Análise de SLA")
         self.tabs.addTab(self.aba_license, "🔑 License")
         self.tabs.addTab(self.aba_kb,      "📚 Bases de Conhecimento")
@@ -48,7 +48,7 @@ class MainWindow(QMainWindow):
         self.status.showMessage("Pronto.")
 
     def _criar_btn_links(self) -> QToolButton:
-        _URL_LINKS  = "https://recondite-frog-e5d.notion.site/Bem-vindo-2e6e32b25a248027b36ef626bf484553?source=copy_link"
+        _URL_LINKS  = "https://recondite-frog-e5d.notion.site/Bem-vindo-2e6e32b25a248027b36ef626bf484553"
 
         menu = QMenu(self)
         menu.addAction("🔗  Sobre",    lambda: QDesktopServices.openUrl(QUrl(_URL_LINKS)))

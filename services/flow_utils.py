@@ -66,6 +66,11 @@ def _fazer_login(driver, usuario: str, senha: str, log) -> bool:
     tentativa = 0
     while True:
         driver.get(_URL_HOME)
+        # Aguarda ate 7s o campo de usuario renderizar. Se ele aparecer, ha tela
+        # de login a preencher. Se estourar o timeout (campo nunca aparece), a
+        # sessao ja esta ativa. NAO checar instantaneamente: a pagina pode ainda
+        # nao ter renderizado o campo no milissegundo da checagem, o que faria o
+        # login concluir "sessao ativa" por engano e travar o fluxo (corrida).
         try:
             WebDriverWait(driver, 7).until(
                 EC.presence_of_element_located(locators.selector_username)

@@ -83,19 +83,21 @@ def aplicar_atualizacao(pasta_extraida: str, app_dir: str) -> None:
     bat_path = Path(app_dir) / "_update.bat"
     vbs_path = Path(app_dir) / "iniciar_automatic.vbs"
 
+    # Espera ~4s para o app fechar antes de sobrescrever os arquivos. Usamos
+    # 'ping' em vez de 'timeout' porque 'timeout' exige um console interativo e
+    # falha quando o processo roda oculto (CREATE_NO_WINDOW).
     bat = (
         "@echo off\n"
-        "echo Aplicando atualizacao do Automatic...\n"
-        "timeout /t 4 /nobreak > nul\n"
+        "ping 127.0.0.1 -n 5 > nul\n"
         f'robocopy "{pasta_extraida}" "{app_dir}" /E /IS /IT '
         '/XD "data" ".venv" "pacotes_automacao" /NFL /NDL /NJH /NJS\n'
         f'rd /S /Q "{pasta_extraida}"\n'
         f'del /F /Q "{bat_path}"\n'
-        "echo Reiniciando...\n"
         f'start "" wscript.exe "{vbs_path}"\n'
     )
     bat_path.write_text(bat, encoding="utf-8")
+    # CREATE_NO_WINDOW: o processo de atualizacao roda oculto, sem piscar um CMD.
     subprocess.Popen(
         ["cmd.exe", "/c", str(bat_path)],
-        creationflags=subprocess.CREATE_NEW_CONSOLE,
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )

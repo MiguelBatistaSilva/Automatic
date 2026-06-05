@@ -14,6 +14,16 @@ def extrair_historico(driver, numero_chamado: str, usuario: str, senha: str, log
     if not _fazer_login(driver, usuario, senha, log):
         return None
 
+    return extrair_historico_chamado(driver, numero_chamado, log)
+
+
+def extrair_historico_chamado(driver, numero_chamado: str, log) -> list | None:
+    """
+    Navega para o chamado e extrai o histórico de ações, assumindo que o login
+    já foi feito (sessão ativa). Pensado para processar uma lista de chamados
+    reaproveitando o mesmo driver sem relogar a cada um.
+    Retorna a lista de dicts com os dados de cada ação, ou None em caso de falha.
+    """
     if not _navegar_para_chamado(driver, numero_chamado, log):
         return None
 

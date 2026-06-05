@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QProgressBar,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from services.updater import UpdateDownloader, aplicar_atualizacao
 
 
@@ -36,6 +36,8 @@ class UpdateDialog(QDialog):
         self.progress.hide()
         layout.addWidget(self.progress)
 
+        self._pasta_extraida = None
+
         btns = QHBoxLayout()
         self.btn_instalar = QPushButton("Instalar")
         self.btn_agora_nao = QPushButton("Agora não")
@@ -59,8 +61,21 @@ class UpdateDialog(QDialog):
         self._worker.start()
 
     def _aplicar(self, pasta_extraida: str):
-        self.label.setText("Aplicando atualização. O aplicativo será reiniciado...")
-        aplicar_atualizacao(pasta_extraida, self.app_dir)
+        # Mostra o download chegando a 100% e uma confirmacao visivel antes de
+        # fechar — a troca de arquivos ocorre apos o fechamento (robocopy nao
+        # sobrescreve com o app aberto), entao damos ao usuario um momento para
+        # ver que terminou em vez de a janela sumir de imediato.
+        self._pasta_extraida = pasta_extraida
+        self.progress.setValue(100)
+        self.label.setText(
+            "✓ Download concluído!<br><br>"
+            "Reiniciando o aplicativo para aplicar a atualização..."
+        )
+        self.adjustSize()
+        QTimer.singleShot(2200, self._finalizar)
+
+    def _finalizar(self):
+        aplicar_atualizacao(self._pasta_extraida, self.app_dir)
         QApplication.quit()
 
     def _on_erro(self, msg: str):
