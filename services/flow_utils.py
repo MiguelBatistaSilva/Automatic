@@ -130,11 +130,21 @@ def _relogin(driver, numero_chamado, usuario, senha, log) -> bool:
 
 
 def _capturar_numero_filho(driver, log) -> str:
-    """Captura o numero do chamado filho gerado pelo Assyst apos salvar."""
+    """
+    Captura o numero do chamado filho gerado pelo Assyst apos salvar.
+
+    O h1#contentPaneTitle ja existe na pagina com o texto antigo, entao esperar
+    so a PRESENCA do elemento captura o numero velho antes do Assyst repintar com
+    o do filho (corrida). Lemos o texto atual e esperamos ele MUDAR.
+    """
+    sel = (By.CSS_SELECTOR, "h1#contentPaneTitle")
     try:
-        titulo = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "h1#contentPaneTitle"))
-        ).text
+        titulo_antes = driver.find_element(*sel).text.strip()
+        titulo = WebDriverWait(driver, 15).until(
+            lambda d: (
+                (t := d.find_element(*sel).text.strip()) and t != titulo_antes and t
+            )
+        )
         numero = titulo.split(" ")[0].strip()
         log(f"Numero do chamado filho capturado: {numero}", "info")
         return numero
@@ -145,24 +155,32 @@ def _capturar_numero_filho(driver, log) -> str:
 
 def _preencher_descricao(driver, log, descricao: str) -> bool:
     """
-    Insere o conteúdo no CKEditor via iframe, usando send_keys para disparar
-    os eventos nativos do browser e garantir que o textarea oculto seja atualizado.
-    Retorna True se a inserção foi confirmada.
+    Insere o conteúdo no CKEditor via iframe, injetando o texto diretamente
+    no corpo do editor via JavaScript para evitar falhas do send_keys.
     """
     try:
+        # 1. Aguarda e localiza o iframe do CKEditor
         iframe = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located(
                 (By.XPATH, "//iframe[contains(@title, 'formattedRemarks')]")
             )
         )
         driver.switch_to.frame(iframe)
+
+        # 2. Aguarda o corpo editável estar pronto
         corpo_editor = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "body.cke_editable"))
         )
-        corpo_editor.clear()
-        corpo_editor.send_keys(descricao)
+
+        # Trata quebras de linha para o formato HTML que o editor espera
+        descricao_html = descricao.replace("\n", "<br>")
+
+        # 3. Injeta o conteúdo diretamente no HTML do editor
+        driver.execute_script("arguments[0].innerHTML = arguments[1];", corpo_editor, descricao_html)
+
+        # Retorna para o escopo principal da página
         driver.switch_to.default_content()
-        log("Descricao preenchida.", "success")
+        log("Descricao preenchida com sucesso.", "success")
         return True
     except Exception as e:
         log(f"Erro ao preencher descricao: {e}", "error")

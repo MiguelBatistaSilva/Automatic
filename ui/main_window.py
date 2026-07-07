@@ -5,13 +5,14 @@ from ui.aba_execucao import AbaExecucao
 from ui.aba_kb import AbaKB
 from ui.aba_license import AbaLicense
 from ui.aba_sla import AbaSLA
+from ui.aba_atendimento import AbaAtendimento
 
 
 class MainWindow(QMainWindow):
 
     def __init__(self, kb_store, icon_path: str = ""):
         super().__init__()
-        self.setWindowTitle("Automatic v6.2.3")
+        self.setWindowTitle("Automatic v6.2.4")
         self.setMinimumSize(900, 700)
         self.resize(1200, 700)
 
@@ -29,15 +30,17 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
 
-        self.aba_exec    = AbaExecucao(entries)
-        self.aba_sla     = AbaSLA()
-        self.aba_license = AbaLicense()
-        self.aba_kb      = AbaKB(kb_store)
+        self.aba_exec       = AbaExecucao(entries)
+        self.aba_sla        = AbaSLA()
+        self.aba_atendimento = AbaAtendimento()
+        self.aba_license    = AbaLicense()
+        self.aba_kb         = AbaKB(kb_store)
 
-        self.tabs.addTab(self.aba_exec,    "🤖 Desmembramento")
-        self.tabs.addTab(self.aba_sla,     "⏱️ Análise de SLA")
-        self.tabs.addTab(self.aba_license, "🔑 License")
-        self.tabs.addTab(self.aba_kb,      "📚 Bases de Conhecimento")
+        self.tabs.addTab(self.aba_exec,        "🤖 Desmembramento")
+        self.tabs.addTab(self.aba_atendimento, "▶️ Iniciar Atendimento")
+        self.tabs.addTab(self.aba_sla,         "⏱️ Análise de SLA")
+        self.tabs.addTab(self.aba_license,     "🔑 License")
+        self.tabs.addTab(self.aba_kb,          "📚 Bases de Conhecimento")
 
         self.aba_kb.kbs_atualizadas.connect(self.aba_exec.atualizar_kbs)
 

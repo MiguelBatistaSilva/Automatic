@@ -77,6 +77,14 @@ def execute_3n_flow(driver, df, descricao_base, numero_chamado,
         # Montar descricao substituindo marcadores {{COL}} pelo valor da linha
         description_son = _montar_descricao(descricao_base, row)
 
+        # Voltar ao chamado-pai antes de cada duplicacao. Isso recarrega uma pagina
+        # limpa (sem iframes de editor acumulados) e faz cada filho ser copia do PAI,
+        # nao do filho anterior — quebra a "cadeia" que fazia a descricao da linha 3
+        # grudar e se repetir da linha 4 em diante.
+        if not _navegar_para_chamado(driver, numero_chamado, log):
+            log(f"Nao foi possivel voltar ao chamado-pai na linha {index + 1}. Pulando.", "error")
+            continue
+
         # -- DUPLICAR --
         try:
             botao = WebDriverWait(driver, 20).until(
@@ -117,6 +125,11 @@ def execute_3n_flow(driver, df, descricao_base, numero_chamado,
             continue
 
         # -- DESCRICAO --
+        # [DEBUG] Diagnostico temporario: quantos iframes de editor existem no DOM
+        # (deve ser 1 apos a quebra da cadeia) e qual descricao esta indo pra esta linha.
+        _qtd_iframes = len(driver.find_elements(By.XPATH, "//iframe[contains(@title, 'formattedRemarks')]"))
+        log(f"[DEBUG] Linha {index + 1}: {_qtd_iframes} iframe(s) no DOM | descricao: '{description_son[:60]}'", "info")
+
         if not _preencher_descricao(driver, log, description_son):
             log(f"Descricao nao preenchida na linha {index + 1}; sera retentada.", "error")
             _navegar_para_chamado(driver, numero_chamado, log)
@@ -129,7 +142,7 @@ def execute_3n_flow(driver, df, descricao_base, numero_chamado,
             )
             botao.click()
             log("Chamado salvo.", "success")
-            time.sleep(2)
+            time.sleep(1)
         except Exception as e:
             log(f"Erro ao salvar: {e}", "error")
             continue
