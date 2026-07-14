@@ -142,7 +142,7 @@ def execute_3n_flow(driver, df, descricao_base, numero_chamado,
             )
             botao.click()
             log("Chamado salvo.", "success")
-            time.sleep(1)
+            time.sleep(2)
         except Exception as e:
             log(f"Erro ao salvar: {e}", "error")
             continue

@@ -1,4 +1,5 @@
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import pandas as pd
@@ -130,21 +131,11 @@ def _relogin(driver, numero_chamado, usuario, senha, log) -> bool:
 
 
 def _capturar_numero_filho(driver, log) -> str:
-    """
-    Captura o numero do chamado filho gerado pelo Assyst apos salvar.
-
-    O h1#contentPaneTitle ja existe na pagina com o texto antigo, entao esperar
-    so a PRESENCA do elemento captura o numero velho antes do Assyst repintar com
-    o do filho (corrida). Lemos o texto atual e esperamos ele MUDAR.
-    """
-    sel = (By.CSS_SELECTOR, "h1#contentPaneTitle")
+    """Captura o numero do chamado filho gerado pelo Assyst apos salvar."""
     try:
-        titulo_antes = driver.find_element(*sel).text.strip()
-        titulo = WebDriverWait(driver, 15).until(
-            lambda d: (
-                (t := d.find_element(*sel).text.strip()) and t != titulo_antes and t
-            )
-        )
+        titulo = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "h1#contentPaneTitle"))
+        ).text
         numero = titulo.split(" ")[0].strip()
         log(f"Numero do chamado filho capturado: {numero}", "info")
         return numero
@@ -155,8 +146,13 @@ def _capturar_numero_filho(driver, log) -> str:
 
 def _preencher_descricao(driver, log, descricao: str) -> bool:
     """
-    Insere o conteúdo no CKEditor via iframe, injetando o texto diretamente
-    no corpo do editor via JavaScript para evitar falhas do send_keys.
+    Insere o conteúdo no CKEditor DIGITANDO via send_keys (como a mão humana).
+
+    Digitar atualiza o MODELO interno do CKEditor, ao contrário do innerHTML —
+    por isso a descrição herdada (quando o chamado e duplicado) e sobrescrita de
+    forma limpa, sem "grudar" e repetir na cadeia. Antes de digitar, foca o editor
+    e apaga o conteúdo herdado (Ctrl+A + Delete). Cada quebra de linha (\\n) vira
+    um Enter no editor. Recebe TEXTO PURO (nao HTML).
     """
     try:
         # 1. Aguarda e localiza o iframe do CKEditor
@@ -172,11 +168,18 @@ def _preencher_descricao(driver, log, descricao: str) -> bool:
             EC.presence_of_element_located((By.CSS_SELECTOR, "body.cke_editable"))
         )
 
-        # Trata quebras de linha para o formato HTML que o editor espera
-        descricao_html = descricao.replace("\n", "<br>")
+        # 3. Foca e limpa o conteúdo herdado
+        corpo_editor.click()
+        corpo_editor.send_keys(Keys.CONTROL, "a")
+        corpo_editor.send_keys(Keys.DELETE)
 
-        # 3. Injeta o conteúdo diretamente no HTML do editor
-        driver.execute_script("arguments[0].innerHTML = arguments[1];", corpo_editor, descricao_html)
+        # 4. Digita linha a linha; cada \n vira um Enter no editor
+        linhas = descricao.split("\n")
+        for i, linha in enumerate(linhas):
+            if i > 0:
+                corpo_editor.send_keys(Keys.ENTER)
+            if linha:
+                corpo_editor.send_keys(linha)
 
         # Retorna para o escopo principal da página
         driver.switch_to.default_content()
