@@ -77,14 +77,6 @@ def execute_3n_flow(driver, df, descricao_base, numero_chamado,
         # Montar descricao substituindo marcadores {{COL}} pelo valor da linha
         description_son = _montar_descricao(descricao_base, row)
 
-        # Voltar ao chamado-pai antes de cada duplicacao. Isso recarrega uma pagina
-        # limpa (sem iframes de editor acumulados) e faz cada filho ser copia do PAI,
-        # nao do filho anterior — quebra a "cadeia" que fazia a descricao da linha 3
-        # grudar e se repetir da linha 4 em diante.
-        if not _navegar_para_chamado(driver, numero_chamado, log):
-            log(f"Nao foi possivel voltar ao chamado-pai na linha {index + 1}. Pulando.", "error")
-            continue
-
         # -- DUPLICAR --
         try:
             botao = WebDriverWait(driver, 20).until(
