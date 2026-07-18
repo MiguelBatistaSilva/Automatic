@@ -32,39 +32,45 @@ class WorkerSLA(QObject):
 
     def run(self):
         try:
-            from services.automatic import _get_driver_manager
-            from services.flow_sla import extrair_historico_chamado
-            from services.flow_utils import _fazer_login
+            # Piloto da migracao para Playwright: o SLA roda em navegador
+            # proprio, fora do driver singleton do Selenium usado pelos demais
+            # fluxos. Para voltar atras, basta reapontar os dois imports abaixo
+            # para services.flow_sla / services.flow_utils e retomar o
+            # _get_driver_manager.
+            from services.browser_pw import NavegadorPW
+            from services.flow_sla_pw import extrair_historico_chamado
+            from services.browser_pw import _fazer_login_pw
             from services.sla_engine import calcular_sla
 
             def log(msg, tipo="info"):
                 self.log_signal.emit(msg, tipo)
 
-            driver = _get_driver_manager(log).iniciar_driver_e_navegar()
+            # O Playwright sync precisa nascer e morrer NESTA thread; o `with`
+            # garante que o navegador feche mesmo se algo estourar no meio.
+            with NavegadorPW(log) as page:
+                # Login uma unica vez; os chamados sao processados na mesma sessao.
+                if not _fazer_login_pw(page, self.usuario, self.senha, log):
+                    self.fim_signal.emit(False)
+                    return
 
-            # Login uma unica vez; os chamados sao processados na mesma sessao.
-            if not _fazer_login(driver, self.usuario, self.senha, log):
-                self.fim_signal.emit(False)
-                return
+                total          = len(self.chamados)
+                houve_sucesso  = False
+                for i, numero in enumerate(self.chamados, 1):
+                    log(f"[{i}/{total}] Analisando {numero}...", "status")
+                    historico = extrair_historico_chamado(page, numero, log)
+                    if historico is None:
+                        self.resultado_signal.emit({
+                            "numero_chamado": numero,
+                            "falha":          True,
+                            "mensagem":       "Falha ao extrair historico",
+                        })
+                        continue
 
-            total          = len(self.chamados)
-            houve_sucesso  = False
-            for i, numero in enumerate(self.chamados, 1):
-                log(f"[{i}/{total}] Analisando {numero}...", "status")
-                historico = extrair_historico_chamado(driver, numero, log)
-                if historico is None:
-                    self.resultado_signal.emit({
-                        "numero_chamado": numero,
-                        "falha":          True,
-                        "mensagem":       "Falha ao extrair historico",
-                    })
-                    continue
-
-                resultado = calcular_sla(historico, self.fila)
-                resultado["numero_chamado"] = numero
-                resultado["total_acoes"]    = len(historico)
-                self.resultado_signal.emit(resultado)
-                houve_sucesso = True
+                    resultado = calcular_sla(historico, self.fila)
+                    resultado["numero_chamado"] = numero
+                    resultado["total_acoes"]    = len(historico)
+                    self.resultado_signal.emit(resultado)
+                    houve_sucesso = True
 
             self.fim_signal.emit(houve_sucesso)
 

@@ -45,29 +45,32 @@ class WorkerAtendimento(QObject):
 
     def run(self):
         try:
-            from services.automatic import _get_driver_manager
-            from services.flow_utils import _fazer_login
-            from services.flow_atendimento import iniciar_atendimento
+            # Migrado para Playwright (ver services/browser_pw.py). Para voltar
+            # atras, reapontar os imports para services.flow_atendimento /
+            # services.flow_utils e retomar o _get_driver_manager.
+            from services.browser_pw import NavegadorPW, _fazer_login_pw
+            from services.flow_atendimento_pw import iniciar_atendimento
 
             def log(msg, tipo="info"):
                 self.log_signal.emit(msg, tipo)
 
-            driver = _get_driver_manager(log).iniciar_driver_e_navegar()
+            # O Playwright sync precisa nascer e morrer NESTA thread; o `with`
+            # garante que o navegador feche mesmo se algo estourar no meio.
+            with NavegadorPW(log) as page:
+                if not _fazer_login_pw(page, self.usuario, self.senha, log):
+                    for c in self.chamados:
+                        self.resultado_signal.emit({"chamado": c, "sucesso": False})
+                    self.fim_signal.emit(False)
+                    return
 
-            if not _fazer_login(driver, self.usuario, self.senha, log):
-                for c in self.chamados:
-                    self.resultado_signal.emit({"chamado": c, "sucesso": False})
-                self.fim_signal.emit(False)
-                return
-
-            houve_sucesso = False
-            for chamado in self.chamados:
-                log(f"Iniciando atendimento do chamado {chamado}...", "status")
-                ok = iniciar_atendimento(
-                    driver, log, chamado, self.descricao, self.modo_teste
-                )
-                self.resultado_signal.emit({"chamado": chamado, "sucesso": ok})
-                houve_sucesso = houve_sucesso or ok
+                houve_sucesso = False
+                for chamado in self.chamados:
+                    log(f"Iniciando atendimento do chamado {chamado}...", "status")
+                    ok = iniciar_atendimento(
+                        page, log, chamado, self.descricao, self.modo_teste
+                    )
+                    self.resultado_signal.emit({"chamado": chamado, "sucesso": ok})
+                    houve_sucesso = houve_sucesso or ok
 
             self.fim_signal.emit(houve_sucesso)
 
