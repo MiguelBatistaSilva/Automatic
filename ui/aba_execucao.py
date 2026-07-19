@@ -25,6 +25,7 @@ from ui.tema_qt import (
 )
 from services.checkpoint import existe_pendente, foi_concluido, resumo as resumo_checkpoint
 from services.flow_bc import _chave_checkpoint
+from ui.dialog_credenciais import obter_credenciais
 
 MODO_COMPLETO = 0
 MODO_SO_CRIAR = 1
@@ -275,29 +276,6 @@ class AbaExecucao(QWidget):
     # Helpers de construcao de UI
     # ------------------------------------------------------------------
 
-    def _campo_credenciais(self) -> tuple:
-        cred_row = QHBoxLayout()
-        cred_row.setSpacing(12)
-
-        mat_col = QVBoxLayout()
-        mat_col.setSpacing(4)
-        mat_col.addWidget(QLabel("Matrícula"))
-        input_usuario = QLineEdit()
-        input_usuario.setPlaceholderText("Matrícula")
-        mat_col.addWidget(input_usuario)
-        cred_row.addLayout(mat_col)
-
-        senha_col = QVBoxLayout()
-        senha_col.setSpacing(4)
-        senha_col.addWidget(QLabel("Senha"))
-        input_senha = QLineEdit()
-        input_senha.setEchoMode(QLineEdit.EchoMode.Password)
-        input_senha.setPlaceholderText("Lanlink@")
-        senha_col.addWidget(input_senha)
-        cred_row.addLayout(senha_col)
-
-        return cred_row, input_usuario, input_senha
-
     def _campo_csv(self) -> tuple:
         col = QVBoxLayout()
         col.setSpacing(6)
@@ -416,22 +394,7 @@ class AbaExecucao(QWidget):
         chamado_col.addWidget(self.input_chamado)
         topo_row.addLayout(chamado_col)
 
-        mat_col = QVBoxLayout()
-        mat_col.setSpacing(4)
-        mat_col.addWidget(QLabel("Matrícula"))
-        self.input_usuario = QLineEdit()
-        self.input_usuario.setPlaceholderText("Matrícula")
-        mat_col.addWidget(self.input_usuario)
-        topo_row.addLayout(mat_col)
-
-        senha_col = QVBoxLayout()
-        senha_col.setSpacing(4)
-        senha_col.addWidget(QLabel("Senha"))
-        self.input_senha = QLineEdit()
-        self.input_senha.setEchoMode(QLineEdit.EchoMode.Password)
-        self.input_senha.setPlaceholderText("Lanlink@")
-        senha_col.addWidget(self.input_senha)
-        topo_row.addLayout(senha_col)
+        # Credenciais: menu ⓘ → Credenciais (ui/dialog_credenciais.py).
 
         col_esq.addLayout(topo_row)
 
@@ -494,22 +457,7 @@ class AbaExecucao(QWidget):
         chamado_col.addWidget(self.input_chamado_criar)
         topo_row.addLayout(chamado_col)
 
-        mat_col = QVBoxLayout()
-        mat_col.setSpacing(4)
-        mat_col.addWidget(QLabel("Matrícula"))
-        self.input_usuario_criar = QLineEdit()
-        self.input_usuario_criar.setPlaceholderText("Matrícula")
-        mat_col.addWidget(self.input_usuario_criar)
-        topo_row.addLayout(mat_col)
-
-        senha_col = QVBoxLayout()
-        senha_col.setSpacing(4)
-        senha_col.addWidget(QLabel("Senha"))
-        self.input_senha_criar = QLineEdit()
-        self.input_senha_criar.setEchoMode(QLineEdit.EchoMode.Password)
-        self.input_senha_criar.setPlaceholderText("Lanlink@")
-        senha_col.addWidget(self.input_senha_criar)
-        topo_row.addLayout(senha_col)
+        # Credenciais: menu ⓘ → Credenciais (ui/dialog_credenciais.py).
 
         col_esq.addLayout(topo_row)
 
@@ -558,8 +506,7 @@ class AbaExecucao(QWidget):
         col_esq = QVBoxLayout()
         col_esq.setSpacing(6)
 
-        cred_row, self.input_usuario_bc, self.input_senha_bc = self._campo_credenciais()
-        col_esq.addLayout(cred_row)
+        # Credenciais: menu ⓘ → Credenciais (ui/dialog_credenciais.py).
 
         col_esq.addWidget(QLabel("Base de Conhecimento"))
         self.combo_kb_so_bc = QComboBox()
@@ -671,13 +618,15 @@ class AbaExecucao(QWidget):
             erros.append("Selecione uma Base de Conhecimento.")
         if not self.input_chamado.text().strip():
             erros.append("Preencha o numero do Chamado PAI.")
-        if not self.input_usuario.text().strip():
-            erros.append("Preencha a matricula.")
-        if not self.input_senha.text().strip():
-            erros.append("Preencha a senha.")
         if erros:
             for e in erros: self._append_log(e, "error")
             return
+
+        cred = obter_credenciais(self)
+        if cred is None:
+            self._append_log("Credenciais nao cadastradas.", "error")
+            return
+        usuario, senha = cred
 
         kb_entry = self._kb_entry(self.combo_kb_completo)
         if not kb_entry:
@@ -693,8 +642,8 @@ class AbaExecucao(QWidget):
             "kb_config":      {"keyword": kb_entry["keyword"], "nome_artigo": kb_entry["nome_artigo"]},
             "df":             pd.DataFrame(self.linhas_csv, columns=self.colunas_csv),
             "numero_chamado": numero_chamado,
-            "usuario":        self.input_usuario.text().strip(),
-            "senha":          self.input_senha.text().strip(),
+            "usuario":        usuario,
+            "senha":          senha,
         }
         self._set_em_execucao(True)
         self._iniciar_thread(WorkerCompleto(dados, iniciar_do_zero))
@@ -705,13 +654,15 @@ class AbaExecucao(QWidget):
             erros.append("Importe o CSV antes de iniciar.")
         if not self.input_chamado_criar.text().strip():
             erros.append("Preencha o numero do Chamado PAI.")
-        if not self.input_usuario_criar.text().strip():
-            erros.append("Preencha a matricula.")
-        if not self.input_senha_criar.text().strip():
-            erros.append("Preencha a senha.")
         if erros:
             for e in erros: self._append_log(e, "error")
             return
+
+        cred = obter_credenciais(self)
+        if cred is None:
+            self._append_log("Credenciais nao cadastradas.", "error")
+            return
+        usuario, senha = cred
 
         numero_chamado  = self.input_chamado_criar.text().strip()
         iniciar_do_zero = self._verificar_checkpoint(numero_chamado)
@@ -722,8 +673,8 @@ class AbaExecucao(QWidget):
             "descricao_base": self.input_descricao_criar.toPlainText(),
             "df":             pd.DataFrame(self.linhas_csv_criar, columns=self.colunas_csv_criar),
             "numero_chamado": numero_chamado,
-            "usuario":        self.input_usuario_criar.text().strip(),
-            "senha":          self.input_senha_criar.text().strip(),
+            "usuario":        usuario,
+            "senha":          senha,
         }
         self._set_em_execucao(True)
         self._iniciar_thread(WorkerSoCriar(dados, iniciar_do_zero))
@@ -734,13 +685,15 @@ class AbaExecucao(QWidget):
             erros.append("Importe a lista de chamados antes de iniciar.")
         if self.combo_kb_so_bc.currentIndex() < 0:
             erros.append("Selecione uma Base de Conhecimento.")
-        if not self.input_usuario_bc.text().strip():
-            erros.append("Preencha a matricula.")
-        if not self.input_senha_bc.text().strip():
-            erros.append("Preencha a senha.")
         if erros:
             for e in erros: self._append_log(e, "error")
             return
+
+        cred = obter_credenciais(self)
+        if cred is None:
+            self._append_log("Credenciais nao cadastradas.", "error")
+            return
+        usuario, senha = cred
 
         kb_entry = self._kb_entry(self.combo_kb_so_bc)
         if not kb_entry:
@@ -755,8 +708,8 @@ class AbaExecucao(QWidget):
         dados = {
             "filhos":     self._filhos_bc,
             "kb_config":  {"keyword": kb_entry["keyword"], "nome_artigo": kb_entry["nome_artigo"]},
-            "usuario":    self.input_usuario_bc.text().strip(),
-            "senha":      self.input_senha_bc.text().strip(),
+            "usuario":    usuario,
+            "senha":      senha,
         }
         self._set_em_execucao(True)
         self._iniciar_thread(WorkerSoBC(dados, iniciar_do_zero))
@@ -816,12 +769,9 @@ class AbaExecucao(QWidget):
             btn.setEnabled(not em_exec)
             btn.setText(label)
         for w in [
-            self.input_chamado,    self.input_usuario,    self.input_senha,
-            self.combo_kb_completo, self.txt_csv,
-            self.input_chamado_criar, self.input_usuario_criar, self.input_senha_criar,
-            self.txt_csv_criar,
-            self.input_usuario_bc, self.input_senha_bc,
-            self.combo_kb_so_bc,   self.txt_filhos,
+            self.input_chamado,     self.combo_kb_completo, self.txt_csv,
+            self.input_chamado_criar, self.txt_csv_criar,
+            self.combo_kb_so_bc,    self.txt_filhos,
             self.combo_modo,
         ]:
             w.setEnabled(not em_exec)

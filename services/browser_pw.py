@@ -22,6 +22,7 @@ _SEL_USERNAME = "input[name='j_username']"
 _SEL_PASSWORD = "input[name='j_password']"
 _SEL_LOGIN = "#loginSubmit"
 _SEL_SESSAO_EXPIRADA = "ol.axios-logout-error"
+_SEL_CRED_INVALIDA = "ol.errormsg"
 _SEL_CHAMADO_CARREGADO = "#btlogEvent"
 
 
@@ -38,8 +39,18 @@ class NavegadorPW:
             ...
     """
 
-    def __init__(self, log_func):
+    def __init__(self, log_func, manter_aberto: bool = False):
         self.log = log_func
+        # manter_aberto=True: sair do `with` NAO fecha o navegador. Usado pela
+        # aba License, cujo proposito e justamente segurar a sessao aberta para
+        # o usuario trabalhar manualmente depois — equivalente ao detach=True
+        # do DriverManager no Selenium.
+        #
+        # Consequencia: quando a thread do worker morre, o navegador sobrevive
+        # mas fica INCONTROLAVEL pelo app (a API sync do Playwright e presa a
+        # thread que a criou). Quem fecha a janela e o usuario. Cada execucao
+        # deixa tambem um processo do driver (node) para tras.
+        self.manter_aberto = manter_aberto
         self._pw = None
         self._browser = None
         self._context = None
@@ -61,6 +72,10 @@ class NavegadorPW:
         return self.page
 
     def __exit__(self, exc_type, exc, tb):
+        if self.manter_aberto:
+            self.log("Navegador mantido aberto para uso manual.", "info")
+            return False
+
         for alvo, nome in (
             (self._context, "contexto"),
             (self._browser, "navegador"),
@@ -101,6 +116,17 @@ def _fazer_login_pw(page, usuario: str, senha: str, log) -> bool:
         if page.locator(_SEL_SESSAO_EXPIRADA).count() > 0:
             log(f"Licencas em uso, tentando novamente... (tentativa {tentativa})", "error")
             continue
+
+        # Credencial errada NAO pode entrar no laco infinito: repetir com a
+        # mesma senha errada nunca vai logar. Sem esta checagem o Assyst apenas
+        # redesenha a tela de login e a funcao concluia "sucesso" por engano —
+        # o fluxo seguia adiante achando que estava logado. Isso importa mais
+        # agora que a senha vem do cofre e a senha corporativa roda a cada 3
+        # meses (ver dialog de Credenciais).
+        erro_cred = page.locator(_SEL_CRED_INVALIDA)
+        if erro_cred.count() > 0 and erro_cred.first.is_visible():
+            log(f"Credencial invalida: {erro_cred.first.inner_text().strip()}", "error")
+            return False
 
         log("Login realizado com sucesso.", "success")
         return True

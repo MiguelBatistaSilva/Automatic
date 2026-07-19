@@ -16,7 +16,8 @@ PACOTES   = os.path.join(BASE_DIR, "pacotes_automacao")
 ATALHO_PY = os.path.join(BASE_DIR, "gerar_atalho.py")
 ICONE     = os.path.join(BASE_DIR, "app_icon.ico")
 
-PACOTES_LISTA = ["pandas", "selenium", "PyQt6", "pywin32", "requests"]
+PACOTES_LISTA = ["pandas", "selenium", "PyQt6", "pywin32", "requests",
+                 "playwright", "keyring"]
 
 # Paleta clara, alinhada ao tema do app (ui/tema_qt.py).
 COR_FUNDO    = "#FFFFFF"

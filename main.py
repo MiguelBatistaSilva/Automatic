@@ -28,7 +28,7 @@ class KBStore:
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("Automatic v6.2.4")
+    app.setApplicationName(f"Automatic v{VERSION}")
     app.setStyleSheet(ESTILO_GLOBAL)
 
     icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_icon.ico")

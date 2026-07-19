@@ -6,13 +6,15 @@ from ui.aba_kb import AbaKB
 from ui.aba_license import AbaLicense
 from ui.aba_sla import AbaSLA
 from ui.aba_atendimento import AbaAtendimento
+from ui.dialog_credenciais import DialogCredenciais
+from version import VERSION
 
 
 class MainWindow(QMainWindow):
 
     def __init__(self, kb_store, icon_path: str = ""):
         super().__init__()
-        self.setWindowTitle("Automatic v6.2.4")
+        self.setWindowTitle(f"Automatic v{VERSION}")
         self.setMinimumSize(900, 700)
         self.resize(1200, 700)
 
@@ -54,6 +56,7 @@ class MainWindow(QMainWindow):
         _URL_LINKS  = "https://recondite-frog-e5d.notion.site/Bem-vindo-2e6e32b25a248027b36ef626bf484553"
 
         menu = QMenu(self)
+        menu.addAction("🔐  Credenciais", self._abrir_credenciais)
         menu.addAction("🔗  Sobre",    lambda: QDesktopServices.openUrl(QUrl(_URL_LINKS)))
 
         btn = QToolButton(self)
@@ -61,3 +64,6 @@ class MainWindow(QMainWindow):
         btn.setMenu(menu)
         btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         return btn
+
+    def _abrir_credenciais(self):
+        DialogCredenciais(self).exec()

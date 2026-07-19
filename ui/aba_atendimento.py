@@ -23,6 +23,7 @@ from ui.tema_qt import (
     COR_SUCESSO, COR_ERRO, COR_STATUS, COR_INFO, COR_AVISO, FONTE_MONO,
 )
 from services.flow_atendimento import DESCRICAO_PADRAO
+from ui.dialog_credenciais import obter_credenciais
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +99,7 @@ class AbaAtendimento(QWidget):
         self._thread = None
         self._worker = None
         self._worker_ativo = False
+        self._cred: tuple[str, str] | None = None   # preenchido ao armar
 
         self._timer = QTimer(self)
         self._timer.setInterval(20_000)    # verifica a agenda a cada 20s
@@ -118,22 +120,10 @@ class AbaAtendimento(QWidget):
         col_esq = QVBoxLayout()
         col_esq.setSpacing(6)
 
-        cred_row = QHBoxLayout()
-        cred_row.setSpacing(12)
-        mat_col = QVBoxLayout()
-        mat_col.addWidget(QLabel("Matrícula"))
-        self.input_usuario = QLineEdit()
-        self.input_usuario.setPlaceholderText("Matrícula")
-        mat_col.addWidget(self.input_usuario)
-        cred_row.addLayout(mat_col)
-        senha_col = QVBoxLayout()
-        senha_col.addWidget(QLabel("Senha"))
-        self.input_senha = QLineEdit()
-        self.input_senha.setEchoMode(QLineEdit.EchoMode.Password)
-        self.input_senha.setPlaceholderText("Lanlink@")
-        senha_col.addWidget(self.input_senha)
-        cred_row.addLayout(senha_col)
-        col_esq.addLayout(cred_row)
+        # Credenciais nao ficam mais aqui: sao unicas para o app inteiro e vivem
+        # no menu ⓘ → Credenciais (ui/dialog_credenciais.py). Aqui elas sao lidas
+        # ao ARMAR o agendamento e guardadas em self._cred, porque o disparo
+        # acontece depois, pelo timer, possivelmente sem ninguem na maquina.
 
         col_esq.addWidget(QLabel("Chamado"))
         self.input_chamado = QLineEdit()
@@ -257,17 +247,17 @@ class AbaAtendimento(QWidget):
             return
 
         # Ativar: validar credenciais e ao menos um pendente
-        erros = []
-        if not self.input_usuario.text().strip():
-            erros.append("Preencha a matrícula.")
-        if not self.input_senha.text().strip():
-            erros.append("Preencha a senha.")
         if not any(i["status"] == self.STATUS_PENDENTE for i in self._agendados):
-            erros.append("Agende ao menos um chamado pendente.")
-        if erros:
-            for e in erros:
-                self._append_log(e, "error")
+            self._append_log("Agende ao menos um chamado pendente.", "error")
             return
+
+        # Le as credenciais agora, com o usuario presente, e guarda para o timer
+        # usar depois.
+        cred = obter_credenciais(self)
+        if cred is None:
+            self._append_log("Credenciais nao cadastradas.", "error")
+            return
+        self._cred = cred
 
         self._set_armado(True)
         self._timer.start()
@@ -276,8 +266,6 @@ class AbaAtendimento(QWidget):
 
     def _set_armado(self, armado: bool):
         self.btn_ativar.setText("⏸  Pausar agendamento" if armado else "▶  Ativar agendamento")
-        self.input_usuario.setEnabled(not armado)
-        self.input_senha.setEnabled(not armado)
 
     def _verificar_agenda(self):
         if self._worker_ativo:
@@ -296,10 +284,11 @@ class AbaAtendimento(QWidget):
 
     def _iniciar_worker(self, chamados: list):
         self._worker_ativo = True
+        usuario, senha = self._cred
         self._worker = WorkerAtendimento(
             chamados=chamados,
-            usuario=self.input_usuario.text().strip(),
-            senha=self.input_senha.text().strip(),
+            usuario=usuario,
+            senha=senha,
             descricao=DESCRICAO_PADRAO,
             modo_teste=False,
         )

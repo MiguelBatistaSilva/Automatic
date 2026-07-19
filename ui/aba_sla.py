@@ -2,7 +2,7 @@ import time
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QTextEdit, QPlainTextEdit,
+    QLabel, QTextEdit, QPlainTextEdit,
     QPushButton, QGroupBox, QComboBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
 )
@@ -12,6 +12,7 @@ from PyQt6.QtGui import QColor, QTextCharFormat, QFont
 from ui.tema_qt import (
     COR_SUCESSO, COR_ERRO, COR_STATUS, COR_INFO, COR_AVISO, FONTE_MONO,
 )
+from ui.dialog_credenciais import obter_credenciais
 
 
 # ---------------------------------------------------------------------------
@@ -107,27 +108,8 @@ class AbaSLA(QWidget):
         col_esq = QVBoxLayout()
         col_esq.setSpacing(6)
 
-        cred_row = QHBoxLayout()
-        cred_row.setSpacing(12)
-
-        mat_col = QVBoxLayout()
-        mat_col.setSpacing(4)
-        mat_col.addWidget(QLabel("Matrícula"))
-        self.input_usuario = QLineEdit()
-        self.input_usuario.setPlaceholderText("Matrícula")
-        mat_col.addWidget(self.input_usuario)
-        cred_row.addLayout(mat_col)
-
-        senha_col = QVBoxLayout()
-        senha_col.setSpacing(4)
-        senha_col.addWidget(QLabel("Senha"))
-        self.input_senha = QLineEdit()
-        self.input_senha.setEchoMode(QLineEdit.EchoMode.Password)
-        self.input_senha.setPlaceholderText("Lanlink@")
-        senha_col.addWidget(self.input_senha)
-        cred_row.addLayout(senha_col)
-
-        col_esq.addLayout(cred_row)
+        # Credenciais nao ficam mais aqui: sao unicas para o app inteiro e vivem
+        # no menu ⓘ → Credenciais (ui/dialog_credenciais.py).
 
         col_esq.addWidget(QLabel("Fila"))
         self.combo_fila = QComboBox()
@@ -279,17 +261,15 @@ class AbaSLA(QWidget):
         if not self._chamados:
             self._importar_chamados()
 
-        erros = []
         if not self._chamados:
-            erros.append("Preencha ao menos um chamado.")
-        if not self.input_usuario.text().strip():
-            erros.append("Preencha a matricula.")
-        if not self.input_senha.text().strip():
-            erros.append("Preencha a senha.")
-        if erros:
-            for e in erros:
-                self._append_log(e, "error")
+            self._append_log("Preencha ao menos um chamado.", "error")
             return
+
+        cred = obter_credenciais(self)
+        if cred is None:
+            self._append_log("Credenciais nao cadastradas.", "error")
+            return
+        usuario, senha = cred
 
         self._limpar_resultados()
         self._set_em_execucao(True)
@@ -297,8 +277,8 @@ class AbaSLA(QWidget):
 
         self._worker = WorkerSLA(
             chamados=list(self._chamados),
-            usuario=self.input_usuario.text().strip(),
-            senha=self.input_senha.text().strip(),
+            usuario=usuario,
+            senha=senha,
             fila=self.combo_fila.currentText(),
         )
         self._thread = QThread()
@@ -339,8 +319,6 @@ class AbaSLA(QWidget):
     def _set_em_execucao(self, em_exec: bool):
         self.btn_analisar.setEnabled(not em_exec)
         self.btn_analisar.setText("⏳ Analisando..." if em_exec else "▶  Analisar SLA")
-        self.input_usuario.setEnabled(not em_exec)
-        self.input_senha.setEnabled(not em_exec)
         self.combo_fila.setEnabled(not em_exec)
         self.txt_chamados.setEnabled(not em_exec)
         self.btn_importar.setEnabled(not em_exec)

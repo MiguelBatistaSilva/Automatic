@@ -7,6 +7,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+docs/
+
 # C extensions
 *.so
 
@@ -176,3 +178,15 @@ poetry.toml
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python
+
+### Automatic ###
+# PyCharm/IntelliJ. O template acima traz "idea/" sem o ponto, que nao casa com
+# a pasta real.
+.idea/
+
+# Credenciais do usuario: guarda a matricula de quem instalou. A senha nao fica
+# aqui (vai para o Cofre do Windows via keyring), mas a matricula tambem nao
+# deve ir para o repositorio.
+# ATENCAO: ignorar so este arquivo, NAO a pasta services/data/ inteira —
+# services/data/kb_configs.json e versionado de proposito.
+services/data/credenciais.json
