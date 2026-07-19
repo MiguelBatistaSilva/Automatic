@@ -190,3 +190,6 @@ pyrightconfig.json
 # ATENCAO: ignorar so este arquivo, NAO a pasta services/data/ inteira —
 # services/data/kb_configs.json e versionado de proposito.
 services/data/credenciais.json
+
+# Scripts de teste manual, nao versionados.
+teste_*.py
