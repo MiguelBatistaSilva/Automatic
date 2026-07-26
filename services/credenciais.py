@@ -1,23 +1,24 @@
 """
 services/credenciais.py — Armazenamento das credenciais do CATI/Assyst.
 
-A matricula fica num JSON simples em services/data/ (mesmo padrao do kb_store).
+A matricula fica num JSON simples em data/ (mesmo padrao do kb_store).
 A SENHA nunca vai para o disco: vai para o Cofre de Credenciais do Windows via
 keyring, criptografada pelo SO e amarrada a conta Windows do usuario.
 
-A pasta 'data' e excluida do robocopy em updater.py, entao as credenciais
-sobrevivem as atualizacoes do app.
+A pasta 'data' e a que o updater precisa excluir ao copiar a versao nova, entao
+as credenciais sobrevivem as atualizacoes do app (ver services/paths.py).
 """
 import json
-from pathlib import Path
 
 import keyring
+
+from services.paths import DATA_DIR
 
 # Nome do "servico" no Cofre do Windows. Aparece assim no Gerenciador de
 # Credenciais, entao vale manter legivel.
 SERVICO = "Automatic"
 
-_PATH = Path(__file__).parent / "data" / "credenciais.json"
+_PATH = DATA_DIR / "credenciais.json"
 
 
 def _ler_matricula() -> str:

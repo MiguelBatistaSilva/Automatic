@@ -1,0 +1,71 @@
+"""
+services/assyst_common.py — Helpers do Assyst que NAO dependem de navegador.
+
+Sao Python/pandas/arquivo puro: URLs, normalizacao de id, montagem da descricao
+a partir da linha do CSV e o registro/abertura do TXT de chamados filhos. Antes
+viviam no `flow_utils.py` (Selenium) e eram reaproveitados pelo codigo Playwright;
+com a migracao completa, foram movidos para ca para que nenhum modulo vivo precise
+importar o `flow_utils` (e, com ele, o proprio Selenium).
+"""
+
+import os
+from pathlib import Path
+
+import pandas as pd
+
+from services.paths import DATA_DIR
+
+_URL_HOME = "https://cati.tjce.jus.br/assystweb/application.do"
+_URL_CHAMADO = (
+    "https://cati.tjce.jus.br/assystweb/application.do"
+    "#event%2FDisplayEvent.do%3Fdispatch%3DgetEvent"
+    "%26checkJukeBoxSettings%3Dtrue%26eventId%3D{id_final}%26resultSet%3D"
+)
+_FILHOS_DIR = DATA_DIR
+
+
+def _path_filhos(numero_chamado: str) -> Path:
+    _FILHOS_DIR.mkdir(parents=True, exist_ok=True)
+    nome = numero_chamado.strip().replace("/", "_").replace("\\", "_")
+    return _FILHOS_DIR / f"filhos_{nome}.txt"
+
+
+def _registrar_filho(numero_chamado: str, numero_filho_str: str) -> None:
+    """Adiciona o numero do filho ao TXT, sem duplicatas."""
+    if not numero_filho_str:
+        return
+    p = _path_filhos(numero_chamado)
+    existentes = set()
+    if p.exists():
+        with open(p, "r", encoding="utf-8") as f:
+            existentes = {linha.strip() for linha in f if linha.strip()}
+    if numero_filho_str.strip() not in existentes:
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(numero_filho_str.strip() + "\n")
+
+
+def _abrir_txt_filhos(numero_chamado: str) -> None:
+    """Abre o TXT de filhos no Bloco de Notas se existir e tiver conteudo."""
+    p = _path_filhos(numero_chamado)
+    if p.exists() and p.stat().st_size > 0:
+        os.startfile(str(p))
+
+
+def _normalizar_id_assyst(numero: str) -> str:
+    n = str(numero).strip().upper()
+    if n.startswith("S2"):
+        return "7" + n[2:]
+    if n.startswith("R2"):
+        return "7" + n[2:]
+    if n.isdigit():
+        return f"1{n}"
+    return n
+
+
+def _montar_descricao(template: str, row) -> str:
+    resultado = template
+    for col, valor in row.items():
+        marcador = "{{" + str(col) + "}}"
+        valor_str = "" if pd.isna(valor) else str(valor).strip()
+        resultado = resultado.replace(marcador, valor_str)
+    return resultado

@@ -7,10 +7,10 @@ services/checkpoint.py — Gerencia o progresso linha a linha com 3 estados:
 Cada chamado tem seu proprio arquivo JSON em data/checkpoints/{numero}.json
 """
 import json
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-_CHECKPOINTS_DIR = Path(__file__).parent.parent / "data" / "checkpoints"
+from services.paths import CHECKPOINTS_DIR as _CHECKPOINTS_DIR
 
 STATUS_PENDENTE  = "pendente"
 STATUS_SALVO     = "salvo"

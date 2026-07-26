@@ -1,8 +1,8 @@
 """
-Extracao do historico de acoes em Playwright — piloto da migracao.
+Extracao do historico de acoes em Playwright.
 
-Gemeo do `services/flow_sla.py` (Selenium), que segue intacto para consulta e
-para rollback. A interface publica e a mesma, trocando `driver` por `page`.
+Portado do antigo `services/flow_sla.py` (Selenium, ja removido). A logica de
+extracao e os indices de coluna sao os mesmos; so muda a API para `page`.
 """
 
 from playwright.sync_api import TimeoutError as PWTimeout

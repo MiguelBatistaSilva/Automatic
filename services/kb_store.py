@@ -1,7 +1,8 @@
 import json
-from pathlib import Path
 
-_KB_PATH = Path(__file__).parent / "data" / "kb_configs.json"
+from services.paths import DATA_DIR
+
+_KB_PATH = DATA_DIR / "kb_configs.json"
 
 
 def carregar() -> list[dict]:

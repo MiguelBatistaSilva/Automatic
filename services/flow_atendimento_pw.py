@@ -1,8 +1,8 @@
 """
 services/flow_atendimento_pw.py — Fluxo "Iniciar Atendimento" em Playwright.
 
-Gemeo do `services/flow_atendimento.py` (Selenium), que segue intacto para
-consulta e rollback. Mesma interface publica, trocando `driver` por `page`.
+Portado do antigo `services/flow_atendimento.py` (Selenium, ja removido). Mesma
+sequencia no Assyst; so muda a API para `page`.
 
 Inicia um chamado que esta em Atendimento Programado (relogio de SLA pausado).
 Caminho no Assyst:

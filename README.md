@@ -2,8 +2,12 @@
 
 Ferramenta de automação para o Assyst/TJCE.
 
-Atualmente reúne quatro módulos: desmembramento de chamados, análise de SLA,
-login automático (License) e gerenciamento das Bases de Conhecimento.
+Reúne cinco módulos: desmembramento de chamados, início de atendimentos
+agendados, análise de SLA, login automático (Licenças) e gerenciamento das Bases
+de Conhecimento.
+
+A interface roda no navegador (Reflex) e a automação usa o Playwright, que dirige
+o Chrome já instalado na máquina — não há mais chromedriver para manter.
 
 ---
 
@@ -11,86 +15,80 @@ login automático (License) e gerenciamento das Bases de Conhecimento.
 
 - Windows 10/11 64-bit;
 - Python 3.11 (o instalador acompanha o executável em `Instalar_Python`);
-- Google Chrome instalado;
-- `chromedriver.exe` compatível com sua versão do Chrome.
+- Google Chrome instalado.
 
 ---
 
 ## Instalação
 
-1. Copie a pasta `Automatic v6.2` para seu computador (ex: `C:\Automatic v6.0`);
+1. Copie a pasta do Automatic para seu computador (ex: `C:\Automatic v6.0`);
 2. Instale o Python 3.11 (executável em `Instalar_Python\python-3.11.9-amd64.exe`);
    - **Marque a opção "Add Python to PATH"** durante a instalação.
-3. Coloque o `chromedriver.exe` dentro de `services\driver\`;
-4. Clique duas vezes em `iniciar_automatic.bat`.
+3. Clique duas vezes em `iniciar_automatic.bat`.
 
 Na **primeira execução**, o `iniciar_automatic.bat`:
 
 - verifica se o Python 3.11 está disponível;
-- cria o ambiente virtual (`.venv`) automaticamente;
-- abre uma janela de instalação que instala as dependências **offline**, a partir
-  da pasta `pacotes_automacao` (não precisa de internet);
-- cria um atalho na área de trabalho.
+- cria o ambiente virtual (`.venv`);
+- instala as dependências (usa os pacotes de `pacotes_automacao` quando existem e
+  baixa o que faltar);
+- sobe o servidor e abre a interface no navegador.
 
-Aguarde a janela de instalação concluir. Nas execuções seguintes o app abre
-direto, sem reinstalar nada.
+Nas execuções seguintes ele pula a instalação e vai direto para o app.
+
+> **A janela preta é o aplicativo.** Enquanto você estiver usando o Automatic ela
+> precisa ficar aberta — fechá-la encerra o programa. A interface fica em
+> `http://localhost:3000`; se a página não abrir sozinha, digite esse endereço no
+> navegador.
 
 ---
 
-## Configurando o chromedriver
+## Credenciais
 
-O `chromedriver.exe` precisa ser da mesma versão do seu Chrome. Em vez de
-procurar uma versão antiga específica, **mantenha o Chrome atualizado** e baixe
-o driver correspondente — assim os dois ficam sempre compatíveis.
-
-1. **Atualize o Chrome:**
-   - Abra o Chrome;
-   - Acesse `chrome://settings/help`;
-   - O Chrome verifica e instala a última versão automaticamente;
-   - Clique em **Reiniciar** quando solicitado.
-
-2. **Veja a versão instalada:**
-   - Acesse `chrome://version`;
-   - Anote os primeiros números — ex: `136.0.7103.x`.
-
-3. **Baixe o chromedriver correspondente:**
-   - Acesse `https://googlechromelabs.github.io/chrome-for-testing/`;
-   - Baixe a versão correspondente ao seu Chrome para **Windows 64-bit**.
-
-4. **Instale o driver:**
-   - Extraia e coloque o `chromedriver.exe` em `services\driver\`.
+As credenciais do Assyst são cadastradas **uma vez**, no menu **Opções →
+Credenciais** (canto inferior da barra lateral). A matrícula fica num arquivo
+local e a senha vai para o Cofre de Credenciais do Windows — nunca em texto
+plano. Todos os módulos usam essas credenciais; nenhuma tela pede login de novo.
 
 ---
 
 ## Como usar
 
-### Aba 🤖 Desmembramento
+### Desmembramento
 
-Cria os chamados filhos a partir de um chamado pai.
+Duplica um chamado de referência em vários chamados filhos, um por linha da
+planilha, e adiciona a Base de Conhecimento a eles. O seletor no topo escolhe as
+etapas: **Criar + Base**, **Só Criar** ou **Só Base**.
 
-1. **Referência PAI** — informe o número do chamado que será desmembrado;
-2. **Matrícula e Senha** — suas credenciais do sistema Assyst;
-3. **Descrição** — texto que será inserido em cada chamado filho;
-4. **Base de Conhecimento** — selecione a BC que será vinculada;
-5. **Dados de Iteração** — cole os dados que cada chamado filho deve ter;
-   - Primeira linha = cabeçalho (ex: `Marca/Modelo,Tombo`)
-   - Demais linhas = dados
-6. Clique em **Importar CSV** para validar;
-7. Clique em **INICIAR** para executar.
+1. **Referência** — número do chamado que será desmembrado;
+2. **Base de Conhecimento** — selecione a BC que será vinculada;
+3. **Descrição** — texto inserido em cada filho; use marcadores `{{COLUNA}}` para
+   trocar pelos valores de cada linha;
+4. **Dados de Iteração (CSV)** — cole os dados;
+   - primeira linha = cabeçalho (ex: `Marca,Tombo`),
+   - demais linhas = dados.
+5. Clique em **Iniciar**.
 
-### Aba ⏱️ Análise de SLA
+Se uma execução for interrompida, o checkpoint é detectado no início seguinte e o
+app pergunta se você quer **retomar** de onde parou ou **começar do zero**.
+
+### Iniciar Atendimento
+
+Inicia chamados que estão em Atendimento Programado na hora agendada. Adicione os
+chamados com data/hora na tabela e clique em **Ativar**: a cada 20 segundos o app
+verifica quem venceu e executa. O agendamento vive enquanto o app estiver aberto.
+
+### Análise de SLA
 
 Calcula o tempo líquido de SLA de um ou vários chamados, lendo o histórico de
-ações de cada um diretamente no Assyst.
+ações de cada um no Assyst.
 
-1. **Matrícula e Senha** — suas credenciais do Assyst;
-2. **Fila** — selecione a fila do chamado (define o limite de SLA);
-3. **Chamados** — cole um número por linha (ex: `S2123456`);
-4. (Opcional) clique em **Importar lista** para validar a quantidade;
-5. Clique em **▶ Analisar SLA**.
+1. **Fila** — define o limite de SLA;
+2. **Chamados** — cole um número por linha (ex: `S2123456`);
+3. Clique em **Analisar SLA**.
 
-Os resultados aparecem na tabela com início, tempo gasto, status (verde quando
-dentro do prazo, vermelho quando estourado) e total de ações.
+Os resultados aparecem na tabela com início, tempo gasto, status (verde dentro do
+prazo, vermelho estourado) e total de ações.
 
 **Regras de cálculo do SLA:**
 
@@ -107,14 +105,14 @@ dentro do prazo, vermelho quando estourado) e total de ações.
 | 2N CATI FCB     | 3h     | Congela       |
 | 2N CATI Remoto  | 2h     | Continua correndo |
 
-### Aba 🔑 License
+### Licenças
 
-Automação dedicada para realizar login no Assyst quando todas as licenças
-estão em uso.
+Faz login no Assyst e deixa o Chrome aberto para uso manual — para quando todas
+as licenças estão em uso.
 
-### Aba 📚 Bases de Conhecimento
+### Bases de Conhecimento
 
-Gerencie as BCs disponíveis para seleção na aba de Desmembramento.
+Gerencie as BCs disponíveis para seleção no Desmembramento.
 
 - **Palavra-chave** — termo usado para pesquisar a BC no Assyst;
 - **Título do Artigo** — nome exato da BC como aparece no sistema.
@@ -123,12 +121,8 @@ Gerencie as BCs disponíveis para seleção na aba de Desmembramento.
 
 ## Atualizações
 
-A aplicação verifica atualizações automaticamente ao iniciar.
-
-Quando houver uma nova versão, uma janela de atualização será exibida. Ao
-confirmar, o app baixa e aplica a atualização sozinho e reinicia — suas
-configurações locais (pasta `data`, `.venv` e `pacotes_automacao`) são
-preservadas.
+Em **Opções → Sobre** você vê a versão instalada e pode verificar se há versão
+nova. Havendo, o app mostra o link para baixar.
 
 ---
 
@@ -139,24 +133,24 @@ preservadas.
 - Feche e abra o `iniciar_automatic.bat` novamente.
 
 **Falha na instalação das dependências:**
-- Verifique se a pasta `pacotes_automacao` está presente e completa;
-- A janela de instalação mostra o log do erro.
+- O log do erro aparece na própria janela preta;
+- Verifique a conexão e se a pasta `pacotes_automacao` está presente.
 
-**Chrome não abre:**
-- Verifique se o `chromedriver.exe` está em `services\driver\`;
-- Verifique se a versão do chromedriver é compatível com o Chrome instalado.
+**A página não abriu no navegador:**
+- Acesse `http://localhost:3000` manualmente;
+- Na primeira execução o servidor demora mais para subir — atualize a página (F5).
+
+**Chrome não abre durante a automação:**
+- Confirme que o Google Chrome está instalado (o Playwright usa o Chrome do
+  sistema).
 
 **Login não funciona:**
-- Verifique suas credenciais;
-- O sistema Assyst pode estar fora do ar.
-
-**Importar CSV (Desmembramento):**
-- Certifique-se de que a primeira linha é o cabeçalho;
-- Certifique-se de que os valores estão separados por vírgulas.
+- Confira as credenciais em Opções → Credenciais;
+- O Assyst pode estar fora do ar.
 
 **Análise de SLA sem resultados:**
 - Confira se os números dos chamados estão corretos (um por linha);
-- Verifique no log se o histórico do chamado foi extraído.
+- Veja no Registro de Execução se o histórico foi extraído.
 
 ---
 
