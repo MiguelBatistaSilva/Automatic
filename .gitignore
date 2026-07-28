@@ -21,6 +21,9 @@ docs/
 *.pkl
 .web/
 exported_pages/
+# Gerado pelo Reflex no primeiro `reflex run` (lockfile do Bun). Cada maquina
+# resolve o seu — mesma decisao de instalar os pacotes Python por nome, sem pino.
+reflex.lock/
 
 # Distribution / packaging
 .Python
