@@ -19,9 +19,13 @@ Seletores confirmados por captura do registry Dojo (2026-07-06):
 Ver memoria: project_flow_atendimento, project_ckeditor_fix, project_sla_regras.
 """
 
-from playwright.sync_api import TimeoutError as PWTimeout
-
 from services.browser_pw import _navegar_para_chamado_pw
+
+# Os `except Exception` deste modulo sao largos DE PROPOSITO (como no fluxo
+# Selenium original). O Playwright levanta PWTimeout so na espera estourada:
+# strict mode, elemento desprendido no meio do clique e target fechado sao
+# `playwright.sync_api.Error`. Capturar so PWTimeout deixava esses furarem o
+# fluxo e derrubarem o LOTE inteiro do timer, em vez de falhar so um chamado.
 
 DESCRICAO_PADRAO = "Contato com êxito, suporte realizando intervenção técnica."
 
@@ -101,7 +105,7 @@ def iniciar_atendimento(page, log, numero_chamado: str,
     try:
         page.click(_SEL_MENU_ACOES, timeout=20000)
         log("Menu 'Ações' aberto.", "success")
-    except PWTimeout as e:
+    except Exception as e:
         log(f"Erro ao abrir o menu 'Ações': {e}", "error")
         return False
 
@@ -109,7 +113,7 @@ def iniciar_atendimento(page, log, numero_chamado: str,
     try:
         page.hover(_SEL_ACOES_RELOGIO, timeout=10000)
         log("Submenu 'Ações de relógio' revelado.", "success")
-    except PWTimeout as e:
+    except Exception as e:
         log(f"Erro ao revelar 'Ações de relógio': {e}", "error")
         return False
 
@@ -117,11 +121,11 @@ def iniciar_atendimento(page, log, numero_chamado: str,
     try:
         page.click(_SEL_ATEND_INICIADO_ID, timeout=10000)
         log("Clicado em 'Atendimento Iniciado'.", "success")
-    except PWTimeout:
+    except Exception:
         try:
             page.click(_SEL_ATEND_INICIADO_TXT, timeout=5000)
             log("Clicado em 'Atendimento Iniciado' (por texto).", "success")
-        except PWTimeout as e:
+        except Exception as e:
             log(f"Erro ao clicar em 'Atendimento Iniciado': {e}", "error")
             log("Confirme que essa acao esta disponivel no chamado "
                 "(so aparece com o relogio pausado / no estado certo).", "info")
@@ -132,7 +136,7 @@ def iniciar_atendimento(page, log, numero_chamado: str,
     try:
         page.locator(_SEL_DIALOGO).wait_for(state="visible", timeout=15000)
         log("Pop-up da acao aberto.", "success")
-    except PWTimeout as e:
+    except Exception as e:
         log(f"O pop-up da acao nao abriu: {e}", "error")
         return False
 
@@ -151,7 +155,7 @@ def iniciar_atendimento(page, log, numero_chamado: str,
     try:
         page.click(_SEL_SALVAR, timeout=15000)
         log("Acao salva ('Salvar ação').", "success")
-    except PWTimeout as e:
+    except Exception as e:
         log(f"Erro ao clicar em 'Salvar ação': {e}", "error")
         return False
 
@@ -159,7 +163,7 @@ def iniciar_atendimento(page, log, numero_chamado: str,
     # Sem isso, um erro de validacao no dialogo passaria por "sucesso".
     try:
         page.locator(_SEL_DIALOGO).wait_for(state="hidden", timeout=15000)
-    except PWTimeout:
+    except Exception:
         log("O pop-up nao fechou apos salvar — a acao pode NAO ter sido "
             "registrada. Confira o chamado manualmente.", "error")
         return False

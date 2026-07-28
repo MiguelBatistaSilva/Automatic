@@ -1,8 +1,9 @@
 """
 components/log_console.py — Console de logs em tempo real.
 
-Renderiza a lista `logs` (dicts {ts, tipo, msg}) do FlowRunnerState, colorindo
-cada linha por `tipo`. Equivalente ao QTextEdit + QTextCharFormat do PyQt6.
+Renderiza a lista `logs` (LogLine {ts, tipo, msg}) do FlowRunnerState, colorindo
+cada linha por `tipo`. Equivalente ao QTextEdit + QTextCharFormat do PyQt6,
+inclusive no rolar automatico para a ultima linha.
 """
 
 import reflex as rx
@@ -26,7 +27,12 @@ def _linha(item: rx.Var) -> rx.Component:
 
 
 def log_console(logs: rx.Var) -> rx.Component:
-    return rx.box(
+    # rx.auto_scroll (nao rx.box): rola sozinho para o fim quando entram linhas
+    # novas, desde que o usuario nao tenha rolado para cima. Sem isso, num laco
+    # longo (as retentativas de login da aba Licencas) as linhas novas caiam
+    # abaixo da area visivel e o console parecia CONGELADO num certo numero de
+    # tentativas, quando na verdade seguia trabalhando.
+    return rx.auto_scroll(
         rx.foreach(logs, _linha),
         height="340px",
         width="100%",

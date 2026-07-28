@@ -78,17 +78,27 @@ class FluxoDesmembramentoPW:
         nao deu para ler o numero) em caso de SUCESSO do salvamento; retorna None
         se qualquer etapa falhou (o chamador retenta na proxima execucao).
         """
+        # NOTA SOBRE OS `except Exception` DESTE METODO: sao largos DE PROPOSITO,
+        # como no fluxo Selenium original. O Playwright levanta PWTimeout so no
+        # caso de espera estourada; violacao de strict mode, elemento que se
+        # desprende no meio do clique, navegacao interrompida e target fechado sao
+        # `playwright.sync_api.Error`. A porta tinha estreitado para `PWTimeout`, e
+        # com isso qualquer um desses furava o metodo, subia pelo `executar()` e
+        # matava a RODADA INTEIRA com "Excecao inesperada" — em vez de falhar so a
+        # linha, marcar o checkpoint e seguir. Era a rede de seguranca do
+        # Desmembramento (checkpoint + retentativa por linha) desligada sem querer.
+
         # -- DUPLICAR ('Salvar como novo') --
         try:
             self.page.click(_SEL_DUPLICAR, timeout=20000)
             self.log("Clicado em 'Salvar como novo'.", "success")
-        except PWTimeout as e:
+        except Exception as e:
             if _sessao_expirada_pw(self.page):
                 if not _relogin_pw(self.page, numero_chamado, self.usuario, self.senha, self.log):
                     return None
                 try:
                     self.page.click(_SEL_DUPLICAR, timeout=20000)
-                except PWTimeout as e2:
+                except Exception as e2:
                     self.log(f"Erro ao duplicar: {e2}", "error")
                     return None
             else:
@@ -99,13 +109,23 @@ class FluxoDesmembramentoPW:
         # equivalente ao execute_script('click') do Selenium)
         try:
             self.page.wait_for_timeout(1000)
-            continuar = self.page.locator(_SEL_CONTINUAR)
+            # `.first` reproduz o Selenium, que usava presence_of_element_located
+            # (primeiro do documento). SEM ele o locator e STRICT: se a tela tiver
+            # mais de um span 'Continuar' — dialogo + template escondido, por
+            # exemplo — o Playwright levanta em vez de clicar no primeiro.
+            continuar = self.page.locator(_SEL_CONTINUAR).first
             continuar.wait_for(state="attached", timeout=10000)
             continuar.dispatch_event("click")
             self.log("Clicado em 'Continuar'.", "success")
             self.page.wait_for_timeout(2000)
-        except PWTimeout as e:
-            self.log(f"Erro ao clicar em 'Continuar': {e}", "error")
+        except Exception as e:
+            # Diagnostico: quantos 'Continuar' a tela tinha no momento da falha.
+            # 0 = o dialogo nao abriu (ou o rotulo mudou); >1 = era strict mode.
+            try:
+                achados = self.page.locator(_SEL_CONTINUAR).count()
+            except Exception:
+                achados = "?"
+            self.log(f"Erro ao clicar em 'Continuar' (encontrados: {achados}): {e}", "error")
             return None
 
         # -- DESCRICAO --
@@ -117,7 +137,7 @@ class FluxoDesmembramentoPW:
             self.page.click(_SEL_SALVAR, timeout=20000)
             self.log("Chamado salvo.", "success")
             self.page.wait_for_timeout(2000)
-        except PWTimeout as e:
+        except Exception as e:
             self.log(f"Erro ao salvar: {e}", "error")
             return None
 

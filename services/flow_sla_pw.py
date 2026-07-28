@@ -5,9 +5,11 @@ Portado do antigo `services/flow_sla.py` (Selenium, ja removido). A logica de
 extracao e os indices de coluna sao os mesmos; so muda a API para `page`.
 """
 
-from playwright.sync_api import TimeoutError as PWTimeout
-
 from services.browser_pw import _fazer_login_pw, _navegar_para_chamado_pw
+
+# `except Exception` largo de proposito — ver a mesma nota em
+# flow_atendimento_pw.py: capturar so PWTimeout deixava erros de strict mode e
+# de elemento desprendido derrubarem a lista inteira de chamados.
 
 _SEL_EXPANDER = "[id='event.tabs.actions_titleDiv']"
 _SEL_LINHAS = ".dojoxGridRow.actionGridRow"
@@ -60,7 +62,7 @@ def extrair_historico_chamado(page, numero_chamado: str, log) -> list | None:
         expander.wait_for(state="visible", timeout=15000)
         expander.click()
         log("Historico de Acoes aberto.", "status")
-    except PWTimeout as e:
+    except Exception as e:
         log(f"Nao foi possivel abrir o Historico de Acoes: {e}", "error")
         return None
 
@@ -69,7 +71,7 @@ def extrair_historico_chamado(page, numero_chamado: str, log) -> list | None:
     # mais seguro quando o Assyst demora mais que 3s.
     try:
         page.locator(_SEL_LINHAS).first.wait_for(state="attached", timeout=15000)
-    except PWTimeout:
+    except Exception:
         log("Nenhuma acao encontrada no historico.", "error")
         return None
 
