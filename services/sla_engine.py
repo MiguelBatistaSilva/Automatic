@@ -26,8 +26,15 @@ HORA_FIM = 21     # 21:00
 # Configuracao por fila. Extensivel: para adicionar uma nova fila, basta incluir
 # uma entrada com o nome EXATO da fila, seu limite em horas e se conta fim de semana.
 FILAS = {
-    "2N CATI FCB":    {"limite_horas": 3, "conta_fim_de_semana": False},
-    "2N CATI Remoto": {"limite_horas": 2, "conta_fim_de_semana": True},
+    "2N CATI FCB":                          {"limite_horas": 3, "conta_fim_de_semana": False},
+    "2N CATI Remoto":                       {"limite_horas": 2, "conta_fim_de_semana": True},
+    "2N CATI TJ":                           {"limite_horas": 3, "conta_fim_de_semana": False},
+    "2N CATI Demais Capital":               {"limite_horas": 6, "conta_fim_de_semana": False},
+    "2N CATI JUIZADO DA MULHER":            {"limite_horas": 3, "conta_fim_de_semana": False},
+    # Plantao de custodia atende no fim de semana, por isso o relogio nao congela.
+    "2N CATI Vara de Custódia":             {"limite_horas": 2, "conta_fim_de_semana": True},
+    "2N CATI Sala de Imagem - Galpão BR":   {"limite_horas": 6, "conta_fim_de_semana": False},
+    "2N CATI Sala de Imagem - FCB":         {"limite_horas": 6, "conta_fim_de_semana": False},
 }
 FILA_PADRAO = "2N CATI FCB"
 

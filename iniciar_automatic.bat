@@ -1,7 +1,7 @@
 @echo off
 cls
 echo =========================================
-echo       INICIANDO APLICACAO REFLEX
+echo       INICIANDO AUTOMATIC
 echo =========================================
 
 rem Se a pasta .venv ja existir, pula direto para a inicializacao

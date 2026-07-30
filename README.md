@@ -2,12 +2,11 @@
 
 Ferramenta de automação para o Assyst/TJCE.
 
-Reúne cinco módulos: desmembramento de chamados, início de atendimentos
-agendados, análise de SLA, login automático (Licenças) e gerenciamento das Bases
-de Conhecimento.
+Reúne módulos, como: desmembramento de chamados, início de atendimentos
+agendados, análise de SLA e gerenciamento das Bases de Conhecimento.
 
 A interface roda no navegador (Reflex) e a automação usa o Playwright, que dirige
-o Chrome já instalado na máquina — não há mais chromedriver para manter.
+o Chrome já instalado na máquina.
 
 ---
 
@@ -21,7 +20,7 @@ o Chrome já instalado na máquina — não há mais chromedriver para manter.
 
 ## Instalação
 
-1. Copie a pasta do Automatic para seu computador (ex: `C:\Automatic v6.0`);
+1. Copie a pasta do Automatic para seu computador (ex: `C:\Automatic`);
 2. Instale o Python 3.11 (executável em `Instalar_Python\python-3.11.9-amd64.exe`);
    - **Marque a opção "Add Python to PATH"** durante a instalação.
 3. Clique duas vezes em `iniciar_automatic.bat`.
@@ -100,15 +99,16 @@ prazo, vermelho estourado) e total de ações.
 
 **Filas disponíveis:**
 
-| Fila            | Limite | Fim de semana |
-|-----------------|--------|---------------|
-| 2N CATI FCB     | 3h     | Congela       |
-| 2N CATI Remoto  | 2h     | Continua correndo |
-
-### Licenças
-
-Faz login no Assyst e deixa o Chrome aberto para uso manual — para quando todas
-as licenças estão em uso.
+| Fila                                | Limite | Fim de semana |
+|-------------------------------------|--------|---------------|
+| 2N CATI FCB                         | 3h     | Congela       |
+| 2N CATI Remoto                      | 2h     | Continua correndo |
+| 2N CATI TJ                          | 3h     | Congela       |
+| 2N CATI Demais Capital              | 6h     | Congela       |
+| 2N CATI JUIZADO DA MULHER           | 3h     | Congela       |
+| 2N CATI Vara de Custódia            | 2h     | Continua correndo |
+| 2N CATI Sala de Imagem - Galpão BR  | 6h     | Congela       |
+| 2N CATI Sala de Imagem - FCB        | 6h     | Congela       |
 
 ### Bases de Conhecimento
 

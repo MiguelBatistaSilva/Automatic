@@ -75,7 +75,7 @@ class KBState(rx.State):
 
 def _linha(item: rx.Var, idx: rx.Var) -> rx.Component:
     return rx.table.row(
-        rx.table.cell(item.nome_artigo, font_weight="bold"),
+        rx.table.cell(item.nome_artigo),
         rx.table.cell(rx.code(item.keyword)),
         rx.table.cell(
             botao_tabela("Remover", on_click=KBState.remover(idx)),
