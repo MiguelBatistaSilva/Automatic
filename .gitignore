@@ -203,3 +203,4 @@ data/filhos_*.txt
 
 # Scripts de teste manual, nao versionados.
 teste_*.py
+html_requisicao
