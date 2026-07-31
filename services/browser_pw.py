@@ -25,6 +25,7 @@ _SEL_LOGIN = "#loginSubmit"
 _SEL_SESSAO_EXPIRADA = "ol.axios-logout-error"
 _SEL_CRED_INVALIDA = "ol.errormsg"
 _SEL_CHAMADO_CARREGADO = "#btlogEvent"
+_SEL_TITULO_CHAMADO = "h1#contentPaneTitle"
 _SEL_IFRAME_EDITOR = "iframe[title*='formattedRemarks']"
 
 # Respiro entre retentativas de login. Existe para nao martelar o Assyst em laco
@@ -249,21 +250,67 @@ def _sessao_expirada_pw(page) -> bool:
         return False
 
 
-def _esperar_chamado_carregado(page, timeout_ms: int = 30000) -> bool:
-    """True se o chamado abriu (botao de log do evento no DOM).
+def _digitos(texto: str) -> str:
+    """So os digitos — usado para comparar numeros de chamado sem depender do
+    prefixo (o usuario digita 'S2123456', 'r2123456' ou so '123456')."""
+    return "".join(c for c in texto if c.isdigit())
 
-    `state="attached"` de proposito: o fluxo Selenium usava
-    `presence_of_element_located` (presenca no DOM), e o default do Playwright e
-    "visible" — deixar o default era uma divergencia silenciosa entre os dois
-    motores. Quem clica depois (`#menuActions`) tem espera de actionability
-    propria, entao presenca aqui basta.
-    """
+
+def _numero_do_titulo(page) -> str:
+    """Numero do chamado ABERTO agora, lido do titulo do painel ("" se indisponivel)."""
     try:
-        page.wait_for_selector(
-            _SEL_CHAMADO_CARREGADO, state="attached", timeout=timeout_ms)
-        return True
-    except PWTimeout:
-        return False
+        texto = page.locator(_SEL_TITULO_CHAMADO).inner_text().strip()
+    except Exception:
+        return ""  # painel ainda nao montado / DOM em transicao
+    return texto.split()[0].upper() if texto else ""
+
+
+def _esperar_chamado_carregado(page, numero_chamado: str | None = None,
+                               timeout_ms: int = 30000, log=None) -> bool:
+    """True quando a tela do chamado PEDIDO esta aberta.
+
+    CORRIDA QUE ESTA FUNCAO EXISTE PARA MATAR: o Assyst e uma SPA e a tela do
+    chamado ANTERIOR continua no DOM enquanto a nova e montada. Esperar so a
+    PRESENCA de `#btlogEvent` (o criterio antigo) retornava True NA HORA em
+    qualquer navegacao feita a partir de um chamado ja aberto: o fluxo logava
+    "Chamado carregado!" instantaneamente e ia clicar no menu da tela VELHA. E o
+    mesmo erro de "presenca em vez de mudanca" ja corrigido na captura do numero
+    do filho.
+
+    Por isso o criterio agora e o TITULO do painel bater com o chamado pedido.
+    Comparamos so os digitos: o titulo traz 'S2123456' e o usuario pode ter
+    digitado o numero sem prefixo.
+
+    Sem `numero_chamado` cai no criterio antigo (so presenca).
+    """
+    if not numero_chamado:
+        try:
+            page.wait_for_selector(
+                _SEL_CHAMADO_CARREGADO, state="attached", timeout=timeout_ms)
+            return True
+        except PWTimeout:
+            return False
+
+    esperado = _digitos(numero_chamado)
+    fim = time.monotonic() + timeout_ms / 1000
+    visto = ""
+    while time.monotonic() < fim:
+        try:
+            # `count()` em vez de wait_for_selector: aqui quem manda no tempo e o
+            # laco, e o botao do evento e so metade do criterio.
+            if page.locator(_SEL_CHAMADO_CARREGADO).count() > 0:
+                visto = _numero_do_titulo(page)
+                if visto and _digitos(visto) == esperado:
+                    return True
+        except Exception:
+            pass  # DOM em transicao: reavalia no proximo ciclo
+        time.sleep(0.2)
+
+    # Diagnostico que faltava: dizer QUAL chamado ficou na tela evita horas
+    # procurando erro de seletor quando o problema foi a navegacao.
+    if log and visto:
+        log(f"A tela aberta e do chamado {visto}, nao do {numero_chamado}.", "error")
+    return False
 
 
 def _navegar_para_chamado_pw(page, numero_chamado: str, log) -> bool:
@@ -281,7 +328,7 @@ def _navegar_para_chamado_pw(page, numero_chamado: str, log) -> bool:
     # O Assyst e SPA com rota em hash: trocar window.location.href mantem a
     # aplicacao viva, enquanto um goto() recarregaria tudo do zero.
     page.evaluate("destino => window.location.href = destino", url)
-    if _esperar_chamado_carregado(page):
+    if _esperar_chamado_carregado(page, numero_chamado):
         log("Chamado carregado!", "success")
         return True
 
@@ -296,7 +343,7 @@ def _navegar_para_chamado_pw(page, numero_chamado: str, log) -> bool:
         return False
     _aguardar_pagina_assentar(page)
     page.evaluate("destino => window.location.href = destino", url)
-    if _esperar_chamado_carregado(page):
+    if _esperar_chamado_carregado(page, numero_chamado, log=log):
         log("Chamado carregado apos refresh.", "success")
         return True
 

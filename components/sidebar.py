@@ -9,7 +9,7 @@ funciona em claro/escuro) e ícones lucide. O rodapé traz o dropdown de opçõe
 import reflex as rx
 from dataclasses import dataclass
 
-from states.sidebar_state import SidebarState
+from state.sidebar_state import SidebarState
 from components.app_menu import app_menu
 from components.theme import SIDEBAR_EXPANDED, SIDEBAR_COLLAPSED
 

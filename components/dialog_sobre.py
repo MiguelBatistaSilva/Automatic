@@ -2,16 +2,12 @@
 components/dialog_sobre.py — "Sobre", como POP-UP.
 
 Era uma página/rota (`/sobre`); virou um `rx.dialog` aberto pelo menu de opções da
-sidebar.
-
-A checagem de atualização foi RETIRADA em 2026-07-27: a distribuição passou a ser
-manual (baixar o zip do GitHub e rodar o `iniciar_automatic.bat`), então não há
-mais versão instalada para comparar. Saíram junto o `version.py`, o `version.json`
-e o `services/update_check.py`.
+sidebar. Só a view — o `SobreState` está em `state/sobre_state.py`.
 """
 
 import reflex as rx
 
+from state.sobre_state import SobreState
 from components.botoes import botao_primario, botao_secundario
 
 _URL_DOCUMENTACAO = "https://recondite-frog-e5d.notion.site/Bem-vindo-2e6e32b25a248027b36ef626bf484553"
@@ -20,18 +16,6 @@ _DESCRICAO = (
     "Ferramenta de automação para o Assyst/TJCE. Reúne módulos, como: desmembramento de chamados, início de atendimentos "
     "agendados, análise de SLA e gerenciamento das Bases de Conhecimento.",
 )
-
-
-class SobreState(rx.State):
-    aberto: bool = False
-
-    @rx.event
-    def abrir(self):
-        self.aberto = True
-
-    @rx.event
-    def set_aberto(self, v: bool):
-        self.aberto = v
 
 
 def sobre_dialog() -> rx.Component:

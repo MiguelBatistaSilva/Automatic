@@ -13,9 +13,11 @@ o conflito de foco/pointer-events do Radix ao abrir um diálogo a partir do menu
 
 import reflex as rx
 
-from states.sidebar_state import SidebarState
-from components.dialog_credenciais import CredenciaisState, credenciais_dialog
-from components.dialog_sobre import SobreState, sobre_dialog
+from state.sidebar_state import SidebarState
+from state.credenciais_state import CredenciaisState
+from state.sobre_state import SobreState
+from components.dialog_credenciais import credenciais_dialog
+from components.dialog_sobre import sobre_dialog
 
 
 def _trigger() -> rx.Component:

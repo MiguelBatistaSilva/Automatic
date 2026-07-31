@@ -23,6 +23,7 @@ from services.browser_pw import (
 from services.assyst_common import (
     _montar_descricao, _registrar_filho, _abrir_txt_filhos,
 )
+from services.kb_manager_pw import BaseAplicadaSemRetorno
 from services.checkpoint import (
     inicializar, marcar_salvo, marcar_concluido_linha,
     existe_pendente, foi_concluido, status_linha, numero_filho,
@@ -52,6 +53,10 @@ class FluxoDesmembramentoPW:
         self.usuario = usuario
         self.senha = senha
         self.log = log
+        # Erguido pelo `_adicionar_bc` quando a base foi aplicada mas a tela nao
+        # voltou ao evento: quem depende da tela aberta (a cadeia de duplicacao
+        # do modo Criar+Base) reabre o chamado pelo numero.
+        self.navegacao_perdida = False
 
     # ------------------------------------------------------------------
     # Acoes reutilizaveis
@@ -150,8 +155,16 @@ class FluxoDesmembramentoPW:
         A kb_function levanta excecao em falha (regra dos 'sinais reais'); aqui
         ela e convertida em False para o checkpoint nao marcar concluido.
         """
+        self.navegacao_perdida = False
         try:
             kb_function(self.page, self.log)
+            return True
+        except BaseAplicadaSemRetorno as e:
+            # A base ESTA no chamado; so a volta a tela do evento falhou. Contar
+            # como fracasso deixaria a linha pendente e a proxima execucao
+            # aplicaria a MESMA base de novo no mesmo chamado.
+            self.log(f"Base aplicada, mas nao voltou a tela do evento: {e}", "error")
+            self.navegacao_perdida = True
             return True
         except Exception as e:
             self.log(f"Erro ao adicionar BC: {e}", "error")
@@ -225,11 +238,20 @@ class FluxoCompletoPW(FluxoDesmembramentoPW):
             if not self._relogar_se_preciso(numero_chamado):
                 return
             self.log("Adicionando Base de Conhecimento...", "status")
-            if self._adicionar_bc(kb_function):
+            bc_ok = self._adicionar_bc(kb_function)
+            if bc_ok:
                 marcar_concluido_linha(numero_chamado, index)
                 self.log(f"Checkpoint: linha {index + 1} marcada como CONCLUIDA.", "success")
             else:
                 self.log(f"BC nao adicionada na linha {index + 1}. Sera retentada na proxima execucao.", "error")
+
+            # A cadeia de duplicacao parte do evento ABERTO na tela. Quando a fase
+            # da BC nao devolve a tela do evento — a volta falhou, ou a propria BC
+            # falhou e deixou a pesquisa de conhecimento aberta — reabrimos o
+            # chamado pelo numero. Sem isso a proxima linha tentaria duplicar a
+            # partir de uma tela qualquer.
+            if self.navegacao_perdida or not bc_ok:
+                _navegar_para_chamado_pw(self.page, num_filho or numero_chamado, self.log)
 
             if not self._relogar_se_preciso(numero_chamado):
                 return
@@ -324,6 +346,11 @@ class FluxoBCPW(FluxoDesmembramentoPW):
     """Modo So Base: recebe filhos ja criados e aplica a BC em cada um.
 
     Checkpoint indexado pelo primeiro filho da lista (`bc_<primeiro>`).
+
+    Diferente do modo Criar+Base, aqui NAO se volta a tela do evento depois de
+    salvar a base: o passo seguinte e navegar para OUTRO chamado, entao a tela do
+    evento seria descartada de qualquer jeito. Quem manda nisso e o
+    `voltar_ao_evento=False` que a aba passa ao `executar_kb_unica_pw`.
     """
 
     def executar(self, filhos: list[str], kb_function,

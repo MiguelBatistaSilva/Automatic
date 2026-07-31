@@ -13,6 +13,9 @@ linha achada (que o Dojo reciclava ao rolar), miramos a linha por TEXTO com
 
 Em falha, LEVANTA excecao — o chamador (fluxo) marca a linha como nao-concluida.
 Isso respeita a regra de "sinais reais" do checkpoint (ver kb_manager antigo).
+A excecao `BaseAplicadaSemRetorno` e a excecao dessa regra: a base ESTA no
+chamado e so a volta a tela do evento falhou; trata-la como falha faria a
+execucao seguinte aplicar a mesma base duas vezes no mesmo chamado.
 """
 
 from playwright.sync_api import TimeoutError as PWTimeout
@@ -31,7 +34,23 @@ _SEL_BTLOG_EVENT = "#btlogEvent"
 _MAX_SCROLLS = 15
 
 
-def executar_kb_unica_pw(page, log, config):
+class BaseAplicadaSemRetorno(Exception):
+    """A base FOI salva no chamado, mas nao deu para voltar a tela do evento.
+
+    Precisa ser distinta de uma falha comum: quem chama tem que contar a base
+    como APLICADA (senao a proxima execucao aplicaria a MESMA base outra vez no
+    mesmo chamado) e apenas reconstruir a navegacao por conta propria.
+    """
+
+
+def executar_kb_unica_pw(page, log, config, voltar_ao_evento: bool = True):
+    """Aplica uma Base de Conhecimento no chamado que estiver aberto na tela.
+
+    `voltar_ao_evento=False` encerra assim que a base e salva, deixando a tela na
+    pesquisa de conhecimento. E o que o modo "So Base" quer: ele navega para
+    OUTRO chamado em seguida, entao voltar ao evento era um clique a mais numa
+    tela que ia ser descartada — e era justamente ali que o fluxo travava.
+    """
     keyword = config.get("keyword")
     nome_artigo = config.get("nome_artigo")
 
@@ -76,16 +95,27 @@ def executar_kb_unica_pw(page, log, config):
         page.click(_SEL_ITEM_ACAO, timeout=10000)
         page.click(_SEL_SALVAR, timeout=10000)
 
-        # 5. Voltar ao evento (botao custom do Dojo; clique via dispatch_event,
-        #    equivalente ao execute_script('click') do Selenium)
+        # 5. Fim do salvamento: o overlay de carregamento sobe e desce.
+        #    DAQUI PARA BAIXO A BASE JA ESTA NO CHAMADO — nada que falhe depois
+        #    pode ser reportado como "base nao aplicada".
         page.locator(_SEL_OVERLAY).wait_for(state="hidden", timeout=20000)
-        voltar = page.locator(_SEL_VOLTAR)
-        voltar.wait_for(state="attached", timeout=15000)
-        voltar.dispatch_event("click")
-        page.locator(_SEL_BTLOG_EVENT).wait_for(state="visible", timeout=15000)
-
         log(f"✨ Base aplicada: {nome_artigo}", "success")
 
     except Exception as e:
         log(f"❌ Erro na base {keyword}: {str(e)}", "error")
         raise
+
+    # 6. Voltar ao evento (botao custom do Dojo; clique via dispatch_event,
+    #    equivalente ao execute_script('click') do Selenium). Fora do try acima
+    #    DE PROPOSITO: a base ja esta aplicada, entao falhar aqui nao e "erro na
+    #    base" — e so a tela que ficou no lugar errado.
+    if not voltar_ao_evento:
+        return
+
+    try:
+        voltar = page.locator(_SEL_VOLTAR)
+        voltar.wait_for(state="attached", timeout=15000)
+        voltar.dispatch_event("click")
+        page.locator(_SEL_BTLOG_EVENT).wait_for(state="visible", timeout=15000)
+    except Exception as e:
+        raise BaseAplicadaSemRetorno(str(e)) from e

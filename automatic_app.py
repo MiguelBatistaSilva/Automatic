@@ -2,7 +2,9 @@
 automatic_app.py — Ponto de entrada do app Reflex (UI única do Automatic).
 
 Apontado por `app_module_import="automatic_app"` no rxconfig.py. Registra todas as
-páginas; a estrutura (pages/, components/, states/) vive na raiz do projeto.
+páginas; a estrutura (pages/, state/, components/) vive na raiz do projeto:
+`pages/` só desenha, `state/` é o back-end de cada tela, `services/` é a automação
+(e não importa reflex — é essa fronteira que permitiu trocar o PyQt6 pelo Reflex).
 Credenciais e Sobre NÃO são rotas: são diálogos (pop-up) montados na sidebar —
 ver `components/dialog_credenciais.py` e `components/dialog_sobre.py`.
 Rode com `reflex run`. O PyQt6 foi removido — esta é a única UI.
@@ -12,9 +14,11 @@ import reflex as rx
 
 from pages.license import license_page
 from pages.sla import sla_page
-from pages.desmembramento import desmembramento_page, DesmembramentoState
+from pages.desmembramento import desmembramento_page
 from pages.atendimento import atendimento_page
-from pages.kb import kb_page, KBState
+from pages.kb import kb_page
+from state.desmembramento_state import DesmembramentoState
+from state.kb_state import KBState
 
 app = rx.App(
     theme=rx.theme(accent_color="blue", gray_color="slate", radius="medium"),
