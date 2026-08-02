@@ -21,6 +21,17 @@ _URL_CHAMADO = (
     "#event%2FDisplayEvent.do%3Fdispatch%3DgetEvent"
     "%26checkJukeBoxSettings%3Dtrue%26eventId%3D{id_final}%26resultSet%3D"
 )
+
+# Tela de abertura de Requisicao de Servico (chamado do zero, sem chamado-pai).
+# O `entRef=ES3` no fim NAO e enfeite: e o identificador do tipo de requisicao, e e
+# dele que saem os ids do formulario (`ManageEventForm_ES3_...`, `rtES3_formattedRemarks`).
+# Trocar o entRef muda a tela E os ids — por isso o fluxo descobre o prefixo lendo a
+# propria pagina (ver services/requisicao_campos.descobrir_prefixo) em vez de fixar "ES3".
+_URL_REQUISICAO = (
+    "https://cati.tjce.jus.br/assystweb/application.do"
+    "#event%2FLogChangeHandler.do%3Fdispatch%3DprepareChange"
+    "%26ncAction%3DCLEARHISTORY%26entRef%3DES3"
+)
 _FILHOS_DIR = DATA_DIR
 
 

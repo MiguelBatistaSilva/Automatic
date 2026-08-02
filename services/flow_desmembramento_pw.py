@@ -33,7 +33,13 @@ from services.checkpoint import (
 # Seletores da tela de edicao do evento (mesmos ids do fluxo Selenium).
 _SEL_DUPLICAR = "#btlogAsNewEvent"
 _SEL_SALVAR = "#btlogEvent"
-_SEL_CONTINUAR = "xpath=//span[text()='Continuar']/ancestor::span[contains(@role, 'button')]"
+# `normalize-space()` em vez de `text()=`: o xpath antigo exigia o texto EXATO, sem
+# espaco em volta e num unico no de texto. Um `&nbsp;` ou uma quebra de linha no HTML
+# do dialogo ja fazia o seletor achar ZERO elementos.
+_SEL_CONTINUAR = (
+    "xpath=//span[normalize-space(.)='Continuar']"
+    "/ancestor-or-self::span[contains(@role, 'button')]"
+)
 
 
 def _chave_checkpoint(filhos: list[str]) -> str:
@@ -76,6 +82,77 @@ class FluxoDesmembramentoPW:
         self.log("Sessao expirada! Reconectando...", "error")
         return _fazer_login_pw(self.page, self.usuario, self.senha, self.log)
 
+    def _clicar_continuar(self) -> bool:
+        """Clica no 'Continuar' do dialogo que abre depois de 'Salvar como novo'.
+
+        O CRITERIO DE SUCESSO E O BOTAO SUMIR, nao o clique nao estourar. Essa era
+        a falha do codigo anterior: ele so usava `dispatch_event`, que NAO levanta
+        excecao quando o widget ignora o evento — entao um clique inocuo passava
+        como "Clicado em 'Continuar'." e o fluxo seguia para uma tela que nunca
+        mudou. (Foi assim que o dispatch se comportou na sonda do menu da Categoria
+        no fluxo de Requisição: "clicou" e nada aconteceu.)
+
+        Por isso: clique NATIVO primeiro (e o que um humano faz), `dispatch` como
+        segunda tentativa — o caminho equivalente ao `execute_script('click')` que
+        o fluxo Selenium usava e que estava provado — e, entre um e outro, a
+        confirmacao de que o dialogo fechou.
+        """
+        try:
+            # `.first`: se a tela tiver mais de um 'Continuar' (dialogo + template
+            # escondido), o locator STRICT do Playwright levantaria em vez de pegar
+            # o primeiro — que era o comportamento do Selenium.
+            botao = self.page.locator(_SEL_CONTINUAR).first
+            botao.wait_for(state="visible", timeout=15000)
+        except Exception as e:
+            self.log(f"O dialogo de 'Continuar' nao apareceu: {e}", "error")
+            self._diagnostico_botoes()
+            return False
+
+        for modo in ("nativo", "dispatch"):
+            try:
+                if modo == "nativo":
+                    botao.click(timeout=5000)
+                else:
+                    botao.dispatch_event("click")
+            except Exception:
+                continue  # este modo nem chegou a clicar; tenta o proximo
+            try:
+                # Sumiu = o dialogo fechou = o clique valeu. `hidden` cobre tambem
+                # o elemento removido do DOM.
+                botao.wait_for(state="hidden", timeout=8000)
+                self.log(f"Clicado em 'Continuar' ({modo}).", "success")
+                return True
+            except Exception:
+                self.log(f"Clique {modo} em 'Continuar' nao surtiu efeito.", "info")
+
+        self.log("Nao consegui acionar o 'Continuar' — o dialogo continua aberto.",
+                 "error")
+        self._diagnostico_botoes()
+        return False
+
+    def _diagnostico_botoes(self) -> None:
+        """Despeja os botoes visiveis. So roda quando algo ja falhou.
+
+        Sem isto, "nao achei o Continuar" nao diz se o dialogo nao abriu, se o
+        rotulo mudou ou se ele esta ali com outro texto — e cada hipotese dessas
+        custa uma execucao inteira para testar.
+        """
+        js = r"""
+        () => Array.from(document.querySelectorAll("span[role='button'], button"))
+            .filter(el => { const r = el.getBoundingClientRect();
+                            return r.width > 0 && r.height > 0; })
+            .map(el => ((el.id ? el.id + ' | ' : '') +
+                        (el.textContent || '').replace(/\s+/g, ' ').trim()).slice(0, 70))
+            .filter(t => t);
+        """
+        try:
+            botoes = self.page.evaluate(js) or []
+        except Exception as e:
+            self.log(f"[DIAG] nao consegui listar os botoes: {e}", "error")
+            return
+        self.log(f"[DIAG] botoes visiveis agora ({len(botoes)}): "
+                 f"{' / '.join(botoes[:25])}", "info")
+
     def _criar_chamado_filho(self, numero_chamado: str, descricao: str) -> str | None:
         """Duplicar -> Continuar -> Descricao -> Salvar -> capturar filho.
 
@@ -110,27 +187,8 @@ class FluxoDesmembramentoPW:
                 self.log(f"Erro ao duplicar: {e}", "error")
                 return None
 
-        # -- CONTINUAR -- (botao custom do Dojo; clique via dispatch_event,
-        # equivalente ao execute_script('click') do Selenium)
-        try:
-            self.page.wait_for_timeout(1000)
-            # `.first` reproduz o Selenium, que usava presence_of_element_located
-            # (primeiro do documento). SEM ele o locator e STRICT: se a tela tiver
-            # mais de um span 'Continuar' — dialogo + template escondido, por
-            # exemplo — o Playwright levanta em vez de clicar no primeiro.
-            continuar = self.page.locator(_SEL_CONTINUAR).first
-            continuar.wait_for(state="attached", timeout=10000)
-            continuar.dispatch_event("click")
-            self.log("Clicado em 'Continuar'.", "success")
-            self.page.wait_for_timeout(2000)
-        except Exception as e:
-            # Diagnostico: quantos 'Continuar' a tela tinha no momento da falha.
-            # 0 = o dialogo nao abriu (ou o rotulo mudou); >1 = era strict mode.
-            try:
-                achados = self.page.locator(_SEL_CONTINUAR).count()
-            except Exception:
-                achados = "?"
-            self.log(f"Erro ao clicar em 'Continuar' (encontrados: {achados}): {e}", "error")
+        # -- CONTINUAR --
+        if not self._clicar_continuar():
             return None
 
         # -- DESCRICAO --

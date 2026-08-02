@@ -16,6 +16,7 @@ from pages.license import license_page
 from pages.sla import sla_page
 from pages.desmembramento import desmembramento_page
 from pages.atendimento import atendimento_page
+from pages.requisicao import requisicao_page
 from pages.kb import kb_page
 from state.desmembramento_state import DesmembramentoState
 from state.kb_state import KBState
@@ -39,6 +40,11 @@ app.add_page(
     atendimento_page,
     route="/atendimento",
     title="Automatic — Iniciar Atendimento",
+)
+app.add_page(
+    requisicao_page,
+    route="/requisicao",
+    title="Automatic — Requisição de Serviço",
 )
 app.add_page(
     kb_page,

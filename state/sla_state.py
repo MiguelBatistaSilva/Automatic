@@ -11,8 +11,34 @@ import dataclasses
 
 import reflex as rx
 
-from services.sla_engine import FILAS, FILA_PADRAO
+from services.sla_engine import FILAS, FILA_PADRAO, HORA_INICIO, HORA_FIM
 from state.flow_runner import FlowRunnerState
+
+# ── Resumo das regras, para a ajuda da tela ────────────────────────────────────
+# DERIVADO do `sla_engine`, nunca escrito à mão: é o mesmo dicionário que o cálculo
+# usa. Se um prazo mudar lá, a tela acompanha — o contrário seria uma ajuda que
+# mente, e ninguém confere ajuda contra código.
+
+
+@dataclasses.dataclass(frozen=True)
+class FilaInfo:
+    nome: str
+    prazo: str
+    fim_de_semana: str
+    corre_no_fds: bool
+
+
+EXPEDIENTE: str = f"{HORA_INICIO:02d}:00 às {HORA_FIM:02d}:00"
+
+FILAS_INFO: list[FilaInfo] = [
+    FilaInfo(
+        nome=nome,
+        prazo=f"{cfg['limite_horas']}h",
+        fim_de_semana="Conta" if cfg["conta_fim_de_semana"] else "Congela",
+        corre_no_fds=cfg["conta_fim_de_semana"],
+    )
+    for nome, cfg in FILAS.items()
+]
 
 
 @dataclasses.dataclass
