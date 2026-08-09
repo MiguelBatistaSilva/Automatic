@@ -11,13 +11,17 @@ dentro da thread do worker, via `with`. Os helpers SEM navegador (URLs,
 normalizacao de id, montagem de descricao) vivem em `services/assyst_common.py`.
 """
 
+import os
+import subprocess
 import time
+import urllib.request
 
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 # Reaproveita as constantes/regras ja validadas no fluxo Selenium, para as duas
 # implementacoes nao divergirem com o tempo.
 from services.assyst_common import _URL_HOME, _URL_CHAMADO, _normalizar_id_assyst
+from services.paths import PERFIL_NAVEGADOR_DIR
 
 _SEL_USERNAME = "input[name='j_username']"
 _SEL_PASSWORD = "input[name='j_password']"
@@ -39,6 +43,14 @@ _PAUSA_ENTRE_TENTATIVAS_S = 0.5
 _POLLS_CONFIRMA_SUCESSO = 4
 
 
+# Tamanho da tela no modo HEADLESS. Sem janela nao existe "maximizar", e o
+# viewport padrao do Playwright (1280x720) e apertado demais para o Assyst: a
+# grade Dojo e VIRTUALIZADA (so desenha as linhas visiveis), entao a altura muda
+# quantas linhas existem no DOM — e o kb_manager rola a grade contando com isso.
+# Full HD faz o headless enxergar a mesma tela que o operador ve maximizado.
+_VIEWPORT_HEADLESS = {"width": 1920, "height": 1080}
+
+
 class NavegadorPW:
     """
     Abre o Chrome ja instalado na maquina (channel="chrome"), sem chromedriver.
@@ -47,48 +59,60 @@ class NavegadorPW:
     com o navegador, entao nao existe binario de driver para casar de versao
     quando o Chrome atualiza sozinho.
 
+    HEADLESS E O PADRAO. A janela existia para acompanhar o fluxo com medo de ele
+    dar errado; esse papel passou para os logs, que dizem em QUAL PASSO parou —
+    coisa que olhar a tela nunca disse. Sem janela o fluxo tambem para de disputar
+    o foco do teclado com quem esta usando a maquina, e o app fica pronto para
+    rodar num servidor.
+
+    Quem NAO usa esta classe: a aba Licencas. La o produto final e a janela
+    aberta para o usuario trabalhar, entao ela usa o `NavegadorAvulsoPW`, que
+    sempre tem janela.
+
     Uso:
-        with NavegadorPW(log) as page:
+        with NavegadorPW(log) as page:                  # sem janela (fluxos)
+            ...
+        with NavegadorPW(log, headless=False) as page:  # com janela (teste_*.py)
             ...
     """
 
-    def __init__(self, log_func, manter_aberto: bool = False):
+    def __init__(self, log_func, headless: bool = True):
         self.log = log_func
-        # manter_aberto=True: sair do `with` NAO fecha o navegador. Usado pela
-        # aba License, cujo proposito e justamente segurar a sessao aberta para
-        # o usuario trabalhar manualmente depois — equivalente ao detach=True
-        # do DriverManager no Selenium.
-        #
-        # Consequencia: quando a thread do worker morre, o navegador sobrevive
-        # mas fica INCONTROLAVEL pelo app (a API sync do Playwright e presa a
-        # thread que a criou). Quem fecha a janela e o usuario. Cada execucao
-        # deixa tambem um processo do driver (node) para tras.
-        self.manter_aberto = manter_aberto
+        self.headless = headless
         self._pw = None
         self._browser = None
         self._context = None
         self.page = None
 
     def __enter__(self):
-        self.log("Iniciando Chrome via Playwright (sem chromedriver)...", "info")
+        modo = "sem janela" if self.headless else "com janela"
+        self.log(f"Iniciando Chrome via Playwright ({modo}, sem chromedriver)...",
+                 "info")
         self._pw = sync_playwright().start()
+
+        # --start-maximized so faz sentido com janela; sem ela e ruido.
+        args = ["--disable-infobars"]
+        if not self.headless:
+            args.insert(0, "--start-maximized")
+
         self._browser = self._pw.chromium.launch(
             channel="chrome",
-            headless=False,
-            args=["--start-maximized", "--disable-infobars"],
+            headless=self.headless,
+            args=args,
         )
-        # no_viewport: deixa a pagina ocupar a janela real, em vez do viewport
-        # padrao de 1280x720 do Playwright.
-        self._context = self._browser.new_context(no_viewport=True)
+        # Com janela, `no_viewport` deixa a pagina ocupar a janela real em vez do
+        # viewport padrao de 1280x720. Sem janela nao ha o que ocupar, entao o
+        # tamanho precisa ser dito (ver _VIEWPORT_HEADLESS).
+        self._context = (
+            self._browser.new_context(viewport=_VIEWPORT_HEADLESS)
+            if self.headless
+            else self._browser.new_context(no_viewport=True)
+        )
         self.page = self._context.new_page()
         self.log("Chrome iniciado com sucesso.", "info")
         return self.page
 
     def __exit__(self, exc_type, exc, tb):
-        if self.manter_aberto:
-            self.log("Navegador mantido aberto para uso manual.", "info")
-            return False
-
         for alvo, nome in (
             (self._context, "contexto"),
             (self._browser, "navegador"),
@@ -105,22 +129,365 @@ class NavegadorPW:
         return False
 
 
+# ---------------------------------------------------------------------------
+# Chrome AVULSO — o navegador da aba Licencas
+# ---------------------------------------------------------------------------
+#
+# Porta fixa (e nao sorteada) DE PROPOSITO: se o Chrome do perfil dedicado ja
+# estiver aberto de uma execucao anterior, a porta ja responde e a gente conecta
+# nele em vez de subir um segundo. Assim clicar duas vezes em "Abrir sessao"
+# reaproveita a janela — e o `_fazer_login_pw` conclui "Sessao ja ativa" na hora.
+_PORTA_CDP = 9333
+
+# Perfil DEDICADO, separado do Chrome do dia a dia. Nao e escolha de estilo: a
+# partir do Chrome 136 o `--remote-debugging-port` e IGNORADO quando o
+# `--user-data-dir` e o perfil padrao (correcao de seguranca da Google). Sem
+# perfil proprio nao ha porta de depuracao, e sem porta nao ha como automatizar
+# o login.
+#
+# E FICA FORA DA PASTA DO PROJETO — este endereco custou caro. Com o perfil em
+# `data/`, o Chrome criava ~1500 arquivos DENTRO da arvore que o `reflex run`
+# observa para hot-reload (`reload_paths = [Path.cwd()]`). O watcher disparava, o
+# backend reiniciava e matava a thread do worker logo depois de "Abrindo o
+# Chrome": a janela abria no Assyst e nunca era logada, sem erro nenhum no log.
+# Rodando fora do Reflex nao ha watcher, entao o bug NAO reproduzia no terminal.
+_PERFIL_AVULSO = PERFIL_NAVEGADOR_DIR
+
+# 60s, nao 30s: numa maquina fria (perfil recem-criado, antivirus varrendo o
+# processo novo) o Chrome pode demorar bem mais que 30s para abrir a porta. Com o
+# teto curto a gente desistia ANTES de ele terminar de subir — e a janela abria
+# logo depois, ja sem ninguem para logar nela. E exatamente o quadro de "o Chrome
+# abriu no Assyst mas nao logou".
+_TIMEOUT_SUBIR_CHROME_S = 60.0
+
+
+def _caminho_do_chrome() -> str | None:
+    """Onde esta o chrome.exe desta maquina ("" nenhum -> None).
+
+    O registro e a fonte boa (segue instalacao por usuario e por maquina); os
+    caminhos fixos sao so a rede de seguranca para quando a chave nao existe.
+    """
+    import winreg
+
+    chave = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"
+    for raiz in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            with winreg.OpenKey(raiz, chave) as k:
+                valor, _ = winreg.QueryValueEx(k, "")
+        except OSError:
+            continue
+        if valor and os.path.exists(valor):
+            return valor
+
+    for base in (os.environ.get("PROGRAMFILES"),
+                 os.environ.get("PROGRAMFILES(X86)"),
+                 os.environ.get("LOCALAPPDATA")):
+        if not base:
+            continue
+        caminho = os.path.join(base, "Google", "Chrome", "Application", "chrome.exe")
+        if os.path.exists(caminho):
+            return caminho
+    return None
+
+
+def _cdp_respondendo(porta: int, timeout_s: float = 1.0) -> bool:
+    """Ja ha um Chrome ouvindo CDP nesta porta?"""
+    try:
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{porta}/json/version", timeout=timeout_s):
+            return True
+    except Exception:
+        return False
+
+
+class NavegadorAvulsoPW:
+    """Chrome que sobrevive ao fim da automacao E CONTINUA UTILIZAVEL.
+
+    E o navegador da aba Licencas, cujo produto final nao e um dado extraido: e
+    a JANELA aberta e logada, para o usuario trabalhar no Assyst.
+
+    POR QUE NAO DA PARA USAR O `NavegadorPW` COM 'manter_aberto':
+    o Playwright configura o Chrome para PAUSAR toda aba nova ate o cliente
+    liberar (`Target.setAutoAttach` com `waitForDebuggerOnStart`). Enquanto o
+    fluxo roda, ele libera. Quando a thread do worker morre, a conexao continua
+    de pe mas sem ninguem do outro lado: a aba que ja existia funciona, e toda
+    aba NOVA nasce em branco e travada. Era o que os usuarios relatavam. Abrir
+    o mesmo Assyst num Chrome normal e abrir 10 abas funcionou — ou seja, o
+    limite nao era do Assyst.
+
+    A INVERSAO QUE CONSERTA: quem abre o Chrome somos NOS (subprocess), e o
+    Playwright apenas CONECTA nele por CDP. Ao sair, desconectamos; as sessoes
+    CDP morrem e com elas a regra de pausar abas. O Chrome fica um Chrome
+    comum — e nao morre nem quando o app fecha, porque nao e o Playwright que o
+    controla. E o equivalente exato do `detach=True` do Selenium, que era o que
+    funcionava antes da migracao.
+
+    Uso:
+        with NavegadorAvulsoPW(log) as page:
+            _fazer_login_pw(page, matricula, senha, log)
+        # a janela continua aberta e usavel
+    """
+
+    def __init__(self, log_func, porta: int = _PORTA_CDP, perfil=_PERFIL_AVULSO):
+        self.log = log_func
+        self.porta = porta
+        self.perfil = perfil
+        self._pw = None
+        self._browser = None
+        self.page = None
+
+    def _subir_chrome(self) -> None:
+        exe = _caminho_do_chrome()
+        if exe is None:
+            raise RuntimeError(
+                "O Google Chrome nao foi encontrado neste computador. Instale-o "
+                "para usar a aba Licencas.")
+
+        self.perfil.mkdir(parents=True, exist_ok=True)
+        self.log("Abrindo o navegador...", "status")
+        processo = subprocess.Popen(
+            [exe,
+             f"--remote-debugging-port={self.porta}",
+             f"--user-data-dir={self.perfil}",
+             "--no-first-run",
+             "--no-default-browser-check",
+             "--start-maximized",
+             # O Assyst vai na PROPRIA linha de comando: assim a aba que o
+             # usuario ve na frente ja nasce sendo a do Assyst. Deixar o Chrome
+             # abrir na Nova Aba e navegar depois pelo Playwright era o que fazia
+             # parecer "uma aba comum" — a Nova Aba e uma pagina `chrome://`, que
+             # o Playwright nao controla e as vezes nem lista, entao ele criava
+             # OUTRA aba, atras, e carregava o Assyst nela.
+             _URL_HOME],
+            # DETACHED_PROCESS: o Chrome nasce fora do console e do grupo de
+            # processos do app. Sem isso ele herdaria o console do Python e
+            # poderia ser derrubado junto com ele.
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+
+        # O CAMINHO FELIZ E MUDO daqui ate o login. O usuario da aba Licencas quer
+        # saber se pode comecar a trabalhar; porta, PID e tempo de resposta sao
+        # assunto de quem mantem o codigo. O detalhe tecnico so aparece quando
+        # algo DA ERRADO — que e quando ele deixa de ser ruido e vira pista.
+        inicio = time.monotonic()
+        fim = inicio + _TIMEOUT_SUBIR_CHROME_S
+        proximo_aviso = inicio + 8.0
+        while time.monotonic() < fim:
+            if _cdp_respondendo(self.porta):
+                return
+
+            # O Chrome MORREU em vez de subir? Acontece quando ele decide
+            # delegar para uma instancia ja existente do mesmo perfil: o
+            # processo novo sai na hora e a porta nunca abre. Esperar o timeout
+            # inteiro nesse caso e so demora.
+            if processo.poll() is not None:
+                raise RuntimeError(
+                    "O navegador fechou sozinho ao abrir. Normalmente e uma "
+                    "janela do navegador do Automatic que ficou aberta: feche "
+                    "todas e clique em Abrir sessao de novo.")
+
+            # Passar de 8s sem resposta e incomum. Avisar evita a sensacao de
+            # travamento numa espera que pode chegar a um minuto.
+            agora = time.monotonic()
+            if agora >= proximo_aviso:
+                self.log("O navegador esta demorando mais que o normal para "
+                         "abrir; aguarde...", "info")
+                proximo_aviso = agora + 8.0
+            time.sleep(0.3)
+
+        raise RuntimeError(
+            "O navegador abriu mas nao respondeu a tempo. Feche as janelas do "
+            "navegador do Automatic e tente de novo; se persistir, reinicie o "
+            f"computador. (detalhe tecnico: sem resposta na porta {self.porta} "
+            f"em {_TIMEOUT_SUBIR_CHROME_S:.0f}s, PID {processo.pid})")
+
+    def __enter__(self):
+        if _cdp_respondendo(self.porta):
+            self.log("Usando a janela do navegador que ja esta aberta.", "info")
+        else:
+            self._subir_chrome()
+
+        self._pw = sync_playwright().start()
+        self._browser = self._pw.chromium.connect_over_cdp(
+            f"http://127.0.0.1:{self.porta}")
+
+        contexto = (self._browser.contexts[0] if self._browser.contexts
+                    else self._browser.new_context())
+        self.page = self._escolher_aba(contexto)
+
+        # Traz a aba escolhida para a frente. Sem isto o Assyst pode carregar
+        # numa aba de FUNDO enquanto o usuario continua olhando outra — o
+        # sintoma de "abriu uma aba comum e nao foi para o Assyst".
+        try:
+            self.page.bring_to_front()
+        except Exception:
+            pass  # perda cosmetica; nao vale derrubar a sessao por isso
+
+        # ENTREGAR A PAGINA ASSENTADA, nunca em transito. A aba e capturada
+        # assim que EXISTE, com a navegacao inicial (o Assyst da linha de
+        # comando) ainda em curso. Quem recebe a page dispara um `goto` por cima
+        # dela: duas navegacoes competindo, e os 7s que o `_fazer_login_pw`
+        # espera pelo campo de usuario comecam a contar numa tela que ainda esta
+        # montando. Estourando esses 7s, ele conclui "Sessao ja ativa" e devolve
+        # sucesso SEM TER DIGITADO NADA — Chrome aberto no Assyst, sem login.
+        # Mesma licao ja aplicada em _navegar_para_chamado_pw.
+        _aguardar_pagina_assentar(self.page)
+        return self.page
+
+    def _escolher_aba(self, contexto, timeout_s: float = 15.0):
+        """A aba onde o login vai acontecer — a do Assyst, se ela existir.
+
+        NAO da para simplesmente pegar `pages[0]`. O Playwright so enxerga
+        paginas que ele consegue controlar: a Nova Aba do Chrome e uma URL
+        `chrome://`, que fica de fora. Numa sessao recem-aberta a lista podia vir
+        VAZIA, e o `new_page()` do codigo anterior criava uma aba ATRAS da que o
+        usuario estava vendo — dai a impressao de que "abriu uma aba comum e nao
+        foi para o Assyst".
+
+        Agora o Chrome ja sobe apontado para o Assyst (ver `_subir_chrome`), e
+        aqui a gente ESPERA essa aba aparecer: a porta CDP passa a responder
+        assim que o processo do Chrome sobe, o que e ANTES de a primeira aba
+        existir. Ler a lista uma vez so cairia justo nesse buraco.
+
+        Esgotado o tempo, abre uma aba NOVA em vez de aproveitar outra qualquer.
+        Isso e o caso de REAPROVEITAR um Chrome ja aberto em que o usuario fechou
+        a aba do Assyst: aproveitar a aba dele significaria navegar por cima do
+        que ele estava fazendo. Uma aba a mais e barata; perder o trabalho alheio
+        nao e.
+        """
+        base = _URL_HOME.split("//", 1)[-1].split("/", 1)[0]  # host do Assyst
+
+        fim = time.monotonic() + timeout_s
+        paginas: list = []
+        while time.monotonic() < fim:
+            paginas = list(contexto.pages)
+            for pagina in paginas:
+                if base in pagina.url:
+                    return pagina
+            time.sleep(0.3)
+
+        # Fora do caminho feliz: aqui o detalhe tecnico deixa de ser ruido e vira
+        # a unica pista de por que a aba certa nao apareceu.
+        self.log("Nao achei a aba do Assyst; abrindo uma nova. (abas vistas: "
+                 f"{[p.url for p in paginas] or 'nenhuma'})", "info")
+        return contexto.new_page()
+
+    def __exit__(self, exc_type, exc, tb):
+        # SO `stop()`. Nada de `browser.close()`: com `connect_over_cdp` ele
+        # limparia os contextos e fecharia as abas do usuario — justo o que
+        # queremos preservar. O `stop()` derruba o processo do driver, e o
+        # Chrome sobrevive porque nao foi o Playwright que o abriu.
+        try:
+            if self._pw is not None:
+                self._pw.stop()
+        except Exception as e:
+            # Nao e cosmetico: se a desconexao falhar, o navegador pode ficar
+            # com as abas travadas — que e exatamente o problema que esta classe
+            # existe para resolver. Por isso a instrucao pratica vem junto.
+            self.log("Nao consegui soltar o navegador por completo. Se as abas "
+                     "novas travarem, feche o navegador e abra a sessao de novo. "
+                     f"(detalhe tecnico: {e})", "error")
+        self._pw = self._browser = self.page = None
+        self.log("Sessao aberta. Pode usar o navegador normalmente.", "success")
+        return False
+
+
+# Teto de falhas TECNICAS seguidas (goto/fill/click que nem chegaram a produzir
+# uma tela). Nao limita a espera por licenca: aquela e uma tela que CARREGOU e
+# trouxe o banner, e zera este contador. Existe porque "insistir para sempre" so
+# faz sentido enquanto ha um Assyst do outro lado respondendo — sem teto, um
+# defeito qualquer prende a thread do worker e o botao da aba nunca reabilita.
+_MAX_FALHAS_TECNICAS = 10
+
+
+def _navegador_morreu(page) -> bool:
+    """A aba/o navegador sumiu? Entao nao ha o que retentar.
+
+    E a diferenca entre "o Assyst engasgou" (insista) e "o usuario fechou o
+    Chrome" (desista). Sem esta distincao, fechar a janela deixava o laco
+    girando para sempre: o `goto` levantava 'Target closed', o `except Exception`
+    engolia, e a thread nunca terminava — o botao 'Abrir sessao' ficava
+    desabilitado ate reiniciar o app.
+    """
+    try:
+        return page.is_closed()
+    except Exception:
+        return True  # nem da para perguntar: trate como morto
+
+
+def _credenciais_na_tela(page) -> bool:
+    """Os dois campos de login estao mesmo preenchidos AGORA?
+
+    Existe porque a tela de login do Assyst se redesenha sozinha (e o que ela faz
+    ao recusar por licencas). Se ela redesenhar ENTRE os dois `fill`, o usuario
+    volta a ficar vazio e o clique envia o formulario pela metade — e o Assyst
+    responde "credencial invalida", que e o UNICO desfecho que aborta o laco.
+    Ou seja: um redesenho passageiro derrubaria a sessao de vez, culpando uma
+    senha que estava certa.
+    """
+    try:
+        return bool(page.input_value(_SEL_USERNAME, timeout=2000).strip()
+                    and page.input_value(_SEL_PASSWORD, timeout=2000))
+    except Exception:
+        return False
+
+
 def _fazer_login_pw(page, usuario: str, senha: str, log) -> bool:
     """Insiste no login ate entrar. Só desiste se a CREDENCIAL estiver errada.
 
     O laco e infinito de proposito (aba Licencas): quando todas as licencas do
     Assyst estao em uso, a unica saida e retentar ate alguem sair. Por isso
-    NENHUMA falha tecnica pode escapar daqui — um PWTimeout no `goto`/`fill`
+    NENHUMA falha tecnica pode escapar daqui — uma excecao no `goto`/`fill`
     subindo pela pilha mata a thread do worker e o app aparenta ter um "limite
     de tentativas" (era o que acontecia: o Assyst engasga justamente quando esta
     saturado, que e exatamente quando este laco precisa insistir).
+
+    POR QUE OS `except` SAO LARGOS: eles capturavam so `PWTimeout`, e isso NAO
+    cobre o que de fato acontece aqui. O Playwright levanta PWTimeout apenas na
+    espera estourada; elemento que se desprende no meio do `fill` (a tela de
+    login redesenhando), contexto de execucao destruido por navegacao e erro de
+    rede no `goto` sao `playwright.sync_api.Error`. Todos furavam o laco. E a
+    mesma licao ja anotada no flow_desmembramento_pw, que aqui tinha ficado de
+    fora.
+
+    ...MAS O LACO PRECISA DE SAIDA. Alargar os `except` sem isso trocou um
+    defeito por outro: fechar a janela do Chrome passou a ser "falha retentavel",
+    o laco girava para sempre e a thread do worker nunca terminava — na aba
+    Licencas o botao 'Abrir sessao' ficava desabilitado ate reiniciar o app. Por
+    isso existem duas saidas de emergencia:
+      - `_navegador_morreu` -> a aba/janela sumiu, nao ha o que retentar;
+      - `_MAX_FALHAS_TECNICAS` -> falhas seguidas que nem produziram tela.
+    Nenhuma das duas limita a espera por LICENCA, que e o caso que precisa
+    insistir indefinidamente: ali a tela carrega, o banner aparece, e o contador
+    de falhas tecnicas zera.
+
+    As credenciais NAO precisam ser apagadas entre as tentativas: cada volta do
+    laco recomeca com `page.goto(_URL_HOME)`, que traz um documento novo, e o
+    `fill()` do Playwright substitui o valor inteiro do campo (nao acumula).
     """
     tentativa = 0
+    falhas_tecnicas = 0
+
+    def desistir(motivo: str) -> bool:
+        log(motivo, "error")
+        return False
+
     while True:
+        if _navegador_morreu(page):
+            return desistir("A janela do navegador foi fechada; login cancelado.")
+        if falhas_tecnicas >= _MAX_FALHAS_TECNICAS:
+            return desistir(
+                f"{falhas_tecnicas} falhas seguidas sem conseguir carregar a tela "
+                "de login. Verifique a conexao com o CATI e tente de novo.")
+
         try:
             page.goto(_URL_HOME)
-        except PWTimeout:
-            log("A home nao respondeu; tentando novamente...", "error")
+        except Exception as e:
+            falhas_tecnicas += 1
+            log(f"A home nao respondeu ({e}); tentando novamente...", "error")
             time.sleep(_PAUSA_ENTRE_TENTATIVAS_S)
             continue
 
@@ -133,15 +500,51 @@ def _fazer_login_pw(page, usuario: str, senha: str, log) -> bool:
         except PWTimeout:
             log("Sessao ja ativa.", "info")
             return True
+        except Exception as e:
+            # AQUI O `except` LARGO NAO PODE SER JUNTO COM O DE CIMA. "Estourou o
+            # tempo" significa "nao ha tela de login" (entramos); qualquer OUTRO
+            # erro significa so que a espera foi atrapalhada pelo DOM em
+            # transicao. Tratar os dois igual devolveria "logado" numa tela de
+            # login — o mesmo falso sucesso que o `_POLLS_CONFIRMA_SUCESSO` ja
+            # existe para impedir mais adiante.
+            falhas_tecnicas += 1
+            log(f"A home nao se estabilizou ({e}); tentando novamente...", "info")
+            time.sleep(_PAUSA_ENTRE_TENTATIVAS_S)
+            continue
+
+        # A tela de login CARREGOU: o que veio antes nao era um problema
+        # persistente. Zerar aqui e o que mantem o teto de falhas tecnicas longe
+        # da espera por licenca — que passa por este ponto a cada rodada.
+        falhas_tecnicas = 0
 
         tentativa += 1
         log(f"Realizando login (tentativa {tentativa})...", "status")
         try:
             page.fill(_SEL_USERNAME, usuario)
             page.fill(_SEL_PASSWORD, senha)
+        except Exception as e:
+            falhas_tecnicas += 1
+            log(f"Tela de login travou ao preencher ({e}); tentando novamente... "
+                f"(tentativa {tentativa})", "error")
+            time.sleep(_PAUSA_ENTRE_TENTATIVAS_S)
+            continue
+
+        # Confere ANTES de clicar (ver `_credenciais_na_tela`): enviar o
+        # formulario pela metade e o unico jeito de este laco desistir por
+        # engano.
+        if not _credenciais_na_tela(page):
+            falhas_tecnicas += 1
+            log(f"A tela de login se redesenhou no meio do preenchimento; "
+                f"refazendo... (tentativa {tentativa})", "info")
+            time.sleep(_PAUSA_ENTRE_TENTATIVAS_S)
+            continue
+
+        try:
             page.click(_SEL_LOGIN)
-        except PWTimeout:
-            log(f"Tela de login travou; tentando novamente... (tentativa {tentativa})", "error")
+        except Exception as e:
+            falhas_tecnicas += 1
+            log(f"Nao consegui clicar em entrar ({e}); tentando novamente... "
+                f"(tentativa {tentativa})", "error")
             time.sleep(_PAUSA_ENTRE_TENTATIVAS_S)
             continue
 
@@ -176,6 +579,9 @@ def _fazer_login_pw(page, usuario: str, senha: str, log) -> bool:
             # "indefinido": a pagina nao se decidiu no tempo previsto. Retentar e
             # SEMPRE seguro — se na verdade tinha entrado, o `goto` do proximo
             # ciclo cai na home e o wait_for_selector conclui "Sessao ja ativa".
+            # Conta como falha tecnica: um Assyst que nunca se decide nao e
+            # contencao de licenca, e sem teto prenderia a thread para sempre.
+            falhas_tecnicas += 1
             log(f"Login sem desfecho claro; tentando novamente... (tentativa {tentativa})", "info")
 
         time.sleep(_PAUSA_ENTRE_TENTATIVAS_S)

@@ -12,10 +12,6 @@
     "nome_artigo": "BC - Instalação e Atualização do Kaspersky"
   },
   {
-    "keyword": "itom",
-    "nome_artigo": "BC - Procedimento para desinstalar e instalar o agente itom"
-  },
-  {
     "keyword": "nomenclatura",
     "nome_artigo": "BC - Nomenclaturas dos Microcomputadores do Tribunal de Justiça do Estado do Ceará"
   },
@@ -28,7 +24,15 @@
     "nome_artigo": "BC - COMO VERIFICAR SE O IP ESTÁ ESTÁTICO OU DHCP"
   },
   {
-    "keyword": "patch",
+    "keyword": "plantao",
+    "nome_artigo": "BC - PROCEDIMENTO CHECKLIST DO PLANTÃO JUDICIÁRIO"
+  },
+  {
+    "keyword": "Patch Cord",
     "nome_artigo": "BC - Teste de Cabo Patch Cord"
+  },
+  {
+    "keyword": "Agente Itom",
+    "nome_artigo": "BC - Procedimento para desinstalar e instalar o agente itom"
   }
 ]

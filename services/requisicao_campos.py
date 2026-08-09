@@ -121,19 +121,44 @@ _SONDA = "shortDescription"
 _PADRAO_PREFIXO = re.compile(r"ManageEventForm_([A-Za-z0-9]+)_" + _SONDA)
 
 
+def descobrir_prefixos(page) -> list[str]:
+    """TODOS os prefixos de formulario presentes na tela, na ordem do DOM.
+
+    Normalmente e um so. Mas o Assyst e uma SPA: ao navegar para uma Requisição
+    NOVA a partir de um chamado ja aberto, a tela anterior continua no DOM
+    enquanto a nova e montada — e a tela de um chamado salvo TAMBEM e um
+    `ManageEventForm_`. Nesse instante existem dois prefixos, e pegar o primeiro
+    (o que `descobrir_prefixo` faz) e pegar o VELHO.
+
+    Quem precisa do formulario em branco tem que escolher entre os candidatos,
+    nao aceitar o primeiro — ver `_prefixo_em_branco` no flow_requisicao_pw.
+    """
+    ids = page.eval_on_selector_all(
+        "[id^='ManageEventForm_']", "els => els.map(e => e.id)")
+    prefixos: list[str] = []
+    for id_ in ids:
+        m = _PADRAO_PREFIXO.match(id_)
+        if m and m.group(1) not in prefixos:
+            prefixos.append(m.group(1))
+    return prefixos
+
+
 def descobrir_prefixo(page) -> str:
     """Le da PROPRIA tela o prefixo do formulario (ex.: 'ES3').
 
     Procura o id do campo Resumo, que existe em qualquer Requisição, e extrai o
     trecho do meio. Levanta se nao achar — melhor falhar aqui, alto e claro, do
     que seguir montando seletores que nunca vao casar.
+
+    CUIDADO: devolve o PRIMEIRO prefixo do DOM. Só serve quando ha uma tela so
+    (o teste_requisicao.py, que abre a Requisição direto depois do login). Num
+    LOTE, use `descobrir_prefixos` e escolha o formulario em branco.
     """
+    prefixos = descobrir_prefixos(page)
+    if prefixos:
+        return prefixos[0]
     ids = page.eval_on_selector_all(
         "[id^='ManageEventForm_']", "els => els.map(e => e.id)")
-    for id_ in ids:
-        m = _PADRAO_PREFIXO.match(id_)
-        if m:
-            return m.group(1)
     raise RuntimeError(
         "Nao foi possivel descobrir o prefixo do formulario de Requisicao "
         f"(nenhum id casou com ManageEventForm_<PREFIXO>_{_SONDA}). "

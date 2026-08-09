@@ -7,7 +7,8 @@ campos e clicar em Salvar.
 
 Seletores confirmados por reconhecimento em tela viva (2026-08-02, teste_requisicao.py):
   - Prefixo do formulario  -> 'ES3' na sessao capturada, mas SEMPRE descoberto da
-    propria pagina (`descobrir_prefixo`); nunca escrito por extenso.
+    propria pagina (`descobrir_prefixos`); nunca escrito por extenso. Em LOTE ha
+    mais de um formulario no DOM ao mesmo tempo — ver `abrir_tela_requisicao`.
   - Lista do type-ahead    -> `<campo>_comboBox_dropdown` (pop-up) contendo
     `<campo>_comboBox_popup` (menu); itens = `..._popup0`, `..._popup1`, ...
     'Opções anteriores'/'Mais opções' sao PAGINACAO, nao resultados.
@@ -32,7 +33,7 @@ from services.browser_pw import _aguardar_pagina_assentar, _preencher_descricao_
 from services.requisicao_campos import (
     CAMPOS, CHECKBOX, CKEDITOR, DATA_HORA, LOOKUP, ORDEM_COLUNAS, POR_CHAVE,
     SEPARADOR, TEXTO,
-    descobrir_prefixo, id_campo, id_campo_hora, id_dropdown, id_opcoes,
+    descobrir_prefixos, id_campo, id_campo_hora, id_dropdown, id_opcoes,
 )
 
 # Os `except Exception` deste modulo sao largos DE PROPOSITO, como nos demais
@@ -42,7 +43,6 @@ from services.requisicao_campos import (
 # lote inteiro em vez de falhar so ela.
 
 _SEL_SALVAR = "#btlogEvent"
-_SEL_FORMULARIO = "[id^='ManageEventForm_']"
 _SEL_TITULO = "h1#contentPaneTitle"
 
 # Valores de planilha que significam "marque este checkbox".
@@ -165,11 +165,71 @@ def _escolher_opcao(opcoes: list[dict], valor: str) -> dict | None:
 
 # ------------------------------------------------------------------- a tela
 
-def abrir_tela_requisicao(page, log) -> str | None:
-    """Navega para a tela de Requisição e devolve o prefixo do formulario.
+def _valor_usuario_afetado(page, prefixo: str) -> str | None:
+    """Valor do 'Usuário afetado' do formulario `prefixo`.
+
+    `None` = o campo nao existe ou nao esta VISIVEL nesta tela. A visibilidade
+    importa: o Dojo deixa formularios antigos e templates escondidos no DOM, e
+    um template escondido tem os campos vazios — ele passaria por "formulario em
+    branco" sem ser a tela que o operador esta vendo.
+    """
+    sel = id_campo(prefixo, POR_CHAVE["usuario_afetado"])
+    try:
+        caixa = page.locator(sel)
+        if caixa.count() == 0 or not caixa.first.is_visible():
+            return None
+        return caixa.first.input_value().strip()
+    except Exception:
+        return None  # DOM em transicao: quem chama reavalia no proximo ciclo
+
+
+def _prefixo_em_branco(page) -> str | None:
+    """Prefixo do formulario de Requisição EM BRANCO que esta na tela agora.
+
+    O criterio e o 'Usuário afetado' estar VAZIO. Uma Requisição nova nasce sem
+    ele; a tela de um chamado ja salvo o tem preenchido. E o unico jeito de
+    distinguir as duas, porque no id as duas sao `ManageEventForm_<PREFIXO>_...`.
+    """
+    for prefixo in descobrir_prefixos(page):
+        if _valor_usuario_afetado(page, prefixo) == "":
+            return prefixo
+    return None
+
+
+def _diagnostico_formularios(page, log) -> None:
+    """Diz QUAIS formularios ficaram na tela. So roda quando ja falhou.
+
+    Sem isto, "a tela nao abriu" nao distingue 'nao navegou' de 'navegou mas
+    ficou na tela do chamado anterior' — e cada hipotese custa um lote inteiro
+    para testar.
+    """
+    try:
+        achados = [f"{p}='{_valor_usuario_afetado(page, p)}'"
+                   for p in descobrir_prefixos(page)]
+    except Exception as e:
+        log(f"[DIAG] nao consegui inspecionar os formularios: {e}", "error")
+        return
+    log(f"[DIAG] formularios na tela (prefixo='Usuário afetado'; None = campo "
+        f"escondido): {' / '.join(achados) or 'nenhum'}", "info")
+
+
+def abrir_tela_requisicao(page, log, timeout_s: float = 30.0) -> str | None:
+    """Navega para a tela de Requisição EM BRANCO e devolve o prefixo dela.
 
     Retorna None se a tela nao abriu — sem prefixo nao ha nada a fazer, e melhor
     parar aqui do que montar seletores que nunca vao casar.
+
+    CORRIDA QUE ESTA FUNCAO EXISTE PARA MATAR (bug do lote, relatado em teste com
+    usuarios: a 2a requisição saía com o 'Usuário afetado' vazio). Antes,
+    esperava-se `[id^='ManageEventForm_']` ficar `attached`. So que a tela do
+    chamado RECEM-CRIADO tambem e um `ManageEventForm_` e continua no DOM
+    enquanto a SPA monta a nova: o wait retornava NA HORA, `descobrir_prefixo`
+    lia o prefixo da tela VELHA, e o fluxo ia digitar num formulario que nao era
+    o da tela. E o mesmo erro de "presenca em vez de mudanca" ja corrigido no
+    `_esperar_chamado_carregado` e na captura do numero do filho.
+
+    O criterio agora e positivo: esperar aparecer um formulario com o 'Usuário
+    afetado' VAZIO E VISIVEL — isto e, uma Requisição em branco de verdade.
     """
     log("Abrindo a tela de Requisição de Serviço...", "status")
 
@@ -179,20 +239,21 @@ def abrir_tela_requisicao(page, log) -> str | None:
     _aguardar_pagina_assentar(page)
     try:
         page.evaluate("destino => window.location.href = destino", _URL_REQUISICAO)
-        page.wait_for_selector(_SEL_FORMULARIO, state="attached", timeout=30000)
-        _aguardar_pagina_assentar(page)
     except Exception as e:
         log(f"A tela de Requisição nao abriu: {e}", "error")
         return None
 
-    try:
-        prefixo = descobrir_prefixo(page)
-    except Exception as e:
-        log(str(e), "error")
-        return None
+    fim = time.monotonic() + timeout_s
+    while time.monotonic() < fim:
+        prefixo = _prefixo_em_branco(page)
+        if prefixo is not None:
+            log(f"Formulario carregado (prefixo {prefixo}).", "success")
+            return prefixo
+        page.wait_for_timeout(300)
 
-    log(f"Formulario carregado (prefixo {prefixo}).", "success")
-    return prefixo
+    log(f"A Requisição em branco nao apareceu em {timeout_s:.0f}s.", "error")
+    _diagnostico_formularios(page, log)
+    return None
 
 
 # ------------------------------------------------------- preenchimento por tipo

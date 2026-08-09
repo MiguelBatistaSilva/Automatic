@@ -13,9 +13,14 @@ linha achada (que o Dojo reciclava ao rolar), miramos a linha por TEXTO com
 
 Em falha, LEVANTA excecao — o chamador (fluxo) marca a linha como nao-concluida.
 Isso respeita a regra de "sinais reais" do checkpoint (ver kb_manager antigo).
-A excecao `BaseAplicadaSemRetorno` e a excecao dessa regra: a base ESTA no
-chamado e so a volta a tela do evento falhou; trata-la como falha faria a
-execucao seguinte aplicar a mesma base duas vezes no mesmo chamado.
+
+ONDE FICA A FRONTEIRA DO FRACASSO: no clique em 'Salvar'. Antes dele, qualquer
+erro e "base nao aplicada" e sobe como excecao. DEPOIS dele a base ja esta no
+chamado, e nada pode ser reportado como falha — senao o checkpoint fica pendente
+e a execucao seguinte aplica A MESMA BASE outra vez no mesmo chamado. Por isso a
+confirmacao (passo 5) e o 'Voltar ao evento' (passo 6) vivem FORA do try.
+A excecao `BaseAplicadaSemRetorno` e o meio-termo dessa regra: a base ESTA no
+chamado e so a volta a tela do evento falhou.
 """
 
 from playwright.sync_api import TimeoutError as PWTimeout
@@ -65,8 +70,10 @@ def executar_kb_unica_pw(page, log, config, voltar_ao_evento: bool = True):
         log(f"🔎 Pesquisando por: {keyword}", "status")
 
         # 2. Aguardar o overlay de carregamento sumir (bloqueia a leitura da grade)
+        #    `.first`: o locator do Playwright e STRICT — se a tela tiver mais de
+        #    um overlay, `wait_for` levantaria em vez de esperar o primeiro.
         log("⏳ Aguardando resultados...", "status")
-        page.locator(_SEL_OVERLAY).wait_for(state="hidden", timeout=20000)
+        page.locator(_SEL_OVERLAY).first.wait_for(state="hidden", timeout=20000)
 
         # 3. Localizar o artigo, rolando a grade Dojo virtualizada ate ele
         #    entrar no DOM. O alvo e mirado por TEXTO (re-resolvido no clique).
@@ -91,19 +98,42 @@ def executar_kb_unica_pw(page, log, config, voltar_ao_evento: bool = True):
         artigo.click(button="right")  # menu de contexto
         page.wait_for_timeout(900)
 
-        # 4. Selecionar a acao no menu de contexto e salvar
+        # 4. Selecionar a acao no menu de contexto e salvar.
+        #    O clique em Salvar e A FRONTEIRA: dali em diante a base ESTA no
+        #    chamado (o formulario da acao nao tem campo a validar — e so
+        #    "aplique este artigo"), entao ele e o ultimo passo que pode ser
+        #    reportado como "base nao aplicada".
         page.click(_SEL_ITEM_ACAO, timeout=10000)
         page.click(_SEL_SALVAR, timeout=10000)
-
-        # 5. Fim do salvamento: o overlay de carregamento sobe e desce.
-        #    DAQUI PARA BAIXO A BASE JA ESTA NO CHAMADO — nada que falhe depois
-        #    pode ser reportado como "base nao aplicada".
-        page.locator(_SEL_OVERLAY).wait_for(state="hidden", timeout=20000)
-        log(f"✨ Base aplicada: {nome_artigo}", "success")
 
     except Exception as e:
         log(f"❌ Erro na base {keyword}: {str(e)}", "error")
         raise
+
+    # 5. CONFIRMACAO — FORA do try acima, e NAO-FATAL de proposito.
+    #
+    # BUG QUE ISTO CONSERTA: aqui havia uma espera de ate 20s pelo overlay de
+    # carregamento sumir, DENTRO do try acima — contradizendo o comentario que o
+    # proprio passo trazia. Quando o overlay nao descia no tempo, a base ja
+    # aplicada virava "❌ Erro na base": o fluxo gastava os 20s parados (o "fica
+    # travado e depois navega"), o checkpoint NAO marcava concluido, e a
+    # execucao seguinte aplicava A MESMA BASE OUTRA VEZ no mesmo chamado.
+    #
+    # O sinal agora e o botao Salvar SAIR da tela — o Assyst fecha o
+    # ManageActionForm ao aceitar a acao. E o mesmo criterio ja provado em
+    # producao no flow_atendimento_pw (pop-up que fecha) e no 'Continuar' do
+    # Desmembramento: "sumiu" e observavel; "o overlay desceu" e um efeito
+    # colateral que pode nem acontecer.
+    try:
+        page.locator(_SEL_SALVAR).first.wait_for(state="hidden", timeout=10000)
+    except Exception:
+        # Nao e falha: e falta de confirmacao. Fica registrado para quem for
+        # conferir o chamado, sem derrubar a linha.
+        log(f"⚠️ Base salva em '{nome_artigo}', mas o formulario da acao "
+            "continuou na tela — confira o chamado se algo parecer fora do lugar.",
+            "info")
+
+    log(f"✨ Base aplicada: {nome_artigo}", "success")
 
     # 6. Voltar ao evento (botao custom do Dojo; clique via dispatch_event,
     #    equivalente ao execute_script('click') do Selenium). Fora do try acima

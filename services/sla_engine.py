@@ -5,12 +5,19 @@ TIPOS_PAUSA = {
     'Aguardando Info do Fornecedor',
     'Aguardando Info do Gestor',
     'Atendimento Programado',
+    # GARANTIA: o Assyst NAO congela o relogio nestas duas, mas o chamado sai da
+    # mao do 2N e fica com o fornecedor. Para o gestor esse tempo nao e nosso,
+    # entao aqui ele e descontado como qualquer outra espera.
+    'Atribuir ao Fornecedor',
 }
 TIPOS_RETOMADA = {
     'Atendimento Iniciado',
     'Info Recebida do Fornecedor',
     'Info Recebidas do Gestor',
     'Info Recebidas do Usuário *',
+    # Par de 'Atribuir ao Fornecedor'. Nome distinto de 'Resolvido' (TIPOS_FIM):
+    # a comparacao e por igualdade exata, entao um nao pega o outro.
+    'Resolvido pelo Fornecedor',
 }
 # Tipos que encerram o chamado de vez — param o relogio permanentemente.
 TIPOS_FIM = {
