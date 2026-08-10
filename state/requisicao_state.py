@@ -53,7 +53,7 @@ class RequisicaoResultado:
     """Uma linha da tabela de resultados (tipada: `dict` quebra o rx.foreach)."""
 
     linha: str      # "1", "2"... — casa com a linha colada pelo operador
-    usuario: str    # Usuário afetado, para reconhecer a requisição de relance
+    usuario: str    # NOME do Usuário afetado (lido da tela); matrícula como reserva
     numero: str     # chamado criado ("--" quando falhou)
     status: str
     erro: bool
@@ -124,18 +124,23 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
                     return
 
                 for i, valores in enumerate(requisicoes, 1):
-                    usuario = valores.get("usuario_afetado", "--")
-                    log(f"[{i}/{total}] Requisição para {usuario}...", "status")
+                    # O que o operador COLOU (a matricula). Serve para o log de
+                    # progresso e como reserva na tabela: o nome so existe depois
+                    # que o type-ahead resolve a matricula na tela.
+                    colado = valores.get("usuario_afetado", "--")
+                    log(f"[{i}/{total}] Requisição para {colado}...", "status")
 
                     # A aba SEMPRE salva: o `modo_teste` do fluxo existe so para o
                     # `teste_requisicao.py` (decisao do usuario — o operador nao deve
-                    # ter esse botao). Contrato: None = falhou, str = numero criado.
-                    numero = criar_requisicao(page, log, valores)
+                    # ter esse botao). Contrato: None = falhou, RequisicaoCriada = ok.
+                    resultado = criar_requisicao(page, log, valores)
 
-                    if numero is None:
+                    if resultado is None:
                         status, erro, mostrado = "✗ Falhou", True, "--"
+                        usuario = colado  # falhou antes de dar para ler o nome
                     else:
-                        status, erro, mostrado = "✓ Criada", False, numero
+                        status, erro, mostrado = "✓ Criada", False, resultado.numero
+                        usuario = resultado.usuario
 
                     emit("resultado", RequisicaoResultado(
                         linha=str(i), usuario=usuario, numero=mostrado,

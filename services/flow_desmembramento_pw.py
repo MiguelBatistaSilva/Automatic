@@ -27,7 +27,15 @@ from services.kb_manager_pw import BaseAplicadaSemRetorno
 from services.checkpoint import (
     inicializar, marcar_salvo, marcar_concluido_linha,
     existe_pendente, foi_concluido, status_linha, numero_filho,
+    esta_corrompido,
     STATUS_PENDENTE, STATUS_SALVO, STATUS_CONCLUIDO,
+)
+
+# Mensagem unica do guarda de checkpoint ilegivel (os tres modos usam a mesma).
+_MSG_CHECKPOINT_ILEGIVEL = (
+    "Checkpoint de {chave} existe mas esta ilegivel. ABORTANDO: seguir daqui "
+    "faria o fluxo tratar isto como execucao nova e RECRIAR chamados que ja "
+    "existem. Confira o arquivo em data/checkpoints/ antes de rodar de novo."
 )
 
 # Seletores da tela de edicao do evento (mesmos ids do fluxo Selenium).
@@ -239,6 +247,9 @@ class FluxoCompletoPW(FluxoDesmembramentoPW):
         filhos_novos = []
 
         # CHECKPOINT — inicializar ou retomar
+        if esta_corrompido(numero_chamado):
+            self.log(_MSG_CHECKPOINT_ILEGIVEL.format(chave=numero_chamado), "error")
+            return
         if iniciar_do_zero or (not existe_pendente(numero_chamado) and not foi_concluido(numero_chamado)):
             self.log("Inicializando checkpoint...", "info")
             inicializar(numero_chamado, total)
@@ -342,6 +353,9 @@ class FluxoCriarPW(FluxoDesmembramentoPW):
         filhos_novos = []
 
         # CHECKPOINT
+        if esta_corrompido(numero_chamado):
+            self.log(_MSG_CHECKPOINT_ILEGIVEL.format(chave=numero_chamado), "error")
+            return
         if iniciar_do_zero or (not existe_pendente(numero_chamado) and not foi_concluido(numero_chamado)):
             self.log("Inicializando checkpoint...", "info")
             inicializar(numero_chamado, total)
@@ -422,6 +436,9 @@ class FluxoBCPW(FluxoDesmembramentoPW):
         chave = _chave_checkpoint(filhos)
 
         # CHECKPOINT
+        if esta_corrompido(chave):
+            self.log(_MSG_CHECKPOINT_ILEGIVEL.format(chave=chave), "error")
+            return
         if iniciar_do_zero or (not existe_pendente(chave) and not foi_concluido(chave)):
             self.log("Inicializando checkpoint BC...", "info")
             inicializar(chave, total)

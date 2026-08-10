@@ -7,6 +7,7 @@ services/checkpoint.py — Gerencia o progresso linha a linha com 3 estados:
 Cada chamado tem seu proprio arquivo JSON em data/checkpoints/{numero}.json
 """
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -88,6 +89,29 @@ def carregar(numero_chamado: str) -> dict | None:
     return _carregar_dados(numero_chamado)
 
 
+def esta_corrompido(numero_chamado: str) -> bool:
+    """O arquivo existe mas nao da para ler? (NAO confundir com "nao existe".)
+
+    `_carregar_dados` devolve None nos DOIS casos, e quem chama nao consegue
+    distinguir "chamado novo" de "checkpoint quebrado". Como o fluxo inicializa
+    tudo como pendente quando conclui "chamado novo", um arquivo ilegivel o fazia
+    RECRIAR todos os filhos ja criados — em silencio, com o log dizendo apenas
+    "Inicializando checkpoint...", que e a mesma frase de uma execucao legitima
+    do zero.
+
+    Por isso quem for decidir inicializar precisa perguntar isto ANTES.
+    """
+    p = _path(numero_chamado)
+    if not p.exists():
+        return False
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            json.load(f)
+        return False
+    except Exception:
+        return True
+
+
 def existe_pendente(numero_chamado: str) -> bool:
     """Verifica se existe checkpoint com linhas nao concluidas para esse chamado."""
     dados = _carregar_dados(numero_chamado)
@@ -160,7 +184,26 @@ def _carregar_dados(numero_chamado: str) -> dict | None:
 
 
 def _salvar_dados(numero_chamado: str, dados: dict) -> None:
+    """Grava o checkpoint de forma ATOMICA (temporario + os.replace).
+
+    O `open(p, "w")` ZERA o arquivo antes de escrever: morrer nesse instante
+    (backend do Reflex reiniciando, maquina desligando) deixava um JSON pela
+    metade. `_carregar_dados` nao le esse arquivo, devolve None, e o fluxo
+    concluia "chamado novo" e recriava TODOS os filhos ja criados.
+
+    Com a troca atomica o arquivo bom so deixa de existir quando o novo ja esta
+    inteiro no disco. O pior caso passa a ser "perdi a ultima linha marcada" —
+    que a retomada resolve — em vez de "corrompi o checkpoint".
+
+    Sem `fsync` de proposito: ele protegeria contra queda de energia, mas custa
+    em TODA linha marcada, e a morte real aqui e o processo sendo derrubado —
+    para essa, o `os.replace` sozinho basta.
+    """
     p = _path(numero_chamado)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w", encoding="utf-8") as f:
+    # `p.name + ".tmp"` e nao `with_suffix`: o numero do chamado pode conter
+    # ponto, e `with_suffix` comeria o trecho depois dele.
+    tmp = p.parent / (p.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, p)  # atomico no Windows (mesmo volume)

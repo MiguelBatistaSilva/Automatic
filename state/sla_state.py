@@ -44,6 +44,7 @@ FILAS_INFO: list[FilaInfo] = [
 @dataclasses.dataclass
 class SLAResultado:
     numero: str
+    usuario: str  # Usuário afetado, lido da tela do chamado ("--" se nao deu)
     inicio: str
     tempo: str
     status: str
@@ -98,7 +99,9 @@ class SLAState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/rodando pro
             return
 
         def worker(log, emit):
-            from services.browser_pw import NavegadorPW, _fazer_login_pw
+            from services.browser_pw import (
+                NavegadorPW, _fazer_login_pw, _usuario_afetado_pw,
+            )
             from services.flow_sla_pw import extrair_historico_chamado
             from services.sla_engine import calcular_sla
 
@@ -107,7 +110,7 @@ class SLAState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/rodando pro
                 if not _fazer_login_pw(page, matricula, senha, log):
                     for c in chamados:
                         emit("resultado", SLAResultado(
-                            numero=c, inicio="--", tempo="--",
+                            numero=c, usuario="--", inicio="--", tempo="--",
                             status="✗ Falha no login", acoes="--", erro=True))
                     return
 
@@ -117,12 +120,17 @@ class SLAState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/rodando pro
                     historico = extrair_historico_chamado(page, numero, log)
                     if historico is None:
                         emit("resultado", SLAResultado(
-                            numero=numero, inicio="--", tempo="--",
+                            numero=numero, usuario="--", inicio="--", tempo="--",
                             status="✗ Falha ao extrair historico", acoes="--", erro=True))
                         continue
+                    # Lido DEPOIS do historico: a essa altura o `extrair_historico_chamado`
+                    # ja confirmou que a tela aberta e a do chamado pedido. O fluxo em
+                    # services nao muda de contrato — a `page` esta aqui mesmo.
+                    usuario = _usuario_afetado_pw(page)
                     r = calcular_sla(historico, fila)
                     emit("resultado", SLAResultado(
                         numero=numero,
+                        usuario=usuario or "--",
                         inicio=r.get("inicio", "--"),
                         tempo=r.get("tempo_gasto_str", "--"),
                         status=r.get("mensagem", "--"),

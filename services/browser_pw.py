@@ -20,7 +20,9 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 # Reaproveita as constantes/regras ja validadas no fluxo Selenium, para as duas
 # implementacoes nao divergirem com o tempo.
-from services.assyst_common import _URL_HOME, _URL_CHAMADO, _normalizar_id_assyst
+from services.assyst_common import (
+    _URL_HOME, _URL_CHAMADO, _normalizar_id_assyst, _so_o_nome,
+)
 from services.paths import PERFIL_NAVEGADOR_DIR
 
 _SEL_USERNAME = "input[name='j_username']"
@@ -669,6 +671,33 @@ def _numero_do_titulo(page) -> str:
     except Exception:
         return ""  # painel ainda nao montado / DOM em transicao
     return texto.split()[0].upper() if texto else ""
+
+
+def _usuario_afetado_pw(page) -> str:
+    """Nome do 'Usuário afetado' do chamado ABERTO agora ("" se indisponivel).
+
+    MIRA PELO `name`, NAO PELO ID. O id do campo carrega o prefixo do formulario
+    (`ManageEventForm_EC61_affectedUser_textNode`), e o prefixo muda por tela —
+    `ES3` na criacao de Requisição, `EC61` num chamado salvo. O `name` e sempre
+    `affectedUser.text`, entao nao ha prefixo para descobrir.
+
+    O `:visible` NAO e detalhe. O Assyst e SPA e a tela do chamado ANTERIOR
+    continua no DOM enquanto a nova monta — e ela TAMBEM e um `ManageEventForm_`
+    com o seu proprio `affectedUser.text`. Sem o filtro, percorrer uma lista de
+    chamados leria o usuario do chamado de tras, calado. E a mesma corrida ja
+    corrigida em `_esperar_chamado_carregado` e na captura do numero do filho; o
+    formulario velho fica escondido, entao a visibilidade separa os dois.
+
+    Devolve "" em qualquer problema: isto e enfeite de tabela, nunca pode
+    derrubar a analise de um chamado.
+    """
+    try:
+        campo = page.locator("input[name='affectedUser.text']:visible")
+        if campo.count() == 0:
+            return ""
+        return _so_o_nome(campo.first.input_value())
+    except Exception:
+        return ""
 
 
 def _esperar_chamado_carregado(page, numero_chamado: str | None = None,

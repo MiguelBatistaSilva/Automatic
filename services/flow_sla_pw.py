@@ -61,9 +61,9 @@ def extrair_historico_chamado(page, numero_chamado: str, log) -> list | None:
         expander = page.locator(_SEL_EXPANDER)
         expander.wait_for(state="visible", timeout=15000)
         expander.click()
-        log("Historico de Acoes aberto.", "status")
+        log("Histórico de ações aberto.", "status")
     except Exception as e:
-        log(f"Nao foi possivel abrir o Historico de Acoes: {e}", "error")
+        log(f"Nao foi possível abrir o histórico de ações: {e}", "error")
         return None
 
     # No fluxo Selenium havia um sleep(3) fixo aqui; agora espera-se a primeira
@@ -72,13 +72,13 @@ def extrair_historico_chamado(page, numero_chamado: str, log) -> list | None:
     try:
         page.locator(_SEL_LINHAS).first.wait_for(state="attached", timeout=15000)
     except Exception:
-        log("Nenhuma acao encontrada no historico.", "error")
+        log("Nenhuma ação encontrada no histórico.", "error")
         return None
 
     historico = page.eval_on_selector_all(_SEL_LINHAS, _JS_EXTRAIR_LINHAS)
     if not historico:
-        log("Nenhuma acao encontrada no historico.", "error")
+        log("Nenhuma ação encontrada no histórico.", "error")
         return None
 
-    log(f"{len(historico)} acoes extraidas do historico.", "success")
+    log(f"{len(historico)} ações extraídas do histórico.", "success")
     return historico

@@ -54,9 +54,6 @@ def _preencher_descricao_dialog(page, log, descricao: str) -> bool:
     ja aplicado ao _preencher_descricao do fluxo principal.
     """
     try:
-        total = page.locator(_SEL_IFRAME_EDITOR).count()
-        log(f"[DIAG] editores 'formattedRemarks' na tela: {total}", "info")
-
         # frame_locator resolve o iframe a cada uso e ja espera por ele, entao
         # nao existe o switch_to.frame/default_content nem o risco de ficar
         # preso num frame se algo estourar no meio.
@@ -75,7 +72,7 @@ def _preencher_descricao_dialog(page, log, descricao: str) -> bool:
             if linha:
                 corpo.press_sequentially(linha)
 
-        log("Descricao da acao preenchida (ultimo editor).", "success")
+        log("Descrição da ação preenchida (ultimo editor).", "success")
         return True
     except Exception as e:
         log(f"Erro ao preencher a descricao da acao: {e}", "error")
@@ -135,9 +132,9 @@ def iniciar_atendimento(page, log, numero_chamado: str,
     # agora espera-se o dialogo existir de fato antes de mexer no editor.
     try:
         page.locator(_SEL_DIALOGO).wait_for(state="visible", timeout=15000)
-        log("Pop-up da acao aberto.", "success")
+        log("Pop-up da ação aberto.", "success")
     except Exception as e:
-        log(f"O pop-up da acao nao abriu: {e}", "error")
+        log(f"O pop-up da ação não abriu: {e}", "error")
         return False
 
     # 6. Preencher a descricao no pop-up (mira o editor do pop-up)
@@ -164,7 +161,7 @@ def iniciar_atendimento(page, log, numero_chamado: str,
     try:
         page.locator(_SEL_DIALOGO).wait_for(state="hidden", timeout=15000)
     except Exception:
-        log("O pop-up nao fechou apos salvar — a acao pode NAO ter sido "
+        log("O pop-up não fechou apos salvar — a acao pode NAO ter sido "
             "registrada. Confira o chamado manualmente.", "error")
         return False
 

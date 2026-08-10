@@ -26,9 +26,10 @@ tela. Isso nao e estetica, sao duas dependencias reais:
 Ver memoria: project_flow_requisicao, project_ckeditor_fix, project_checkpoint_sinais.
 """
 
+import dataclasses
 import time
 
-from services.assyst_common import _URL_REQUISICAO
+from services.assyst_common import _URL_REQUISICAO, _so_o_nome
 from services.browser_pw import _aguardar_pagina_assentar, _preencher_descricao_pw
 from services.requisicao_campos import (
     CAMPOS, CHECKBOX, CKEDITOR, DATA_HORA, LOOKUP, ORDEM_COLUNAS, POR_CHAVE,
@@ -44,6 +45,20 @@ from services.requisicao_campos import (
 
 _SEL_SALVAR = "#btlogEvent"
 _SEL_TITULO = "h1#contentPaneTitle"
+
+
+@dataclasses.dataclass
+class RequisicaoCriada:
+    """O que UMA requisição produziu. `None` continua sendo o unico sinal de falha.
+
+    Existe porque a tabela de resultados precisa de DUAS informacoes: o numero e
+    quem e o usuario afetado. Antes a aba mostrava o valor que o operador COLOU
+    (a matricula), que e o que ela tinha em maos — o nome so aparece depois, na
+    tela, quando o type-ahead resolve a matricula.
+    """
+
+    numero: str   # "" no modo_teste (preencheu e nao salvou, entao nao ha numero)
+    usuario: str  # nome do Usuario afetado; cai para a matricula se nao der para ler
 
 # Valores de planilha que significam "marque este checkbox".
 _VERDADEIROS = {"1", "x", "s", "sim", "true", "v", "verdadeiro", "y", "yes"}
@@ -386,6 +401,20 @@ def _valor_de(page, prefixo, campo) -> str:
         return ""
 
 
+def _nome_usuario(page, prefixo, fallback: str) -> str:
+    """Nome do Usuário afetado, lido da tela DEPOIS que o type-ahead resolveu.
+
+    O operador cola a matricula (`905245`); o Assyst renderiza o campo escolhido
+    como `905245(RIBAMAR TORRES CORREIA LIMA)`. O corte fica no `_so_o_nome`
+    (assyst_common), compartilhado com a Analise de SLA.
+
+    Cai para o `fallback` (o valor colado) quando o campo esta vazio ou o DOM
+    esta em transicao. Ler isto NUNCA pode derrubar o fluxo — e enfeite de
+    tabela, nao etapa da criacao.
+    """
+    return _so_o_nome(_valor_de(page, prefixo, POR_CHAVE["usuario_afetado"])) or fallback
+
+
 def _esperar_autocompletar(page, log, prefixo, campo, timeout_s: float = 6.0) -> None:
     """Depois de um campo que dispara auto-preenchimento, espera a RESPOSTA chegar.
 
@@ -639,14 +668,16 @@ def parse_entrada(texto: str, ordem=ORDEM_COLUNAS) -> list[dict[str, str]]:
     return requisicoes
 
 
-def criar_requisicao(page, log, valores: dict[str, str], modo_teste: bool = False) -> str | None:
-    """Abre UMA Requisição de Serviço. Retorna o numero do chamado criado.
+def criar_requisicao(page, log, valores: dict[str, str],
+                     modo_teste: bool = False) -> RequisicaoCriada | None:
+    """Abre UMA Requisição de Serviço. Retorna o que ela produziu.
 
     Retorna:
-      - o numero (str nao vazia) quando a requisição foi criada;
+      - um `RequisicaoCriada` (com `numero` e `usuario`) quando foi criada;
       - `None` em QUALQUER falha — campo que nao entrou, obrigatorio vazio, ou
         Salvar que nao trocou de tela (o Assyst recusou). Nada e salvo pela metade;
-      - `""` so no `modo_teste` (preencheu e nao salvou, entao nao ha numero).
+      - no `modo_teste`, um `RequisicaoCriada` com `numero=""` (preencheu e nao
+        salvou, entao nao ha numero).
 
     `modo_teste=True` preenche tudo e PARA antes de salvar, deixando a tela na
     tela para conferencia. E o mesmo de-risking usado no Iniciar Atendimento.
@@ -691,11 +722,15 @@ def criar_requisicao(page, log, valores: dict[str, str], modo_teste: bool = Fals
     # tela responde a pergunta certa: falta alguma coisa AGORA?
     vazios = _obrigatorios_vazios(page, prefixo)
 
+    # Lido AGORA, com o formulario ainda na tela: depois do Salvar a SPA troca de
+    # tela e o campo pode nao existir mais no DOM.
+    usuario = _nome_usuario(page, prefixo, valores.get("usuario_afetado", "--"))
+
     if modo_teste:
         if vazios:
             log(f"MODO TESTE: obrigatorios ainda vazios: {', '.join(vazios)}", "error")
         log("MODO TESTE: formulario preenchido, NAO salvei.", "status")
-        return ""
+        return RequisicaoCriada(numero="", usuario=usuario)
 
     if vazios:
         log(f"Nao salvei: campos obrigatorios vazios na tela: {', '.join(vazios)}",
@@ -717,5 +752,5 @@ def criar_requisicao(page, log, valores: dict[str, str], modo_teste: bool = Fals
             "error")
         return None
 
-    log(f"Requisição criada: {numero}", "success")
-    return numero
+    log(f"Requisição criada: {numero} ({usuario})", "success")
+    return RequisicaoCriada(numero=numero, usuario=usuario)

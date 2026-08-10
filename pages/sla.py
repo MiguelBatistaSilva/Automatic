@@ -83,6 +83,7 @@ def _regras_das_filas() -> rx.Component:
 def _linha_resultado(r: rx.Var) -> rx.Component:
     return rx.table.row(
         rx.table.cell(r.numero, font_weight="bold"),
+        rx.table.cell(r.usuario),
         rx.table.cell(r.inicio),
         rx.table.cell(r.tempo),
         rx.table.cell(
@@ -99,6 +100,7 @@ def _tabela() -> rx.Component:
         rx.table.header(
             rx.table.row(
                 rx.table.column_header_cell("Chamado"),
+                rx.table.column_header_cell("Usuário afetado"),
                 rx.table.column_header_cell("Início"),
                 rx.table.column_header_cell("Tempo de SLA"),
                 rx.table.column_header_cell("Status"),

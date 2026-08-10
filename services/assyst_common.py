@@ -73,6 +73,30 @@ def _normalizar_id_assyst(numero: str) -> str:
     return n
 
 
+def _so_o_nome(bruto: str) -> str:
+    """Extrai o nome de um valor de lookup renderizado pelo Assyst.
+
+    O type-ahead grava no campo a forma `matricula(NOME)` — confirmado em tela
+    viva tanto na criacao (`905245(RIBAMAR...)`) quanto num chamado ja salvo
+    (`905513(JHONATAN NASCIMENTO DA COSTA)`). Aqui interessa so o miolo.
+
+    NUNCA devolve vazio se recebeu algo: sem parentese, ou com parentese
+    malformado, devolve o valor bruto. Uma linha de resultado com a matricula
+    ainda identifica o chamado; uma vazia, nao.
+
+    Mora aqui, e nao num fluxo, porque a Requisição (le da tela de criacao) e a
+    Analise de SLA (le da tela do chamado salvo) precisam da MESMA regra.
+    """
+    bruto = (bruto or "").strip()
+    if not bruto:
+        return ""
+    ini = bruto.find("(")
+    if ini == -1:
+        return bruto
+    fim = bruto.rfind(")")
+    return bruto[ini + 1:fim if fim > ini else None].strip() or bruto
+
+
 def _montar_descricao(template: str, row) -> str:
     resultado = template
     for col, valor in row.items():
