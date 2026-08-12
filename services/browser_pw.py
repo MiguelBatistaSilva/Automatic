@@ -794,20 +794,44 @@ def _relogin_pw(page, numero_chamado, usuario, senha, log) -> bool:
     return _navegar_para_chamado_pw(page, numero_chamado, log)
 
 
-def _capturar_numero_filho_pw(page, log) -> str:
+def _capturar_numero_filho_pw(page, log, titulo_antes: str,
+                              timeout_s: float = 15.0) -> str:
     """Captura o numero do chamado filho gerado pelo Assyst apos salvar.
 
-    Le o titulo do painel (h1#contentPaneTitle) e pega o primeiro token.
+    Recebe `titulo_antes` -- o titulo do painel (via `_numero_do_titulo`) lido
+    pelo CHAMADOR imediatamente ANTES do clique em Salvar, quando a tela ja
+    diz "Insira os detalhes do <servico>". So aceita um titulo que MUDOU em
+    relacao a esse valor E que tem algum digito; sem os dois, continua
+    esperando ate o teto e devolve "".
+
+    ISSO NAO REPETE O BUG DO SELENIUM (13/07/2026, revertido por ter ficado
+    lento): la a referencia era tomada ANTES de 'Salvar como Novo', e o titulo
+    passava por varios estados intermediarios ate estabilizar -- esperar
+    'mudou' a partir dali demorava e nao capturava. Aqui a referencia e tomada
+    ANTES do Salvar final, quando o titulo ja esta parado em "Insira os
+    detalhes...": so falta UMA transicao, para o numero do filho. E o mesmo
+    ponto de referencia que ja funciona no `_capturar_numero` da Requisicao.
+
+    NAO TRAVA: o teto e sempre respeitado, poll curto (200ms), e qualquer
+    erro de leitura de tela (`_numero_do_titulo` devolve "" em transicao de
+    DOM) so faz o laco tentar de novo no proximo ciclo, nunca bloqueia.
+
+    Antes disto, um `wait_for_timeout(2000)` cego + leitura unica podia
+    devolver o titulo AINDA em transicao ("Insira os detalhes...") como se
+    fosse o numero do filho -- ele passava no `if num_filho:` do chamador e
+    virava um numero de chamado inventado no checkpoint e no TXT de filhos.
     """
-    try:
-        titulo = page.locator("h1#contentPaneTitle")
-        titulo.wait_for(state="visible", timeout=10000)
-        numero = titulo.inner_text().split(" ")[0].strip()
-        log(f"Numero do chamado filho capturado: {numero}", "info")
-        return numero
-    except Exception as e:
-        log(f"Nao foi possivel capturar numero do filho: {e}", "error")
-        return ""
+    fim = time.monotonic() + timeout_s
+    while time.monotonic() < fim:
+        atual = _numero_do_titulo(page)
+        if atual and atual != titulo_antes and any(c.isdigit() for c in atual):
+            log(f"Numero do chamado filho capturado: {atual}", "info")
+            return atual
+        page.wait_for_timeout(200)
+    log("Nao foi possivel capturar o numero do filho (titulo nao mudou a "
+        f"tempo, {timeout_s:.0f}s). O chamado pode ter sido salvo mesmo assim "
+        "-- confira a tela.", "error")
+    return ""
 
 
 def _preencher_descricao_pw(page, log, descricao: str) -> bool:

@@ -201,9 +201,15 @@ def _salvar_dados(numero_chamado: str, dados: dict) -> None:
     """
     p = _path(numero_chamado)
     p.parent.mkdir(parents=True, exist_ok=True)
-    # `p.name + ".tmp"` e nao `with_suffix`: o numero do chamado pode conter
-    # ponto, e `with_suffix` comeria o trecho depois dele.
-    tmp = p.parent / (p.name + ".tmp")
+    # `p.name + ".tmp.json"` e nao `with_suffix`: o numero do chamado pode conter
+    # ponto, e `with_suffix` comeria o trecho depois dele. Termina em ".json" (e
+    # nao ".tmp") de proposito: em desenvolvimento o `reflex run` observa a pasta
+    # do projeto INTEIRA para hot-reload e ignora extensoes conhecidas (json,
+    # txt, log...) mas NAO ignora ".tmp" — um arquivo terminado em ".tmp" aqui
+    # disparava o reload do backend a cada linha marcada, matando a thread do
+    # worker no meio do fluxo (era exatamente o que travava o Desmembramento
+    # logo apos "Inicializando checkpoint...", sem excecao nenhuma no log).
+    tmp = p.parent / (p.name + ".tmp.json")
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
     os.replace(tmp, p)  # atomico no Windows (mesmo volume)

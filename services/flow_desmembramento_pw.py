@@ -19,6 +19,7 @@ from playwright.sync_api import TimeoutError as PWTimeout
 from services.browser_pw import (
     _fazer_login_pw, _navegar_para_chamado_pw, _sessao_expirada_pw,
     _relogin_pw, _preencher_descricao_pw, _capturar_numero_filho_pw,
+    _numero_do_titulo,
 )
 from services.assyst_common import (
     _montar_descricao, _registrar_filho, _abrir_txt_filhos,
@@ -204,16 +205,22 @@ class FluxoDesmembramentoPW:
             return None
 
         # -- SALVAR --
+        # Titulo ANTES do clique: aqui a tela ja diz "Insira os detalhes do
+        # <servico>" (pos-'Continuar'), nao mais "em transito" como estava
+        # logo apos 'Salvar como Novo' -- ver docstring de
+        # `_capturar_numero_filho_pw` sobre por que isso nao repete o bug do
+        # Selenium (13/07/2026) que fez a espera por mudanca de titulo virar
+        # lenta e sem captura.
+        titulo_antes = _numero_do_titulo(self.page)
         try:
             self.page.click(_SEL_SALVAR, timeout=20000)
             self.log("Chamado salvo.", "success")
-            self.page.wait_for_timeout(2000)
         except Exception as e:
             self.log(f"Erro ao salvar: {e}", "error")
             return None
 
         # -- CAPTURAR NUMERO DO FILHO -- ("" nao e falha: o chamado foi salvo)
-        return _capturar_numero_filho_pw(self.page, self.log)
+        return _capturar_numero_filho_pw(self.page, self.log, titulo_antes)
 
     def _adicionar_bc(self, kb_function) -> bool:
         """Executa a funcao de KB e retorna True se sucesso.
