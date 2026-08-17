@@ -10,29 +10,39 @@ não escritos à mão: se a ordem mudar no catálogo, a tela acompanha em vez de
 
 import reflex as rx
 
-from state.requisicao_state import RequisicaoState, EXEMPLO_ORDEM, EXEMPLO_PREENCHIDO
+from state.requisicao_state import RequisicaoState, EXEMPLO_ORDEM, EXEMPLOS_PREENCHIDOS
 from components.log_console import log_console
 from components.layout import page_layout
 from components.form import coluna, ALTURA_TEXTAREA
 from components.botoes import botao_primario
 
 
-def _exemplo() -> rx.Component:
-    """O quadro de exemplo, abaixo da caixa: uma linha real preenchida.
+def _exemplos() -> rx.Component:
+    """UM quadro de exemplo, com as linhas (varios cenarios) empilhadas dentro —
+    cada linha ilustra um formato diferente de Item B (o campo que mais confunde:
+    tombo vs. valor comum). `EXEMPLOS_PREENCHIDOS` vem PRONTA (Python puro, nao
+    Var do Reflex), entao e so um loop normal, nao `rx.foreach`.
 
-    So os VALORES (decisao do usuario). Os nomes dos campos ficam no placeholder da
-    caixa. `white_space="pre"` para a linha NAO quebrar: em duas linhas ela pareceria
-    duas requisições — por isso o quadro rola na horizontal.
+    So os VALORES em cada linha (decisao do usuario). Os nomes dos campos ficam no
+    placeholder da caixa. `white_space="pre"` para cada linha NAO quebrar: em duas
+    linhas ela pareceria duas requisições — por isso o quadro rola na horizontal.
     """
     return rx.vstack(
         rx.text("Exemplo de preenchimento:", size="1", color=rx.color("gray", 11)),
         rx.box(
-            rx.text(
-                EXEMPLO_PREENCHIDO,
-                size="1",
-                font_family="monospace",
-                white_space="pre",
-                color=rx.color("gray", 12),
+            rx.vstack(
+                *[
+                    rx.text(
+                        linha,
+                        size="1",
+                        font_family="monospace",
+                        white_space="pre",
+                        color=rx.color("gray", 12),
+                    )
+                    for _, linha in EXEMPLOS_PREENCHIDOS
+                ],
+                spacing="2",
+                align_items="stretch",
             ),
             width="100%",
             overflow_x="auto",
@@ -66,7 +76,7 @@ def _conteudo_entrada() -> rx.Component:
             width="100%",
             font_family="monospace",
         ),
-        _exemplo(),
+        _exemplos(),
     )
 
 

@@ -27,6 +27,7 @@ Ver memoria: project_flow_requisicao, project_ckeditor_fix, project_checkpoint_s
 """
 
 import dataclasses
+import hashlib
 import time
 
 from services.assyst_common import _URL_REQUISICAO, _so_o_nome
@@ -34,8 +35,15 @@ from services.browser_pw import _aguardar_pagina_assentar, _preencher_descricao_
 from services.requisicao_campos import (
     CAMPOS, CHECKBOX, CKEDITOR, DATA_HORA, LOOKUP, ORDEM_COLUNAS, POR_CHAVE,
     SEPARADOR, TEXTO,
-    descobrir_prefixos, id_campo, id_campo_hora, id_dropdown, id_opcoes,
+    descobrir_prefixos, id_campo, id_campo_hora, id_dropdown,
+    id_lookup_dialog_cancelar, id_lookup_dialog_resultados_contagem,
+    id_lookup_dialog_usar_selecionado, id_opcoes,
 )
+
+# Valor de catalogo usado quando o Item B nao localiza o tombo digitado (ver
+# `_preencher_item_b`). Mesmo texto usado nos exemplos de `EXEMPLOS_PREENCHIDOS`
+# (state/requisicao_state.py) — e um valor real, ja confirmado na tela.
+_ITEM_B_NAO_LOCALIZADO = "IC NÃO LOCALIZADO"
 
 # Os `except Exception` deste modulo sao largos DE PROPOSITO, como nos demais
 # fluxos: o Playwright so levanta PWTimeout na espera estourada — strict mode,
@@ -522,6 +530,134 @@ def selecionar_lookup(page, log, prefixo, campo, valor: str) -> bool:
     return True
 
 
+def _preencher_item_b(page, log, prefixo, campo, valor: str) -> bool:
+    """Preenche 'Item B' — igual ao lookup comum, mas com uma rede de segurança
+    especifica deste campo.
+
+    NEM TODO VALOR DE ITEM B E UM TOMBO. Muitas vezes e so uma palavra normal, e
+    o esperado e ela SER encontrada pelo caminho comum (dropdown de sugestoes,
+    igual a qualquer outro lookup). Mas quando o valor E um tombo de patrimonio
+    (digitado como '*<numero>', ex. '*332255'), o campo entra num modo de busca
+    por CODIGO EXATO com TRES desfechos possiveis, confirmados em tela viva
+    (2026-08-13):
+      1. Acha um resultado exato -> RESOLVE SOZINHO, sem abrir nada (nem
+         dropdown, nem dialogo) — o campo so passa a mostrar o valor resolvido
+         (ex.: '*332255' vira 'C091SJURI332255'). Esse e o caminho mais comum
+         para um tombo que existe.
+      2. Nao acha nada -> abre um DIALOGO MODAL de busca avancada, sem nenhuma
+         relacao com o tombo digitado (o campo 'Nome' de dentro dele vem com o
+         coringa '*' por padrao — e uma busca generica da categoria, nao um
+         resultado filtrado). O contador `resultsCount` vem '0'. Nao ha nada
+         util pra automacao extrair dali: a saida e fechar e usar o valor de
+         catalogo `_ITEM_B_NAO_LOCALIZADO`.
+      3. (Defensivo, nao confirmado em tela — o botao existe pra isso) Acha UM
+         resultado mas nao resolve sozinho -> mesmo dialogo, `resultsCount=='1'`,
+         com a linha ja pre-selecionada (`automaticRowSelection`); clicar OK
+         aplica o resultado.
+
+    A DIGITACAO TEM QUE SER TECLA A TECLA (`tecla_a_tecla=True`), NAO o modo
+    rapido (`fill()`) usado nos demais lookups. Foi a causa raiz de um bug ja
+    visto ao vivo: com o modo rapido, um tombo EXISTENTE (*332255) abria o
+    dialogo mesmo achando 1 resultado — o `fill()` nao dispara os mesmos
+    eventos de teclado que o widget usa para reconhecer a busca por codigo
+    exato. Tecla a tecla reproduz o que o usuario faz na mao e resolve direto,
+    sem popup nenhum, exatamente como descrito por ele.
+
+    Reusa os pedacos do `selecionar_lookup`/`_digitar_e_listar` (escolha de
+    opcao, clique, confirmacao) em vez de duplicar aquele fluxo inteiro.
+    """
+    sel = id_campo(prefixo, campo)
+
+    # ATALHO: mesmo criterio do selecionar_lookup — se ja esta certo, nada a fazer.
+    atual = _valor_de(page, prefixo, campo)
+    if _mesmo_valor(atual, valor):
+        log(f"{campo.rotulo}: {atual} (ja preenchido pelo Assyst)", "success")
+        return True
+
+    if not _esperar_editavel(page, log, sel, campo):
+        return False
+
+    try:
+        caixa = page.locator(sel).first
+        caixa.wait_for(state="visible", timeout=15000)
+        _escrever(caixa, valor, tecla_a_tecla=True)
+        caixa.press("Tab")  # gatilho da busca, igual ao passo manual
+    except Exception as e:
+        log(f"Nao consegui digitar em '{campo.rotulo}': {e}", "error")
+        return False
+
+    sel_dropdown = id_dropdown(prefixo, campo)
+    sel_cancelar = id_lookup_dialog_cancelar(campo)
+    try:
+        page.wait_for_selector(f"{sel_dropdown}, {sel_cancelar}",
+                               state="visible", timeout=5000)
+    except Exception:
+        # NEM dropdown NEM dialogo apareceram — o caminho feliz do tombo: o
+        # widget resolveu sozinho. Confirma olhando o campo, em vez de supor.
+        gravado = _valor_gravado(page, sel, timeout_s=3.0)
+        if gravado:
+            log(f"{campo.rotulo}: {gravado} (resolvido direto, sem popup)", "success")
+            return True
+        log(f"'{campo.rotulo}': nem a lista de sugestoes, nem o dialogo de busca, "
+            f"nem um valor resolvido apareceram para {valor!r}.", "error")
+        return False
+
+    if page.locator(sel_cancelar).count() > 0 and page.locator(sel_cancelar).is_visible():
+        contagem = page.evaluate(
+            "id => { const el = document.getElementById(id);"
+            " return el ? el.textContent.trim() : null; }",
+            id_lookup_dialog_resultados_contagem())
+
+        if contagem == "1":
+            # Defensivo (nao reproduzido em tela): 1 resultado, mas o widget nao
+            # resolveu sozinho. A linha vem pre-selecionada; OK aplica ela.
+            log(f"'{campo.rotulo}': dialogo abriu com 1 resultado para {valor!r}; "
+                "usando o selecionado.", "info")
+            sel_ok = id_lookup_dialog_usar_selecionado(campo)
+            try:
+                page.locator(sel_ok).click(timeout=5000)
+            except Exception as e:
+                log(f"Nao consegui clicar em OK no dialogo do '{campo.rotulo}': {e}",
+                    "error")
+                return False
+            gravado = _valor_gravado(page, sel, timeout_s=4.0)
+            if not gravado:
+                log(f"'{campo.rotulo}': cliquei em OK mas o campo ficou vazio.", "error")
+                return False
+            log(f"{campo.rotulo}: {gravado}", "success")
+            return True
+
+        log(f"'{campo.rotulo}': {valor!r} nao foi localizado (dialogo com "
+            f"resultsCount={contagem!r}); fechando e usando "
+            f"'{_ITEM_B_NAO_LOCALIZADO}'.", "info")
+        try:
+            page.locator(sel_cancelar).click(timeout=5000)
+        except Exception as e:
+            log(f"Nao consegui fechar o dialogo de busca do '{campo.rotulo}': {e}",
+                "error")
+            return False
+        return selecionar_lookup(page, log, prefixo, campo, _ITEM_B_NAO_LOCALIZADO)
+
+    # Dropdown normal abriu (valor sem cara de tombo, ex. uma palavra): segue o
+    # caminho comum de escolha de sugestao.
+    opcoes = page.evaluate(_JS_OPCOES, id_opcoes(prefixo, campo)) or []
+    alvo = _escolher_opcao(opcoes, valor)
+    if alvo is None:
+        vistas = " | ".join(o["texto"] for o in opcoes[:8])
+        log(f"'{campo.rotulo}': {valor!r} nao identifica UM item. Opcoes na tela: "
+            f"{vistas}.", "error")
+        return False
+    if not _clicar_sugestao(page, log, campo, alvo):
+        return False
+    gravado = _valor_gravado(page, sel)
+    if not gravado:
+        log(f"'{campo.rotulo}': cliquei em {alvo['texto']!r} mas o campo ficou vazio.",
+            "error")
+        return False
+    log(f"{campo.rotulo}: {gravado}", "success")
+    return True
+
+
 def preencher_texto(page, log, prefixo, campo, valor: str) -> bool:
     """Input comum — aqui `fill()` basta (nao ha widget guardando o valor)."""
     try:
@@ -591,6 +727,10 @@ def preencher_data_hora(page, log, prefixo, campo, valor: str) -> bool:
 
 def _preencher_campo(page, log, prefixo, campo, valor: str) -> bool:
     """Despacha para o preenchedor certo conforme o TIPO do campo."""
+    if campo.chave == "item_b":
+        # Rede de seguranca do tombo (ver `_preencher_item_b`): so este campo,
+        # nao o LOOKUP generico — os outros 16 nao tem o dialogo modal.
+        return _preencher_item_b(page, log, prefixo, campo, valor)
     if campo.tipo == LOOKUP:
         return selecionar_lookup(page, log, prefixo, campo, valor)
     if campo.tipo == TEXTO:
@@ -666,6 +806,22 @@ def parse_entrada(texto: str, ordem=ORDEM_COLUNAS) -> list[dict[str, str]]:
         except ValueError as e:
             raise ValueError(f"Linha {n}: {e}") from e
     return requisicoes
+
+
+def _chave_checkpoint(texto: str) -> str:
+    """Gera a chave do checkpoint a partir do TEXTO COLADO inteiro.
+
+    A Requisição não tem chamado-pai pra ancorar a chave (ela cria do zero) —
+    por isso a chave é derivada do próprio conteúdo colado (hash, não o texto
+    puro: pode ter dezenas de linhas, e um nome de arquivo não aguenta isso).
+
+    CONSEQUÊNCIA ACEITA (decisão do usuário, 2026-08-13): mudar UMA linha do
+    bloco colado — mesmo só um espaço — vira "lote novo" pro checkpoint, sem
+    ligação com o anterior. Efeito colateral bom: como a chave já embute o
+    conteúdo, não existe o CASO 4 do Desmembramento (mesma chave, `total`
+    diferente) — aqui, conteúdo diferente É chave diferente, sempre.
+    """
+    return "req_" + hashlib.sha1(texto.strip().encode("utf-8")).hexdigest()[:16]
 
 
 def criar_requisicao(page, log, valores: dict[str, str],

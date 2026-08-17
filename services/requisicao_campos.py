@@ -209,6 +209,42 @@ def id_opcoes(prefixo: str, campo: Campo) -> str:
     return f"{_base_lookup(prefixo, campo)}_popup"
 
 
+def id_lookup_dialog_cancelar(campo: Campo) -> str:
+    """Botao Cancelar do dialogo de busca MODAL que alguns lookups abrem quando o
+    valor digitado nao e localizado (ex.: um tombo de patrimonio no Item B, que
+    normalmente e digitado como '*<numero>').
+
+    SEM PREFIXO — diferente de tudo mais neste modulo. Os campos do formulario
+    levam `ManageEventForm_<PREFIXO>_...`, mas o id deste botao vem do
+    `lookupProperty` do widget (`<sufixo>.lookup._cancelbutton`), que nao carrega
+    o prefixo do formulario. Contem um PONTO, por isso o seletor e por atributo
+    (`[id='...']`), nao `#id` (CSS exigiria escapar o ponto).
+
+    O id do DIALOGO em si (`components_LookupDialog_7` no HTML capturado) e
+    NUMERADO por ordem de criacao na pagina — muda a cada abertura e por isso NAO
+    pode ser usado como seletor. O botao Cancelar e a unica peca estavel.
+    """
+    return f"[id='{campo.sufixo}.lookup._cancelbutton']"
+
+
+def id_lookup_dialog_usar_selecionado(campo: Campo) -> str:
+    """Botao OK ('usar selecionado') do mesmo dialogo modal — ver
+    `id_lookup_dialog_cancelar` para o porque de nao levar prefixo."""
+    return f"[id='{campo.sufixo}.lookup._lookupUseSelectedButton']"
+
+
+def id_lookup_dialog_resultados_contagem() -> str:
+    """Id do contador de resultados dentro do dialogo modal ('resultsCount').
+
+    NAO leva o sufixo do campo — e um unico elemento fixo do widget de
+    dialogo, confirmado em tela viva (2026-08-13): mostra '0' quando a busca
+    por codigo exato (ex.: tombo '*332255') nao acha nada, e '1' quando acha
+    um so resultado exato (nesse caso o widget normalmente resolve sozinho,
+    sem nem abrir o dialogo — ver `_preencher_item_b` no flow).
+    """
+    return "resultsCount"
+
+
 def id_campo_hora(prefixo: str, campo: Campo) -> str:
     """Segunda metade de um campo DATA_HORA (o input de hora)."""
     if campo.tipo != DATA_HORA:

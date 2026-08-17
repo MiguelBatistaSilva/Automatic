@@ -69,8 +69,14 @@ def numero_filho(numero_chamado: str, index: int) -> str:
     return ""
 
 
-def marcar_concluido_linha(numero_chamado: str, index: int) -> None:
-    """Marca linha como concluida (chamado + BC adicionados)."""
+def marcar_concluido_linha(numero_chamado: str, index: int, **extra) -> None:
+    """Marca linha como concluida (chamado + BC adicionados).
+
+    `**extra` grava campos adicionais na linha (ex.: `numero=`, `usuario=`) —
+    para fluxos de uma fase so (sem SALVO intermediario, ex. Requisicao de
+    Servico) que precisam reconstruir a tabela de resultados inteira ao
+    retomar um lote, nao so saber "concluida sim/nao".
+    """
     dados = _carregar_dados(numero_chamado)
     if not dados:
         return
@@ -78,6 +84,7 @@ def marcar_concluido_linha(numero_chamado: str, index: int) -> None:
         if linha["index"] == index:
             linha["status"]       = STATUS_CONCLUIDO
             linha["concluido_em"] = _agora()
+            linha.update(extra)
             break
     todas = all(l["status"] == STATUS_CONCLUIDO for l in dados["linhas"])
     dados["concluido"]     = todas

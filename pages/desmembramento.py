@@ -24,9 +24,94 @@ def _ajuda_marcadores() -> rx.Component:
     )
 
 
+def _bloco_exemplo(rotulo: str, texto: str) -> rx.Component:
+    """Um bloco de exemplo (rótulo + caixa monoespaçada) — mesmo estilo usado nos
+    exemplos da Requisição de Serviço (`pages/requisicao.py::_exemplos`)."""
+    return rx.vstack(
+        rx.text(rotulo, size="1", weight="bold", color=rx.color("gray", 11)),
+        rx.box(
+            rx.text(
+                texto,
+                size="1",
+                font_family="monospace",
+                white_space="pre-wrap",
+                color=rx.color("gray", 12),
+            ),
+            width="100%",
+            padding="0.5em 0.7em",
+            border=f"1px solid {rx.color('gray', 6)}",
+            border_radius="6px",
+            background=rx.color("gray", 2),
+        ),
+        spacing="1",
+        width="100%",
+        align_items="stretch",
+    )
+
+
+def _exemplo_desmembramento() -> rx.Component:
+    """Pop-up com um exemplo completo: como o CSV e a Descrição se combinam via
+    marcadores `{{COLUNA}}`. Mesmo padrão do pop-up de regras das filas na
+    Análise de SLA (`pages/sla.py::_regras_das_filas`) — ícone de info ao lado
+    do rótulo onde a dúvida aparece (aqui, 'Descrição').
+    """
+    return rx.popover.root(
+        rx.popover.trigger(
+            rx.button(
+                rx.icon("info", size=14),
+                size="1",
+                variant="ghost",
+                color_scheme="gray",
+                cursor="pointer",
+                title="Exemplo de preenchimento",
+            ),
+        ),
+        rx.popover.content(
+            rx.vstack(
+                rx.text("Como o CSV vira a Descrição", weight="bold", size="2"),
+                rx.text(
+                    "A 1ª linha do CSV é o cabeçalho, com os nomes das colunas. "
+                    "Cada linha seguinte vira UM chamado filho. Na Descrição, os "
+                    "marcadores {{COLUNA}} são trocados pelo valor daquela coluna "
+                    "na linha do momento.",
+                    size="1",
+                    color=rx.color("gray", 11),
+                ),
+                _bloco_exemplo(
+                    "Dados de Iteração (CSV)",
+                    "Marca,Tombo\nPOSITIVO C6200,212150\nHP ProBook 450,198342",
+                ),
+                _bloco_exemplo(
+                    "Descrição",
+                    "Solicito troca do equipamento {{Marca}}, tombo {{Tombo}}, "
+                    "por apresentar defeito.",
+                ),
+                rx.text(
+                    "Vira, no 1º chamado filho:",
+                    size="1", color=rx.color("gray", 11), margin_top="0.2em",
+                ),
+                _bloco_exemplo(
+                    "Resultado (linha 1)",
+                    "Solicito troca do equipamento POSITIVO C6200, tombo 212150, "
+                    "por apresentar defeito.",
+                ),
+                spacing="2",
+                align_items="stretch",
+            ),
+            width="480px",
+            max_width="90vw",
+        ),
+    )
+
+
 def _campo_descricao() -> rx.Component:
     return coluna(
-        rx.text("Descrição", weight="bold"),
+        rx.hstack(
+            rx.text("Descrição", weight="bold"),
+            _exemplo_desmembramento(),
+            align="center",
+            spacing="2",
+        ),
         rx.text_area(
             value=DesmembramentoState.descricao,
             on_change=DesmembramentoState.set_descricao,

@@ -8,6 +8,18 @@ separados por `;` e na ordem de `ORDEM_COLUNAS`. Reusa `flow_requisicao_pw` inte
 Segue o padrão "resultado por item numa tabela" da Análise de SLA: o worker emite um
 `resultado` por linha, que `_on_evento` anexa em `resultados`.
 
+**CHECKPOINT (2026-08-13), automático, sem diálogo.** Reusa `services/checkpoint.py`
+(mesmo módulo do Desmembramento), com a chave derivada do HASH do texto colado
+(`_chave_checkpoint` em `flow_requisicao_pw.py`) — não há chamado-pai pra ancorar
+aqui. Ao clicar Iniciar, o `iniciar()` decide sozinho: lote novo (`inicializar`),
+lote com pendências (retoma — loga e pula as linhas já concluídas) ou lote já
+concluído (não abre o navegador). Decisão do usuário: **sem a mesma retentativa
+"na hora" que existe no Desmembramento** — se uma linha falhar mas o resto do lote
+continuar rodando, ela só é retentada numa PRÓXIMA execução (que também é
+automática, sem precisar de clique extra além de rodar de novo). Isso é
+intencional, pensando numa futura hospedagem em servidor: um checkpoint em disco
+sobrevive a reinícios de processo; um laço de retentativa em memória não.
+
 **A entrada é validada ANTES de abrir o navegador.** `parse_entrada` levanta com o
 número da linha; mostrar isso na hora é muito melhor do que descobrir no meio do lote,
 com metade dos chamados já criados — aqui cada execução ABRE CHAMADO DE VERDADE, e não
@@ -31,21 +43,42 @@ from state.flow_runner import FlowRunnerState
 ORDEM_ROTULOS: list[str] = [POR_CHAVE[c].rotulo for c in ORDEM_COLUNAS]
 EXEMPLO_ORDEM: str = f"{SEPARADOR} ".join(ORDEM_ROTULOS)
 
-# `EXEMPLO_PREENCHIDO` é uma linha de verdade, mostrada abaixo da caixa. Vai colada no
-# `;`, sem espaço depois, para o exemplo mostrar o formato mínimo — o `parse_linha` dá
-# `strip()` em cada valor, então espaço em volta do separador é indiferente.
-_EXEMPLO_VALORES: tuple[str, ...] = (
-    "905245",
-    "Fórum Clóvis Beviláqua",
-    "Troca de periférico",
-    "Usuário relatou que o mouse não funciona.",
-    "Notebook",
-    "IC NÃO LOCALIZADO",
-    "Instalação",   # Categoria: os valores usados sao "Instalação" e "Configuração"
-    "2N CATI FCB",
-    "Miguel Batista da Silva",
+# `EXEMPLOS_PREENCHIDOS` são linhas de verdade, mostradas abaixo da caixa — cada uma
+# ilustra um formato diferente de Item B (ver `_preencher_item_b` no flow), que é o
+# campo que mais confunde: pode ser um TOMBO de patrimônio (prefixo `*`, o Assyst
+# resolve sozinho quando acha) ou uma PALAVRA/valor de catálogo comum, digitado
+# igual aos outros lookups. Vão coladas no `;`, sem espaço depois, para o exemplo
+# mostrar o formato mínimo — o `parse_linha` dá `strip()` em cada valor, então
+# espaço em volta do separador é indiferente.
+# Categoria = "Configuração": "Instalação" NAO EXISTE no Assyst (confirmado pelo
+# usuário em 2026-08-13) — não trocar de volta sem validar de novo.
+_EXEMPLOS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Item B com tombo conhecido (o Assyst resolve sozinho, sem popup)", (
+        "905245",
+        "Fórum Clóvis Beviláqua",
+        "Troca de periférico",
+        "Usuário relatou que o computador funciona.",
+        "Computador",
+        "*332255",
+        "Configuração",
+        "2N CATI FCB",
+        "Miguel Batista da Silva",
+    )),
+    ("Item B sem tombo (tombo não localizado ou desconhecido)", (
+        "905245",
+        "Fórum Clóvis Beviláqua",
+        "Troca de periférico",
+        "Usuário relatou que o mouse não funciona.",
+        "Computador",
+        "Teclado / Mouse",
+        "Configuração",
+        "2N CATI FCB",
+        "Miguel Batista da Silva",
+    )),
 )
-EXEMPLO_PREENCHIDO: str = SEPARADOR.join(_EXEMPLO_VALORES)
+EXEMPLOS_PREENCHIDOS: list[tuple[str, str]] = [
+    (rotulo, SEPARADOR.join(valores)) for rotulo, valores in _EXEMPLOS
+]
 
 
 @dataclasses.dataclass
@@ -70,7 +103,12 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
     async def _on_evento(self, kind: str, payload):
         if kind == "resultado":
             async with self:
-                self.resultados = self.resultados + [payload]
+                # `sorted` por LINHA, nao por ordem de chegada: numa retomada as
+                # linhas ja concluidas (recarregadas do checkpoint) e as
+                # pendentes desta rodada podem nao ser contiguas — sem isso a
+                # linha retentada apareceria no fim da tabela, fora de ordem.
+                self.resultados = sorted(
+                    self.resultados + [payload], key=lambda r: int(r.linha))
 
     @rx.event(background=True)
     async def iniciar(self):
@@ -98,6 +136,60 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
                 self.rodando = False
             return
 
+        # -- CHECKPOINT — decide sozinho (sem dialogo): lote novo, retomar ou ja
+        # concluido. A chave vem do PROPRIO TEXTO colado (nao ha chamado-pai
+        # pra ancorar, diferente do Desmembramento) — ver `_chave_checkpoint`.
+        from services import checkpoint
+        from services.flow_requisicao_pw import _chave_checkpoint
+
+        total = len(requisicoes)
+        chave = _chave_checkpoint(texto)
+
+        if checkpoint.esta_corrompido(chave):
+            async with self:
+                self.logs = self.logs + [self._linha(
+                    "Checkpoint deste lote existe mas esta ilegivel. ABORTANDO: "
+                    "seguir daqui faria o fluxo tratar isto como lote novo e "
+                    f"RECRIAR requisições que já existem. Confira o arquivo em "
+                    f"data/checkpoints/{chave}.json antes de rodar de novo.",
+                    "error")]
+                self.rodando = False
+            return
+
+        # Linhas ja concluidas em execucoes anteriores (se houver checkpoint) —
+        # usadas tanto pra reconstruir a tabela quanto pra decidir o que falta.
+        concluidas_antes = sorted(
+            (l for l in checkpoint.status_linhas(chave)
+             if l["status"] == checkpoint.STATUS_CONCLUIDO),
+            key=lambda l: l["index"],
+        )
+        resultados_antigos = [
+            RequisicaoResultado(
+                linha=str(l["index"] + 1), usuario=l.get("usuario", ""),
+                numero=l.get("numero", ""), status="✓ Criada", erro=False,
+            )
+            for l in concluidas_antes
+        ]
+
+        if checkpoint.foi_concluido(chave):
+            async with self:
+                self.resultados = resultados_antigos
+                self.logs = self.logs + [self._linha(
+                    f"Este lote já foi concluído anteriormente ({total}/{total}). "
+                    "Nada a fazer — mude o texto colado para criar um lote novo.",
+                    "info")]
+                self.rodando = False
+            return
+
+        if checkpoint.existe_pendente(chave):
+            async with self:
+                self.resultados = resultados_antigos
+                self.logs = self.logs + [self._linha(
+                    f"Retomando lote anterior: {len(concluidas_antes)} de {total} "
+                    "já concluídas.", "info")]
+        else:
+            checkpoint.inicializar(chave, total)
+
         from services import credenciais
         matricula, senha = credenciais.carregar()
         if not matricula or not senha:
@@ -111,19 +203,26 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
         def worker(log, emit):
             from services.browser_pw import NavegadorPW, _fazer_login_pw
             from services.flow_requisicao_pw import criar_requisicao
+            from services import checkpoint as cp
 
-            total = len(requisicoes)
-            log(f"Iniciando {total} requisição(ões)...", "status")
+            # So as PENDENTES (0-based no checkpoint, 1-based aqui) — as ja
+            # concluidas em rodadas anteriores nao sao retocadas.
+            pendentes = [
+                (i, valores) for i, valores in enumerate(requisicoes, 1)
+                if cp.status_linha(chave, i - 1) != cp.STATUS_CONCLUIDO
+            ]
+            log(f"Iniciando {len(pendentes)} de {total} requisição(ões) "
+                "pendente(s)...", "status")
 
             with NavegadorPW(log) as page:
                 if not _fazer_login_pw(page, matricula, senha, log):
-                    for i, valores in enumerate(requisicoes, 1):
+                    for i, valores in pendentes:
                         emit("resultado", RequisicaoResultado(
                             linha=str(i), usuario=valores.get("usuario_afetado", "--"),
                             numero="--", status="✗ Falha no login", erro=True))
                     return
 
-                for i, valores in enumerate(requisicoes, 1):
+                for i, valores in pendentes:
                     # O que o operador COLOU (a matricula). Serve para o log de
                     # progresso e como reserva na tabela: o nome so existe depois
                     # que o type-ahead resolve a matricula na tela.
@@ -141,6 +240,11 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
                     else:
                         status, erro, mostrado = "✓ Criada", False, resultado.numero
                         usuario = resultado.usuario
+                        # So aqui o checkpoint sabe que a linha esta feita — se
+                        # a execucao morrer logo depois, a proxima rodada nao
+                        # recria esta requisicao.
+                        cp.marcar_concluido_linha(
+                            chave, i - 1, numero=resultado.numero, usuario=usuario)
 
                     emit("resultado", RequisicaoResultado(
                         linha=str(i), usuario=usuario, numero=mostrado,
