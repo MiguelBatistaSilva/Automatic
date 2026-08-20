@@ -44,9 +44,11 @@ LOG_FILE = BASE_DIR / "_update.log"
 # Pastas que NUNCA são copiadas (nem no update, nem no backup): pesadas ou de runtime.
 EXCLUIR_DIRS = [".venv", ".web", ".states", "_backup", ".git", "__pycache__"]
 # Arquivos protegidos de sobrescrita:
-#   iniciar_automatic.bat  -> sobrescrever um .bat EM EXECUÇÃO corrompe o Windows
-#   _update.log             -> nosso próprio log
-EXCLUIR_FILES = ["iniciar_automatic.bat", "_update.log"]
+#   iniciar_automatic.bat / iniciar_bot.bat -> sobrescrever um .bat EM EXECUÇÃO
+#     corrompe o Windows; o bot roda pelo iniciar_bot.bat numa máquina à parte,
+#     que pode estar de pé na hora em que uma atualização é aplicada pela tela.
+#   _update.log -> nosso próprio log
+EXCLUIR_FILES = ["iniciar_automatic.bat", "iniciar_bot.bat", "_update.log"]
 
 
 def log(msg: str) -> None:
