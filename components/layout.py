@@ -8,20 +8,30 @@ reativamente pela própria sidebar (via router), então não há mais parâmetro
 import reflex as rx
 
 from components.sidebar import sidebar
+from components.topbar import topbar
 
 
 def page_layout(content: rx.Component) -> rx.Component:
     return rx.hstack(
         sidebar(),
-        rx.box(
-            content,
-            flex="1",
+        rx.vstack(
+            topbar(),
+            rx.box(
+                content,
+                width="100%",
+                min_width="0",
+                flex="1",
+                overflow_y="auto",
+                background_color=rx.color("gray", 1),
+                padding="32px 40px",
+            ),
+            spacing="0",
+            align="start",
             width="100%",
-            min_width="0",
             height="100vh",
-            overflow_y="auto",
-            background_color=rx.color("gray", 1),
-            padding="32px 40px",
+            flex="1",
+            min_width="0",
+            overflow="hidden",
         ),
         spacing="0",
         align="start",

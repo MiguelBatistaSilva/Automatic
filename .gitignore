@@ -198,8 +198,16 @@ pyrightconfig.json
 # ATENCAO: ignorar so o que e por maquina, NAO a pasta data/ inteira —
 # data/kb_configs.json e versionado de proposito.
 data/credenciais.json
+data/credenciais_ponto.json
+data/credencial_bot.json
+data/usuarios_bot.json
 data/checkpoints/
 data/filhos_*.txt
+
+# Auto-atualizador (atualizar.py): backup local antes de trocar os arquivos, e
+# o log de cada tentativa. Gerados na maquina, nao fazem sentido no repositorio.
+_backup/
+_update.log
 
 # Scripts de teste manual, nao versionados.
 teste_*.py
