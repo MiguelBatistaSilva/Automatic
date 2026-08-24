@@ -2,6 +2,11 @@
 .web
 assets/external/
 .states
+
+# Outro projeto seu, que mora dentro desta pasta mas nao tem nada a ver com o
+# Automatic (tem o proprio .git). Sem isto o Git tenta versiona-lo como gitlink
+# na primeira vez que alguem rodar 'git add' na raiz inteira.
+patrimonio-os/
 # Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python
 
