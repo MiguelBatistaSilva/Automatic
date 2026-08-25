@@ -15,6 +15,7 @@ lá para o porquê dessa separação.
 import json
 import shutil
 import tempfile
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -59,10 +60,17 @@ def baixar_e_preparar(download_url: str, versao_alvo: str, log) -> bool:
     log(f"Baixando versão {versao_alvo}...", "info")
     zip_path = None
     try:
-        r = requests.get(download_url, timeout=120, stream=True)
-        r.raise_for_status()
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as f:
-            for chunk in r.iter_content(chunk_size=256 * 1024):
+        # urllib (não requests) de propósito: em rede com inspeção TLS
+        # corporativa, o certificado raiz costuma já estar confiável no
+        # repositório do Windows, mas não no bundle do certifi que o
+        # `requests` usa — urllib valida contra o do Windows.
+        req = urllib.request.Request(download_url, headers={"User-Agent": "Automatic-Updater"})
+        with urllib.request.urlopen(req, timeout=120) as resp, \
+                tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as f:
+            while True:
+                chunk = resp.read(256 * 1024)
+                if not chunk:
+                    break
                 f.write(chunk)
             zip_path = Path(f.name)
     except Exception as e:
