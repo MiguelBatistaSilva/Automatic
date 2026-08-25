@@ -2,7 +2,7 @@
 senior/page.py — Tela "Ponto" (Senior HCM).
 
 SEM entrada em components/sidebar.py NAV_ITEMS de propósito: automação à parte,
-site e credencial diferentes do Assyst. Só acessível digitando /ponto no
+site e credencial diferentes do Assyst. Só acessível digitando /senior no
 navegador. O back-end está em senior/state.py.
 """
 

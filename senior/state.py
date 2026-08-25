@@ -3,7 +3,7 @@ senior/state.py — Back-end da página Ponto (Senior HCM).
 
 Site e credencial à parte do Assyst — ver senior/credenciais.py e
 senior/service.py. Página SEM entrada na sidebar (components/sidebar.py
-NAV_ITEMS): só acessível digitando a rota /ponto no navegador.
+NAV_ITEMS): só acessível digitando a rota /senior no navegador.
 
 Laço de agendamento espelha o padrão de state/atendimento_state.py (poll a cada
 ~20s, fatiado em 1s para o "Parar" responder rápido) — só que aqui os horários são

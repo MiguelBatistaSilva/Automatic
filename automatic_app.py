@@ -9,7 +9,7 @@ Credenciais e Sobre NÃO são rotas: são diálogos (pop-up) montados na sidebar
 ver `components/dialog_credenciais.py` e `components/dialog_sobre.py`.
 `senior/` é à parte: automação da Senior HCM (Ponto), site/credencial diferentes
 do Assyst — page/state/service/credenciais próprios, sem entrada na sidebar
-(components/sidebar.py NAV_ITEMS), só a rota /ponto mesmo.
+(components/sidebar.py NAV_ITEMS), só a rota /senior mesmo.
 Atualização (ícone na topbar, components/topbar.py — acima do conteúdo, separada
 da sidebar) também não é rota: verificar/baixar rodam aqui dentro
 (state/update_state.py), mas quem troca os arquivos de fato é `atualizar.py` na
@@ -73,7 +73,7 @@ app.add_page(
 )
 app.add_page(
     ponto_page,
-    route="/ponto",
+    route="/senior",
     title="Automatic — Ponto",
     on_load=PontoState.on_load,
 )
