@@ -110,8 +110,18 @@ class UpdateState(rx.State):
         self.status_cor = "#0891B2"
 
         pid_atual = os.getpid()
+        # "cmd /c start" (não Popen direto) de propósito: atualizar.py precisa
+        # sobreviver ao `taskkill /T` que ELE MESMO dispara em cima de
+        # pid_atual. Um Popen direto registra atualizar.py como filho de
+        # pid_atual, e /T mata a árvore inteira — incluindo o próprio
+        # atualizar.py antes de ele conseguir reabrir o app (comprovado com
+        # reprodução isolada: o processo morre logo após o taskkill, nunca
+        # loga além disso). O "start" cria um cmd.exe intermediário que
+        # encerra na hora, então quando o taskkill roda, esse elo já sumiu do
+        # retrato de processos vivos e não dá pra descer até atualizar.py.
         subprocess.Popen(
-            [sys.executable, str(PROJECT_ROOT / "atualizar.py"), "--reiniciar", str(pid_atual)],
+            ["cmd", "/c", "start", "", sys.executable,
+             str(PROJECT_ROOT / "atualizar.py"), "--reiniciar", str(pid_atual)],
             cwd=str(PROJECT_ROOT),
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
             stdout=subprocess.DEVNULL,

@@ -1,0 +1,15 @@
+# Padrão do repositório: LF. Bate com o que o zip do GitHub sempre traz (é
+# dele que o auto-updater copia por cima do projeto via robocopy, fora do
+# controle do Git) — sem isso, cada atualização aplicada troca CRLF por LF
+# em toda a árvore e o `git status` acusa "modificado" em tudo sem diferença
+# real de conteúdo.
+* text=auto eol=lf
+
+# Exceção: os .bat SÓ funcionam com CRLF — com LF o cmd.exe engasga nos
+# comentários e o único ponto de entrada do app não sobe (ver
+# iniciar_automatic.bat / iniciar_bot.bat).
+*.bat text eol=crlf
+
+# Binários: nunca normalizar.
+*.ico binary
+*.exe binary
