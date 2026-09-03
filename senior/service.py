@@ -32,6 +32,8 @@ SELETOR_BOTAO_PONTO = "button:has-text('Registrar Ponto')"
 
 TIMEOUT_SEGUNDOS = 60
 TOLERANCIA_MINUTOS = 1
+TENTATIVAS_PONTO = 3
+ESPERA_ENTRE_TENTATIVAS_SEGUNDOS = 15
 
 
 def validar_horario(texto: str):
@@ -150,11 +152,29 @@ def abrir_navegador(p, headless: bool):
 
 
 def testar(usuario: str, senha: str, log, clicar: bool, headless: bool = False) -> bool:
-    """Bate (ou simula) o ponto uma vez, agora."""
+    """Bate (ou simula) o ponto agora, tentando novamente em caso de falha
+    (ate TENTATIVAS_PONTO vezes, sem fechar o navegador entre elas — login/captcha
+    ja resolvidos continuam valendo)."""
     with sync_playwright() as p:
         contexto, pagina = abrir_navegador(p, headless)
         try:
-            return bater_ponto(pagina, usuario, senha, log, clicar=clicar)
+            for tentativa in range(1, TENTATIVAS_PONTO + 1):
+                try:
+                    if bater_ponto(pagina, usuario, senha, log, clicar=clicar):
+                        return True
+                except Exception as e:
+                    log(f"Erro na tentativa {tentativa}: {e}", "error")
+
+                if tentativa < TENTATIVAS_PONTO:
+                    log(
+                        f"Tentativa {tentativa} de {TENTATIVAS_PONTO} falhou. "
+                        f"Tentando novamente em {ESPERA_ENTRE_TENTATIVAS_SEGUNDOS}s...",
+                        "error",
+                    )
+                    pagina.wait_for_timeout(ESPERA_ENTRE_TENTATIVAS_SEGUNDOS * 1000)
+
+            log(f"Falha ao bater o ponto apos {TENTATIVAS_PONTO} tentativas.", "error")
+            return False
         finally:
             contexto.close()
 

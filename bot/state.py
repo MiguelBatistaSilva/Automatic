@@ -1,12 +1,17 @@
 """
 bot/state.py — Back-end do diálogo "Telegram" (menu de opções).
 
-Junta as três coisas que `cadastrar.py` fazia por linha de comando: token do
-bot (@BotFather), a credencial única do bot para o Assyst e a whitelist de
-chat_ids. Motivo de virar tela: se quem normalmente cadastra não puder, outro
-colega faz na própria máquina, sem precisar abrir terminal.
+Token do bot (@BotFather) e a whitelist de chat_ids. Motivo de virar tela: se
+quem normalmente cadastra não puder, outro colega faz na própria máquina, sem
+precisar abrir terminal.
 
-Cofre e arquivos são os do BOT (`bot/credencial_servico.py`, `bot/usuarios.py`
+NÃO cadastra mais credencial do Assyst aqui — desde 2026-08-26 cada pessoa
+cadastra a PRÓPRIA matrícula/senha direto no bot, com /credencial (ver
+`bot/commands/cmd_credencial.py`). Fazia sentido ter uma tela pra isso quando havia UMA
+credencial só para todo mundo; com credencial por pessoa, quem cadastra tem
+que ser a própria pessoa, então só faz sentido pelo chat dela com o bot.
+
+Cofre e arquivos são os do BOT (`bot/services/credencial_servico.py`, `bot/usuarios.py`
 — serviço "Automatic-Bot" no keyring), de propósito separados do
 `CredenciaisState` (cofre "Automatic", a matrícula pessoal de quem usa o app).
 Misturar os dois aqui recriaria o risco que motivou separar os cofres.
@@ -21,11 +26,6 @@ class TelegramState(rx.State):
     token: str = ""
     mostrar_token: bool = False
     tem_token: bool = False
-
-    matricula: str = ""
-    senha: str = ""
-    mostrar_senha: bool = False
-    tem_credencial: bool = False
 
     usuarios: list[tuple[str, str]] = []
     novo_chat_id: str = ""
@@ -42,12 +42,6 @@ class TelegramState(rx.State):
         self.token = credencial_servico.carregar_token()
         self.mostrar_token = False
         self.tem_token = bool(self.token)
-
-        mat, senha = credencial_servico.carregar()
-        self.matricula = mat
-        self.senha = senha
-        self.mostrar_senha = False
-        self.tem_credencial = bool(mat)
 
         self.usuarios = sorted(usuarios.listar().items())
         self.novo_chat_id = ""
@@ -68,18 +62,6 @@ class TelegramState(rx.State):
     @rx.event
     def toggle_mostrar_token(self, v: bool):
         self.mostrar_token = v
-
-    @rx.event
-    def set_matricula(self, v: str):
-        self.matricula = v
-
-    @rx.event
-    def set_senha(self, v: str):
-        self.senha = v
-
-    @rx.event
-    def toggle_mostrar_senha(self, v: bool):
-        self.mostrar_senha = v
 
     @rx.event
     def set_novo_chat_id(self, v: str):
@@ -105,24 +87,6 @@ class TelegramState(rx.State):
             return
         self.tem_token = True
         self.status = "✓ Token salvo com sucesso."
-        self.status_cor = "#16A34A"
-
-    @rx.event
-    def salvar_credencial(self):
-        from bot import credencial_servico
-
-        try:
-            credencial_servico.salvar(self.matricula, self.senha)
-        except ValueError as e:
-            self.status = str(e)
-            self.status_cor = "#DC2626"
-            return
-        except Exception as e:
-            self.status = f"Não foi possível gravar no Cofre do Windows: {e}"
-            self.status_cor = "#DC2626"
-            return
-        self.tem_credencial = True
-        self.status = "✓ Credencial do bot salva com sucesso."
         self.status_cor = "#16A34A"
 
     @rx.event

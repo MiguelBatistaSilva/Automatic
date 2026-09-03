@@ -17,8 +17,8 @@ import asyncio
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from bot import credencial_servico, desmembramento_service
 from bot.comum import MAX_CHAMADOS, WIZARD, liberado, log_bot, quem
+from bot.services import credencial_servico, desmembramento_service
 
 
 def _teclado_kbs(kbs) -> InlineKeyboardMarkup:
@@ -484,12 +484,12 @@ async def confirmar_desmembrar(update: Update, context: ContextTypes.DEFAULT_TYP
 async def _rodar_desmembrar(context, chat_id, estado) -> None:
     WIZARD.pop(chat_id, None)
 
-    matricula, senha = credencial_servico.carregar()
+    matricula, senha = credencial_servico.carregar_de(chat_id)
     if not senha:
         await context.bot.send_message(
             chat_id,
-            "A credencial do bot ainda não foi configurada nesta máquina "
-            "(menu Opções -> Telegram, no app).",
+            "Você ainda não cadastrou sua credencial do Assyst. Mande "
+            "/credencial primeiro.",
         )
         return
 
@@ -547,12 +547,12 @@ async def _rodar(context, chat_id, estado) -> None:
     """Executa o modo So Base, mostrando o andamento e relatando no fim."""
     WIZARD.pop(chat_id, None)
 
-    matricula, senha = credencial_servico.carregar()
+    matricula, senha = credencial_servico.carregar_de(chat_id)
     if not senha:
         await context.bot.send_message(
             chat_id,
-            "A credencial do bot ainda não foi configurada nesta máquina "
-            "(menu Opções -> Telegram, no app).",
+            "Você ainda não cadastrou sua credencial do Assyst. Mande "
+            "/credencial primeiro.",
         )
         return
 

@@ -25,6 +25,7 @@ class NavItem:
 
 NAV_ITEMS: list[NavItem] = [
     NavItem("file-plus", "Requisição de Serviço", "/requisicao"),
+    NavItem("list-checks", "Presets da Requisição", "/requisicao-presets"),
     NavItem("circle-play", "Iniciar Atendimento", "/atendimento"),
     NavItem("copy", "Desmembramento", "/desmembramento"),
     NavItem("timer", "Análise de SLA", "/sla"),

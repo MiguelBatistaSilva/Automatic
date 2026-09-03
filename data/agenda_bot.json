@@ -1,0 +1,32 @@
+[
+  {
+    "id": "1788260430793",
+    "chat_id": 1070692564,
+    "quem": "Miguel",
+    "chamado": "R2445487",
+    "quando_ts": 1788262200.0,
+    "quando_label": "01/09/2026 08:30",
+    "status": "concluido",
+    "detalhe": ""
+  },
+  {
+    "id": "1788266959641",
+    "chat_id": 1070692564,
+    "quem": "Miguel",
+    "chamado": "S2443736",
+    "quando_ts": 1788267600.0,
+    "quando_label": "01/09/2026 10:00",
+    "status": "erro",
+    "detalhe": "O fluxo nao chegou ao fim"
+  },
+  {
+    "id": "1788267855299",
+    "chat_id": 1070692564,
+    "quem": "Miguel",
+    "chamado": "S2443736",
+    "quando_ts": 1788267900.0,
+    "quando_label": "01/09/2026 10:05",
+    "status": "erro",
+    "detalhe": "O fluxo nao chegou ao fim"
+  }
+]

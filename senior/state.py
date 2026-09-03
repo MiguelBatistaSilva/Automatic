@@ -54,12 +54,15 @@ class PontoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/rodando p
 
     @rx.event
     def on_load(self):
-        from senior import credenciais
+        from senior import credenciais, horarios
 
         usuario, senha = credenciais.carregar()
         self.usuario = usuario
         self.senha = senha
         self.tem_credencial = bool(usuario)
+
+        h1, h2, h3, h4 = horarios.carregar()
+        self.horario1, self.horario2, self.horario3, self.horario4 = h1, h2, h3, h4
 
     @rx.event
     def set_usuario(self, v: str):
@@ -149,6 +152,7 @@ class PontoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/rodando p
     @rx.event(background=True)
     async def armar(self):
         from senior.service import validar_horario
+        from senior import horarios as horarios_service
 
         async with self:
             if self.armado:
@@ -171,6 +175,7 @@ class PontoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/rodando p
                 self.logs = self.logs + [self._linha("Informe ao menos um horario.", "error")]
                 return
             horarios.sort()
+            horarios_service.salvar(self.horario1, self.horario2, self.horario3, self.horario4)
 
             self.agenda = [
                 HorarioItem(label=h.strftime("%H:%M"), quando_ts=h.timestamp(), status=STATUS_PENDENTE)

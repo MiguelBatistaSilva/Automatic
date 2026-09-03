@@ -8,18 +8,28 @@ Este arquivo NAO tem regra de fluxo. Ele so:
   - sobe o laco da agenda.
 
 Cada fluxo mora no seu proprio modulo:
-    bot/cmd_sla.py             /sla
-    bot/cmd_atendimento.py     /atendimento, /agenda
-    bot/cmd_desmembramento.py  /base
+    bot/commands/cmd_credencial.py      /credencial
+    bot/commands/cmd_sla.py             /sla
+    bot/commands/cmd_minhafila.py       /minhafila
+    bot/commands/cmd_atendimento.py     /atendimento, /agenda
+    bot/commands/cmd_informacao.py      /informacao
+    bot/commands/cmd_fornecedor.py      /fornecedor
+    bot/commands/cmd_usuario.py         /infousuario
+    bot/commands/cmd_desmembramento.py  /base
+
+Desde 2026-08-26 a credencial do Assyst NAO e mais unica: cada chat_id loga
+com a PROPRIA matricula/senha (ver bot/services/credencial_servico.py). O /credencial
+e o cadastro; os demais fluxos so leem o que ja foi cadastrado.
 
 Rodar:
     python -m bot.main             producao — tudo vale
     python -m bot.main --teste     nada e salvo no Assyst
     python -m bot.main --simulado  o /sla tambem devolve dados falsos
 
-`--teste` deixa Atendimento e Requisicao preencherem tudo e pararem antes de
-salvar. O /sla continua real: e leitura, nao ha o que proteger. O /desmembrar
-NAO e coberto — aquele fluxo ainda nao tem modo de teste (ver LEIA-ME.md).
+`--teste` deixa Atendimento, Informacao, Fornecedor, Usuario e Requisicao
+preencherem tudo e pararem antes de salvar. O /sla continua real: e leitura,
+nao ha o que proteger. O /desmembrar NAO e coberto — aquele fluxo ainda nao
+tem modo de teste (ver LEIA-ME.md).
 """
 import asyncio
 import os
@@ -33,6 +43,9 @@ import sys
 if "--teste" in sys.argv:
     os.environ["BOT_ATENDIMENTO_TESTE"] = "1"
     os.environ["BOT_REQUISICAO_TESTE"] = "1"
+    os.environ["BOT_INFORMACAO_TESTE"] = "1"
+    os.environ["BOT_FORNECEDOR_TESTE"] = "1"
+    os.environ["BOT_USUARIO_TESTE"] = "1"
 if "--simulado" in sys.argv:
     os.environ["BOT_SIMULADO"] = "1"
 
@@ -46,15 +59,23 @@ from telegram.ext import (  # noqa: E402
     filters,
 )
 
-from bot import (  # noqa: E402
+from bot.commands import (  # noqa: E402
     cmd_atendimento,
+    cmd_credencial,
     cmd_desmembramento,
+    cmd_fornecedor,
+    cmd_informacao,
+    cmd_minhafila,
     cmd_requisicao,
     cmd_sla,
-    credencial_servico,
+    cmd_usuario,
 )
+from bot.services import credencial_servico  # noqa: E402
 from bot.comum import ATENDIMENTO_TESTE, SIMULADO, WIZARD, liberado, log_bot  # noqa: E402
-from bot.cmd_requisicao import REQUISICAO_TESTE  # noqa: E402
+from bot.commands.cmd_fornecedor import FORNECEDOR_TESTE  # noqa: E402
+from bot.commands.cmd_informacao import INFORMACAO_TESTE  # noqa: E402
+from bot.commands.cmd_requisicao import REQUISICAO_TESTE  # noqa: E402
+from bot.commands.cmd_usuario import USUARIO_TESTE  # noqa: E402
 
 
 # ---------------------------------------------------------------- /start
@@ -64,7 +85,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     avisos = []
-    if ATENDIMENTO_TESTE or REQUISICAO_TESTE:
+    if (ATENDIMENTO_TESTE or REQUISICAO_TESTE or INFORMACAO_TESTE
+            or FORNECEDOR_TESTE or USUARIO_TESTE):
         avisos.append("⚠️ MODO TESTE — nada será salvo no Assyst.")
     if SIMULADO:
         avisos.append("⚠️ O /sla está devolvendo dados falsos.")
@@ -76,12 +98,19 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "\n"
         "CONSULTA\n"
         "/sla — SLA de um ou mais chamados\n"
+        "/minhafila — lista os chamados da sua fila\n"
+        "\n"
+        "CONFIGURAÇÃO\n"
+        "/credencial — cadastra sua matrícula/senha do Assyst (uma vez só)\n"
         "\n"
         "EXECUÇÃO\n"
         "/atendimento — agenda o início de um atendimento\n"
+        "/informacao — adiciona um texto em um ou mais chamados\n"
+        "/fornecedor — marca Aguardando Info do Fornecedor em um ou mais chamados\n"
+        "/infousuario — marca Aguardando Info do Usuário * em um ou mais chamados\n"
         "/base — aplica uma Base de Conhecimento\n"
         "/desmembrar — cria os filhos a partir de um CSV\n"
-        "/requisicao — abre requisições do zero\n"
+        "/requisicao — abre uma requisição do zero, passo a passo\n"
         "\n"
         "/agenda — o que está agendado\n"
         "/cancelar — aborta a pergunta atual"
@@ -107,16 +136,21 @@ async def cmd_cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 _WIZARDS = {
     "atendimento": cmd_atendimento.responder,
     "base": cmd_desmembramento.responder,
+    "credencial": cmd_credencial.responder,
     "desmembrar": cmd_desmembramento.responder_desmembrar,
+    "fornecedor": cmd_fornecedor.responder,
+    "informacao": cmd_informacao.responder,
     "requisicao": cmd_requisicao.responder,
     "sla": cmd_sla.responder,
+    "usuario": cmd_usuario.responder,
 }
 
 # Quais fluxos aceitam arquivo, e quem trata. Fluxo que nao esta aqui ignora
 # anexos — mandar planilha no meio de um /atendimento nao deve fazer nada.
+# /requisicao NAO esta mais aqui: desde 2026-08-27 e passo a passo, um
+# chamado por vez, sem colar arquivo (ver bot/cmd_requisicao.py).
 _DOCUMENTOS = {
     "desmembrar": cmd_desmembramento.receber_documento,
-    "requisicao": cmd_requisicao.receber_documento,
 }
 
 
@@ -133,7 +167,8 @@ async def texto_solto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             return
 
     await update.message.reply_text(
-        "Não entendi. Use /sla, /atendimento, /base, /desmembrar, "
+        "Não entendi. Use /credencial, /sla, /minhafila, /atendimento, "
+        "/informacao, /fornecedor, /infousuario, /base, /desmembrar, "
         "/requisicao ou /agenda."
     )
 
@@ -150,7 +185,7 @@ async def documento_solto(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     await update.message.reply_text(
-        "Não estou esperando arquivo agora. Use /desmembrar ou /requisicao."
+        "Não estou esperando arquivo agora. Use /desmembrar."
     )
 
 
@@ -186,8 +221,13 @@ def main() -> None:
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("cancelar", cmd_cancelar))
     app.add_handler(CommandHandler("sla", cmd_sla.cmd_sla))
+    app.add_handler(CommandHandler("minhafila", cmd_minhafila.cmd_minhafila))
     app.add_handler(CommandHandler("atendimento", cmd_atendimento.cmd_atendimento))
     app.add_handler(CommandHandler("agenda", cmd_atendimento.cmd_agenda))
+    app.add_handler(CommandHandler("informacao", cmd_informacao.cmd_informacao))
+    app.add_handler(CommandHandler("fornecedor", cmd_fornecedor.cmd_fornecedor))
+    app.add_handler(CommandHandler("infousuario", cmd_usuario.cmd_usuario))
+    app.add_handler(CommandHandler("credencial", cmd_credencial.cmd_credencial))
     app.add_handler(CommandHandler("base", cmd_desmembramento.cmd_base))
     app.add_handler(CommandHandler("desmembrar", cmd_desmembramento.cmd_desmembrar))
     app.add_handler(CommandHandler("requisicao", cmd_requisicao.cmd_requisicao))
@@ -204,7 +244,12 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(cmd_desmembramento.decidir_checkpoint_desmembrar, pattern=r"^ds:cp:"))
     app.add_handler(CallbackQueryHandler(cmd_desmembramento.confirmar_desmembrar, pattern=r"^ds:(ok|nao)$"))
 
+    app.add_handler(CallbackQueryHandler(cmd_requisicao.escolher_valor, pattern=r"^rq:v:\d+$"))
+    app.add_handler(CallbackQueryHandler(cmd_requisicao.pular, pattern=r"^rq:pular$"))
     app.add_handler(CallbackQueryHandler(cmd_requisicao.confirmar, pattern=r"^rq:(ok|nao)$"))
+    app.add_handler(CallbackQueryHandler(cmd_informacao.confirmar, pattern=r"^in:(ok|nao)$"))
+    app.add_handler(CallbackQueryHandler(cmd_fornecedor.confirmar, pattern=r"^fn:(ok|nao)$"))
+    app.add_handler(CallbackQueryHandler(cmd_usuario.confirmar, pattern=r"^us:(ok|nao)$"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, texto_solto))
     app.add_handler(MessageHandler(filters.Document.ALL, documento_solto))
@@ -214,6 +259,12 @@ def main() -> None:
         modos.append("SLA SIMULADO")
     if ATENDIMENTO_TESTE:
         modos.append("ATENDIMENTO TESTE")
+    if INFORMACAO_TESTE:
+        modos.append("INFORMACAO TESTE")
+    if FORNECEDOR_TESTE:
+        modos.append("FORNECEDOR TESTE")
+    if USUARIO_TESTE:
+        modos.append("USUARIO TESTE")
     log_bot.info("Bot no ar%s.", f" ({', '.join(modos)})" if modos else "")
     app.run_polling()
 

@@ -50,5 +50,17 @@
   {
     "keyword": "POSITIVO C810",
     "nome_artigo": "BC – Procedimento de Instalação do microcomputador Positivo C810 / C820 / C6200"
+  },
+  {
+    "keyword": "ativação de ponto",
+    "nome_artigo": "BC - Ativação de ponto de rede"
+  },
+  {
+    "keyword": "tarefa de demanda",
+    "nome_artigo": "BC - Preechimento do Termo de Demanda"
+  },
+  {
+    "keyword": "migração do windows",
+    "nome_artigo": "BC - Procedimento para Migração do Windows 10 para Windows 11 via Execução Manual"
   }
 ]

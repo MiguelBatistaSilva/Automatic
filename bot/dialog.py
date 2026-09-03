@@ -33,10 +33,9 @@ def telegram_dialog() -> rx.Component:
         rx.dialog.content(
             rx.dialog.title("Telegram"),
             rx.dialog.description(
-                "Configuração do bot do Telegram — token, credencial única do "
-                "Assyst (usada por todo mundo liberado abaixo) e quem pode falar "
-                "com o bot. Tudo salvo no Cofre de Credenciais do Windows desta "
-                "máquina, não em arquivo.",
+                "Configuração do bot do Telegram — token e quem pode falar com "
+                "ele. Cada pessoa liberada cadastra a PRÓPRIA credencial do "
+                "Assyst direto no bot, com /credencial — não é feito aqui.",
                 color="#6B7280",
                 size="2",
             ),
@@ -62,40 +61,13 @@ def telegram_dialog() -> rx.Component:
                     align="center",
                 ),
                 rx.divider(margin_y="0.5em"),
-                rx.text("Credencial do bot no Assyst", weight="bold", size="2"),
+                rx.text("Quem pode falar com o bot", weight="bold", size="2"),
                 rx.text(
-                    "Uma matrícula só, usada por todo mundo liberado abaixo.",
+                    "Depois de liberado(a) aqui, a pessoa manda /credencial "
+                    "pro próprio bot pra cadastrar a matrícula/senha dela.",
                     size="1",
                     color="#6B7280",
                 ),
-                rx.input(
-                    placeholder="400123",
-                    value=TelegramState.matricula,
-                    on_change=TelegramState.set_matricula,
-                    width="100%",
-                    margin_top="0.5em",
-                ),
-                rx.input(
-                    placeholder="••••••",
-                    type=rx.cond(TelegramState.mostrar_senha, "text", "password"),
-                    value=TelegramState.senha,
-                    on_change=TelegramState.set_senha,
-                    width="100%",
-                ),
-                rx.hstack(
-                    rx.checkbox(
-                        "Mostrar",
-                        checked=TelegramState.mostrar_senha,
-                        on_change=TelegramState.toggle_mostrar_senha,
-                        size="1",
-                    ),
-                    rx.spacer(),
-                    botao_secundario("Salvar credencial", on_click=TelegramState.salvar_credencial),
-                    width="100%",
-                    align="center",
-                ),
-                rx.divider(margin_y="0.5em"),
-                rx.text("Quem pode falar com o bot", weight="bold", size="2"),
                 rx.vstack(
                     rx.foreach(TelegramState.usuarios, _linha_usuario),
                     rx.cond(

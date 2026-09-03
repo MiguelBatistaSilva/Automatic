@@ -4,7 +4,7 @@ bot/usuarios.py — quem pode falar com o bot (whitelist).
 Isto é SÓ autorização — quais chat_ids têm permissão de acionar o bot. A
 credencial usada para logar no Assyst é ÚNICA para todo mundo (decisão do
 usuário, 2026-08-17: cadastrar a senha de cada colega não é viável) e mora em
-`bot/credencial_servico.py`, separada daqui.
+`bot/services/credencial_servico.py`, separada daqui.
 
 Guarda tambem um nome/apelido por chat_id — não vem do perfil do Telegram
 (que a pessoa pode mudar a qualquer hora) para os logs ficarem previsíveis.

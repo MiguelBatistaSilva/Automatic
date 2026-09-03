@@ -15,8 +15,9 @@ from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from bot import agenda, credencial_servico, atendimento_service
+from bot import agenda
 from bot.comum import ATENDIMENTO_TESTE, WIZARD, liberado, log_bot, quem
+from bot.services import credencial_servico, atendimento_service
 
 INTERVALO_AGENDA_S = 20    # de quanto em quanto tempo o laco checa os vencidos
 TOLERANCIA_ATRASO_S = 120  # depois disso o agendamento vira PERDIDO, nao roda
@@ -184,29 +185,28 @@ async def cancelar_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def _executar_vencidos(app, itens) -> None:
     """Roda os agendamentos que venceram e avisa quem pediu.
 
-    Agrupa por pessoa só para mandar o aviso certo pra cada uma — a
-    credencial usada para logar é a MESMA para todo mundo (ver
-    `credencial_servico.py`), então não precisa mais reservar uma sessão de
-    navegador por pessoa por causa de login; é só organização da mensagem.
+    Agrupa por pessoa e cada uma loga com a PRÓPRIA credencial (ver
+    `credencial_servico.py`) — por isso a sessão de navegador também é uma
+    por pessoa, não mais uma sessão só compartilhada. Se uma pessoa não tem
+    credencial cadastrada, só os agendamentos DELA falham; os das outras
+    seguem normalmente.
     """
-    matricula, senha = credencial_servico.carregar()
-
     por_pessoa: dict[int, list] = {}
     for item in itens:
         por_pessoa.setdefault(item.chat_id, []).append(item)
 
-    if not senha:
-        for item in itens:
-            agenda.concluir(item.id, False, "Credencial do bot nao configurada")
-        for chat_id in por_pessoa:
+    for chat_id, grupo in por_pessoa.items():
+        matricula, senha = credencial_servico.carregar_de(chat_id)
+        if not senha:
+            for item in grupo:
+                agenda.concluir(item.id, False, "Credencial pessoal nao configurada")
             await app.bot.send_message(
                 chat_id,
-                "⚠️ Chegou a hora dos seus agendamentos, mas a credencial do "
-                "bot ainda não foi configurada nesta máquina. Nada foi executado.",
+                "⚠️ Chegou a hora dos seus agendamentos, mas você ainda não "
+                "cadastrou sua credencial. Mande /credencial e agende de novo.",
             )
-        return
+            continue
 
-    for chat_id, grupo in por_pessoa.items():
         chamados = [i.chamado for i in grupo]
 
         # O nome de quem agendou, nao a matricula: o log e sobre QUEM pediu, e

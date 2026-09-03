@@ -1,4 +1,5 @@
 @echo off
+title AutomaticApp
 cls
 echo =========================================
 echo       INICIANDO AUTOMATIC

@@ -12,10 +12,10 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
-from bot import credencial_servico
 from bot.comum import MAX_CHAMADOS, SIMULADO, WIZARD, liberado, log_bot, quem
+from bot.services import credencial_servico
+from bot.services.sla_service import analisar_chamados
 from services.sla_engine import FILAS
-from bot.sla_service import analisar_chamados
 
 _FILAS = list(FILAS.keys())
 
@@ -156,12 +156,12 @@ async def escolher_fila(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     fila = _FILAS[int(query.data.split(":")[1])]
-    matricula, senha = credencial_servico.carregar()
+    matricula, senha = credencial_servico.carregar_de(chat_id)
 
     if not SIMULADO and not senha:
         await query.edit_message_text(
-            "A credencial do bot ainda não foi configurada nesta máquina "
-            "(menu Opções -> Telegram, no app)."
+            "Você ainda não cadastrou sua credencial do Assyst. Mande "
+            "/credencial primeiro."
         )
         return
 
