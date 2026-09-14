@@ -1,9 +1,17 @@
 """
-bot/state.py — Back-end do diálogo "Telegram" (menu de opções).
+bot/state.py — Back-end do diálogo "Telegram" (menu de opções) e da aba
+"Usuários Autorizados" na página Configurações.
 
 Token do bot (@BotFather) e a whitelist de chat_ids. Motivo de virar tela: se
 quem normalmente cadastra não puder, outro colega faz na própria máquina, sem
 precisar abrir terminal.
+
+A whitelist saiu do diálogo (2026-09-09) e foi para a página Configurações
+(antes "Presets da Requisição") — as duas são config exclusiva do bot, faz
+mais sentido ficarem juntas do que uma no pop-up e outra numa página. O
+diálogo ficou só com o token; por isso `abrir()` (chamada por ele) e
+`carregar_usuarios()` (chamada pelo `on_load` daquela página) carregam
+coisas diferentes.
 
 NÃO cadastra mais credencial do Assyst aqui — desde 2026-08-26 cada pessoa
 cadastra a PRÓPRIA matrícula/senha direto no bot, com /credencial (ver
@@ -36,20 +44,28 @@ class TelegramState(rx.State):
 
     @rx.event
     def abrir(self):
-        """Carrega o que está salvo e abre o pop-up."""
-        from bot import credencial_servico, usuarios
+        """Carrega o token e abre o pop-up. A whitelist de usuários não mora
+        mais aqui (ver `carregar_usuarios`) — foi para a página Presets da
+        Requisição, junto do resto do que é config específica do bot."""
+        from bot.services import credencial_servico
 
         self.token = credencial_servico.carregar_token()
         self.mostrar_token = False
         self.tem_token = bool(self.token)
 
-        self.usuarios = sorted(usuarios.listar().items())
-        self.novo_chat_id = ""
-        self.novo_nome = ""
-
         self.status = ""
         self.status_cor = "#6B7280"
         self.aberto = True
+
+    @rx.event
+    def carregar_usuarios(self):
+        """on_load da página Configurações — carrega a whitelist sem abrir o
+        pop-up do Telegram (que agora só cuida do token)."""
+        from bot import usuarios
+
+        self.usuarios = sorted(usuarios.listar().items())
+        self.novo_chat_id = ""
+        self.novo_nome = ""
 
     @rx.event
     def set_aberto(self, v: bool):
@@ -73,7 +89,7 @@ class TelegramState(rx.State):
 
     @rx.event
     def salvar_token(self):
-        from bot import credencial_servico
+        from bot.services import credencial_servico
 
         try:
             credencial_servico.salvar_token(self.token)

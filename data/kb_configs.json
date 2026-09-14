@@ -62,5 +62,13 @@
   {
     "keyword": "migração do windows",
     "nome_artigo": "BC - Procedimento para Migração do Windows 10 para Windows 11 via Execução Manual"
+  },
+  {
+    "keyword": "avaliação de monitor",
+    "nome_artigo": "BC - Procedimento para Teste de Monitores"
+  },
+  {
+    "keyword": "avaliação de teclado",
+    "nome_artigo": "BC - Avaliação de Teclado e Mouse"
   }
 ]

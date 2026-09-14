@@ -12,7 +12,7 @@ import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from bot.comum import MAX_CHAMADOS, WIZARD, liberado, log_bot, quem
+from bot.comum import MAX_CHAMADOS, WIZARD, descrever_info_chamado, liberado, log_bot, quem
 from bot.services import credencial_servico, informacao_service
 
 # Preenche tudo e PARA antes de salvar. Mesmo padrao do REQUISICAO_TESTE: flag
@@ -135,9 +135,9 @@ async def confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     linhas = []
     for numero in chamados:
-        ok, detalhe = resultados.get(numero, (False, "sem resultado"))
+        ok, detalhe, info = resultados.get(numero, (False, "sem resultado", {}))
         if ok:
-            linhas.append(f"✅ {numero}")
+            linhas.append(f"✅ {numero}{descrever_info_chamado(info)}")
         else:
             linhas.append(f"❌ {numero} — {detalhe or 'falhou'}")
     if INFORMACAO_TESTE:

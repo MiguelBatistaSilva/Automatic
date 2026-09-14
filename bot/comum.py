@@ -74,3 +74,22 @@ def quem(update: Update) -> str:
     """Nome de quem falou, para o log e para os avisos."""
     u = update.effective_user
     return (u.first_name or str(u.id)) if u else "?"
+
+
+# ------------------------------------------------------------- resultado
+
+
+def descrever_info_chamado(info: dict | None) -> str:
+    """" — Nome (Setor)" pronto para colar apos o numero do chamado na
+    resposta de /informacao, /fornecedor e /infousuario. "" se nao leu nada
+    (info vazio ou os dois campos em branco) — nunca inventa um traco solto.
+    """
+    nome = (info or {}).get("usuario") or ""
+    setor = (info or {}).get("setor") or ""
+    if nome and setor:
+        return f" — {nome} ({setor})"
+    if nome:
+        return f" — {nome}"
+    if setor:
+        return f" — ({setor})"
+    return ""

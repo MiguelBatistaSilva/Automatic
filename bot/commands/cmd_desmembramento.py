@@ -13,6 +13,7 @@ O dialogo de checkpoint (Retomar / Do zero / Cancelar) e a parte que mais se
 parece com a tela: mesma decisao, mesmos tres caminhos, so que em botao.
 """
 import asyncio
+import unicodedata
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -20,10 +21,52 @@ from telegram.ext import ContextTypes
 from bot.comum import MAX_CHAMADOS, WIZARD, liberado, log_bot, quem
 from bot.services import credencial_servico, desmembramento_service
 
+# Quem digita isso na busca de KB quer a lista inteira, sem filtrar por nada.
+_PALAVRAS_TODAS = ("todas", "todos", "all", "*")
 
-def _teclado_kbs(kbs) -> InlineKeyboardMarkup:
+
+def _sem_acento(s: str) -> str:
+    """Minusculo e sem acento, para comparar palavra-chave sem exigir digitar
+    'instalação' com o til certo."""
+    normalizado = unicodedata.normalize("NFKD", s)
+    return "".join(c for c in normalizado if not unicodedata.combining(c)).lower()
+
+
+def _filtrar_kbs(entradas: list[dict], termo: str) -> list[str]:
+    """Nomes de artigo cujo `keyword` OU `nome_artigo` contem o termo (busca
+    livre, ver kb_manager_pw: o `keyword` ja e o que o operador digitaria na
+    pesquisa do Assyst)."""
+    alvo = _sem_acento(termo)
+    return [
+        e["nome_artigo"] for e in entradas
+        if alvo in _sem_acento(e["keyword"]) or alvo in _sem_acento(e["nome_artigo"])
+    ]
+
+
+def _resultado_busca_kb(estado: dict, termo: str) -> list[str]:
+    """Nomes que batem com a palavra-chave, ou a lista inteira se o pedido foi
+    'todas'. [] se a busca nao achou nada."""
+    entradas = estado["kb_entradas"]
+    if termo.strip().lower() in _PALAVRAS_TODAS:
+        return [e["nome_artigo"] for e in entradas]
+    return _filtrar_kbs(entradas, termo)
+
+
+def _rotulo_kb(nome: str, limite: int = 60) -> str:
+    """Nome do artigo pronto para o botao: sem o prefixo 'BC' redundante (todo
+    artigo comeca assim) e cortado se passar do limite. So cosmetico — o
+    callback usa o INDICE em `estado["kbs"]`, nao o texto do botao."""
+    rotulo = nome
+    for prefixo in ("BC - ", "BC – ", "BC- ", "BC "):
+        if rotulo.startswith(prefixo):
+            rotulo = rotulo[len(prefixo):]
+            break
+    return rotulo if len(rotulo) <= limite else rotulo[:limite - 1].rstrip() + "…"
+
+
+def _teclado_kbs(kbs, prefixo: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton(nome, callback_data=f"bc:kb:{i}")]
+        [[InlineKeyboardButton(_rotulo_kb(nome), callback_data=f"{prefixo}:kb:{i}")]
          for i, nome in enumerate(kbs)]
     )
 
@@ -62,15 +105,15 @@ async def cmd_base(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not liberado(update):
         return
 
-    kbs = desmembramento_service.kbs_disponiveis()
-    if not kbs:
+    entradas = desmembramento_service.kb_entradas()
+    if not entradas:
         await update.message.reply_text(
             "Não há Base de Conhecimento cadastrada nesta máquina. "
             "Cadastre pelo app antes."
         )
         return
 
-    WIZARD[chat_id] = {"fluxo": "base", "passo": "filhos", "kbs": kbs,
+    WIZARD[chat_id] = {"fluxo": "base", "passo": "filhos", "kb_entradas": entradas,
                        "quem": quem(update)}
     await update.message.reply_text(
         "Cole os chamados filhos, um por linha.\n(/cancelar para desistir)"
@@ -81,25 +124,42 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     estado = WIZARD[chat_id]
 
-    if estado["passo"] != "filhos":
-        return
+    if estado["passo"] == "filhos":
+        filhos = [l.strip() for l in update.message.text.splitlines() if l.strip()]
+        if not filhos:
+            await update.message.reply_text("Não achei nenhum número. Cole um por linha.")
+            return
+        if len(filhos) > MAX_CHAMADOS:
+            await update.message.reply_text(
+                f"São {len(filhos)} chamados; o limite é {MAX_CHAMADOS} por vez."
+            )
+            return
 
-    filhos = [l.strip() for l in update.message.text.splitlines() if l.strip()]
-    if not filhos:
-        await update.message.reply_text("Não achei nenhum número. Cole um por linha.")
-        return
-    if len(filhos) > MAX_CHAMADOS:
+        estado["filhos"] = filhos
+        estado["passo"] = "kb_busca"
         await update.message.reply_text(
-            f"São {len(filhos)} chamados; o limite é {MAX_CHAMADOS} por vez."
+            f"{len(filhos)} chamado(s). Digite uma palavra-chave para buscar a "
+            "Base de Conhecimento (ou 'todas' para ver a lista completa)."
         )
         return
 
-    estado["filhos"] = filhos
-    estado["passo"] = "kb"
-    await update.message.reply_text(
-        f"{len(filhos)} chamado(s). Qual a Base de Conhecimento?",
-        reply_markup=_teclado_kbs(estado["kbs"]),
-    )
+    if estado["passo"] == "kb_busca":
+        termo = update.message.text.strip()
+        nomes = _resultado_busca_kb(estado, termo)
+        if not nomes:
+            await update.message.reply_text(
+                f"Nenhuma base bate com \"{termo}\". Tente outra palavra-chave "
+                "ou mande 'todas' para ver a lista completa."
+            )
+            return
+
+        estado["kbs"] = nomes
+        estado["passo"] = "kb"
+        plural = "base encontrada" if len(nomes) == 1 else "bases encontradas"
+        await update.message.reply_text(
+            f"{len(nomes)} {plural}:",
+            reply_markup=_teclado_kbs(nomes, "bc"),
+        )
 
 
 async def escolher_kb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -307,6 +367,25 @@ async def responder_desmembrar(update: Update, context: ContextTypes.DEFAULT_TYP
         await _apos_descricao(update.message, chat_id, estado)
         return
 
+    if passo == "kb_busca":
+        termo = update.message.text.strip()
+        nomes = _resultado_busca_kb(estado, termo)
+        if not nomes:
+            await update.message.reply_text(
+                f"Nenhuma base bate com \"{termo}\". Tente outra palavra-chave "
+                "ou mande 'todas' para ver a lista completa."
+            )
+            return
+
+        estado["kbs"] = nomes
+        estado["passo"] = "kb"
+        plural = "base encontrada" if len(nomes) == 1 else "bases encontradas"
+        await update.message.reply_text(
+            f"{len(nomes)} {plural}:",
+            reply_markup=_teclado_kbs(nomes, "ds"),
+        )
+        return
+
 
 async def receber_documento(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Aceita o CSV como arquivo — no celular e bem melhor que colar texto."""
@@ -354,21 +433,18 @@ async def _receber_csv(update, estado, texto) -> None:
 async def _apos_descricao(mensagem, chat_id, estado) -> None:
     """Com a descricao definida: pede a KB (modo completo) ou vai para o resumo."""
     if estado["modo"] == "completo":
-        kbs = desmembramento_service.kbs_disponiveis()
-        if not kbs:
+        entradas = desmembramento_service.kb_entradas()
+        if not entradas:
             WIZARD.pop(chat_id, None)
             await mensagem.reply_text(
                 "Não há Base de Conhecimento cadastrada nesta máquina."
             )
             return
-        estado["kbs"] = kbs
-        estado["passo"] = "kb"
+        estado["kb_entradas"] = entradas
+        estado["passo"] = "kb_busca"
         await mensagem.reply_text(
-            "Qual a Base de Conhecimento?",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton(n, callback_data=f"ds:kb:{i}")]
-                 for i, n in enumerate(kbs)]
-            ),
+            "Digite uma palavra-chave para buscar a Base de Conhecimento "
+            "(ou 'todas' para ver a lista completa)."
         )
         return
 

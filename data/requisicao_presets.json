@@ -1,0 +1,35 @@
+{
+  "edificio": [
+    "Fórum Clóvis Beviláqua"
+  ],
+  "resumo": [
+    "Requisição de Serviço"
+  ],
+  "item": [
+    "Computador",
+    "Hardware",
+    "Serviço de Impressão",
+    "Internet",
+    "Periféricos e Acessórios"
+  ],
+  "item_b": [
+    "IC NÃO LOCALIZADO",
+    "Impressoras"
+  ],
+  "categoria": [
+    "Configuração"
+  ],
+  "grupo_atribuido": [
+    "2N CATI FCB"
+  ],
+  "usuario_atribuido": [
+    "Arthur Carvalho da Silva",
+    "Demetrius de Miranda Siqueira",
+    "Diogo Lima Silva",
+    "Esdras Soares Queiroz",
+    "Flávio Reuten Pereira da Silva",
+    "Francivaldo Araujo Sousa",
+    "Igor Freitas Magalhães",
+    "Jonatas Pacheco da Costa"
+  ]
+}

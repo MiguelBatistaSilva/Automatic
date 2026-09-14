@@ -37,9 +37,11 @@ def _silencioso(msg, tipo="info"):
     pass
 
 
-def kbs_disponiveis() -> list:
-    """Nomes das Bases de Conhecimento cadastradas, na ordem do kb_store."""
-    return [e["nome_artigo"] for e in kb_store.carregar()]
+def kb_entradas() -> list[dict]:
+    """Bases de Conhecimento cadastradas (nome_artigo + keyword), cru, na ordem
+    do kb_store — para o bot filtrar por palavra-chave antes de listar (ver
+    cmd_desmembramento), ja que sao muitas para caber num teclado inline."""
+    return kb_store.carregar()
 
 
 def chave_bc(filhos) -> str:

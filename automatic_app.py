@@ -24,12 +24,13 @@ from pages.sla import sla_page
 from pages.desmembramento import desmembramento_page
 from pages.atendimento import atendimento_page
 from pages.requisicao import requisicao_page
-from pages.requisicao_presets import requisicao_presets_page
+from pages.configuracoes import configuracoes_page
 from pages.kb import kb_page
 from senior.page import ponto_page
 from state.desmembramento_state import DesmembramentoState
 from state.kb_state import KBState
 from state.requisicao_presets_state import RequisicaoPresetsState
+from bot.state import TelegramState
 from senior.state import PontoState
 
 app = rx.App(
@@ -58,10 +59,12 @@ app.add_page(
     title="Automatic — Requisição de Serviço",
 )
 app.add_page(
-    requisicao_presets_page,
-    route="/requisicao-presets",
-    title="Automatic — Presets da Requisição",
-    on_load=RequisicaoPresetsState.on_load,
+    configuracoes_page,
+    route="/configuracoes",
+    title="Automatic — Configurações",
+    # TelegramState.carregar_usuarios: a aba "Usuários Autorizados" que
+    # migrou do pop-up Telegram para esta pagina (ver pages/configuracoes.py).
+    on_load=[RequisicaoPresetsState.on_load, TelegramState.carregar_usuarios],
 )
 app.add_page(
     kb_page,

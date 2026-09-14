@@ -23,25 +23,27 @@ def aguardar_lote(chamados, texto, matricula, senha, log=None, modo_teste=False)
     """Adiciona o MESMO texto (via 'Aguardando Info do Fornecedor') a varios
     chamados numa sessao so do navegador.
 
-    Devolve {numero: (ok, detalhe)} contendo SEMPRE todos os chamados da
-    entrada — chamado que falhou vem com ok=False e o motivo, nunca ausente.
+    Devolve {numero: (ok, detalhe, info)} contendo SEMPRE todos os chamados
+    da entrada — chamado que falhou vem com ok=False e o motivo, nunca
+    ausente. `info` e {"usuario": ..., "setor": ...} lido do chamado (ver
+    flow_fornecedor_pw), so para enfeitar a mensagem do bot.
     """
     log = log or _silencioso
     resultados = {}
 
     with NavegadorPW(log) as page:
         if not _fazer_login_pw(page, matricula, senha, log):
-            return {c: (False, "Falha no login") for c in chamados}
+            return {c: (False, "Falha no login", {}) for c in chamados}
 
         for numero in chamados:
             log(f"Registrando Aguardando Info do Fornecedor no chamado {numero}...", "status")
             try:
-                ok = aguardar_info_fornecedor(page, log, numero, texto, modo_teste)
+                ok, info = aguardar_info_fornecedor(page, log, numero, texto, modo_teste)
                 detalhe = "" if ok else "O fluxo nao chegou ao fim"
             except Exception as e:
                 # Uma excecao num chamado nao pode derrubar os outros do lote.
-                ok, detalhe = False, str(e)
+                ok, detalhe, info = False, str(e), {}
                 log(f"Excecao em {numero}: {e}", "error")
-            resultados[numero] = (ok, detalhe)
+            resultados[numero] = (ok, detalhe, info)
 
     return resultados

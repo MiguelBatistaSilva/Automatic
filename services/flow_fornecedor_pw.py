@@ -16,7 +16,7 @@ quebra silenciosamente até alguém recapturar o id certo.
 Ver memoria: project_flow_informacao_bot, project_flow_atendimento.
 """
 
-from services.browser_pw import _navegar_para_chamado_pw
+from services.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
 
 _SEL_MENU_ACOES = "#menuActions"
 _SEL_ACOES_RELOGIO = "td.dijitMenuItemLabel:text-is('Ações de relógio')"
@@ -59,7 +59,7 @@ def _preencher_texto_dialog(page, log, texto: str) -> bool:
 
 
 def aguardar_info_fornecedor(page, log, numero_chamado: str, informacao: str,
-                             modo_teste: bool = False) -> bool:
+                             modo_teste: bool = False) -> tuple[bool, dict]:
     """
     Adiciona uma informação (texto livre) a um chamado, via 'Ações de
     relógio -> Aguardando Info do Fornecedor'.
@@ -68,14 +68,20 @@ def aguardar_info_fornecedor(page, log, numero_chamado: str, informacao: str,
                         'Salvar ação', nao altera o chamado).
     modo_teste=False -> completa a acao clicando em 'Salvar ação'.
 
-    Retorna True se chegou ao fim esperado, False em qualquer falha.
+    Retorna (ok, info): ok=True se chegou ao fim esperado, False em qualquer
+    falha. info={"usuario": ..., "setor": ...} — lido da tela assim que o
+    chamado abre, ENFEITE para a mensagem do bot (ver _usuario_afetado_pw /
+    _setor_pw): fica preenchido mesmo se um passo POSTERIOR falhar, e vem
+    vazio ({}) so quando nem a navegacao ate o chamado deu certo.
     """
     numero_chamado = numero_chamado.strip()
 
     # 1. Navegar ate o chamado
     if not _navegar_para_chamado_pw(page, numero_chamado, log):
         log(f"Nao foi possivel abrir o chamado {numero_chamado}.", "error")
-        return False
+        return False, {}
+
+    info = {"usuario": _usuario_afetado_pw(page), "setor": _setor_pw(page)}
 
     # 2. Abrir o menu 'Ações'
     try:
@@ -83,7 +89,7 @@ def aguardar_info_fornecedor(page, log, numero_chamado: str, informacao: str,
         log("Menu 'Ações' aberto.", "success")
     except Exception as e:
         log(f"Erro ao abrir o menu 'Ações': {e}", "error")
-        return False
+        return False, info
 
     # 3. Revelar o submenu 'Ações de relógio' (passa o mouse por cima)
     try:
@@ -91,7 +97,7 @@ def aguardar_info_fornecedor(page, log, numero_chamado: str, informacao: str,
         log("Submenu 'Ações de relógio' revelado.", "success")
     except Exception as e:
         log(f"Erro ao revelar 'Ações de relógio': {e}", "error")
-        return False
+        return False, info
 
     # 4. Clicar em 'Aguardando Info do Fornecedor'
     try:
@@ -102,7 +108,7 @@ def aguardar_info_fornecedor(page, log, numero_chamado: str, informacao: str,
         log("Confirme que essa acao esta disponivel no chamado e que o "
             "texto do botao no Assyst e exatamente "
             "'Aguardando Info do Fornecedor'.", "info")
-        return False
+        return False, info
 
     # 5. Esperar o pop-up da acao
     try:
@@ -110,18 +116,18 @@ def aguardar_info_fornecedor(page, log, numero_chamado: str, informacao: str,
         log("Pop-up da ação aberto.", "success")
     except Exception as e:
         log(f"O pop-up da ação não abriu: {e}", "error")
-        return False
+        return False, info
 
     # 6. Preencher o texto no pop-up (mira o editor do pop-up)
     if not _preencher_texto_dialog(page, log, informacao):
         log("Nao foi possivel preencher o texto da informacao.", "error")
-        return False
+        return False, info
 
     # 7. Modo teste: para aqui, sem salvar
     if modo_teste:
         log("MODO TESTE: texto preenchido. Parando ANTES de 'Salvar ação'. "
             "Nada foi alterado no chamado.", "status")
-        return True
+        return True, info
 
     # 8. Salvar acao
     try:
@@ -129,7 +135,7 @@ def aguardar_info_fornecedor(page, log, numero_chamado: str, informacao: str,
         log("Acao salva ('Salvar ação').", "success")
     except Exception as e:
         log(f"Erro ao clicar em 'Salvar ação': {e}", "error")
-        return False
+        return False, info
 
     # 9. Confirmar que o pop-up fechou — sinal de que o Assyst aceitou a acao.
     try:
@@ -137,8 +143,8 @@ def aguardar_info_fornecedor(page, log, numero_chamado: str, informacao: str,
     except Exception:
         log("O pop-up não fechou apos salvar — a acao pode NAO ter sido "
             "registrada. Confira o chamado manualmente.", "error")
-        return False
+        return False, info
 
     log(f"Aguardando Info do Fornecedor registrado com sucesso no chamado "
         f"{numero_chamado}.", "success")
-    return True
+    return True, info

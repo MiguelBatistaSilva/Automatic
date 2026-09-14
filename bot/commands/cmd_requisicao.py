@@ -7,8 +7,8 @@ PERGUNTA campo por campo, na ordem de `requisicao_campos.ORDEM_COLUNAS`, e
 UM chamado por vez só — no celular não faz sentido colar 40 linhas de uma vez
 como no formato antigo.
 
-Campo com valores pré-cadastrados (`services/requisicao_presets.py`, tela
-"Presets da Requisição" no app) vira BOTÃO — sem opção de digitar por cima,
+Campo com valores pré-cadastrados (`services/requisicao_presets.py`, aba
+"Presets" da tela Configurações no app) vira BOTÃO — sem opção de digitar por cima,
 decisão do usuário (se não tiver o valor certo, ajeita depois no PC). Campo
 SEM preset cadastrado pede texto digitado. Usuário afetado e Descrição são
 SEMPRE digitados — mudam a cada chamado, não faz sentido pré-cadastrar.

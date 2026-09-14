@@ -700,6 +700,28 @@ def _usuario_afetado_pw(page) -> str:
         return ""
 
 
+def _setor_pw(page) -> str:
+    """Nome da 'Seção' do chamado ABERTO agora ("" se indisponivel).
+
+    Mesmo padrao de `_usuario_afetado_pw`: mira pelo `name` (`section.text`),
+    filtra por `:visible` pelo mesmo motivo (SPA com o formulario do chamado
+    anterior ainda no DOM). O `name` foi confirmado em HTML real capturado da
+    tela de Requisição (`ManageEventForm_ES3_section_textNode`, mesmo widget
+    type-ahead do Usuário Afetado) — so o FORMATO do valor preenchido (se
+    segue `codigo(NOME)` como o affectedUser) ainda nao foi visto em tela
+    viva; `_so_o_nome` cobre os dois casos sem devolver vazio a toa.
+
+    Enfeite de mensagem: NUNCA levanta, "" em qualquer problema.
+    """
+    try:
+        campo = page.locator("input[name='section.text']:visible")
+        if campo.count() == 0:
+            return ""
+        return _so_o_nome(campo.first.input_value())
+    except Exception:
+        return ""
+
+
 def _esperar_chamado_carregado(page, numero_chamado: str | None = None,
                                timeout_ms: int = 30000, log=None) -> bool:
     """True quando a tela do chamado PEDIDO esta aberta.
