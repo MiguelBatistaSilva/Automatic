@@ -29,7 +29,6 @@ NAV_ITEMS: list[NavItem] = [
     NavItem("copy", "Desmembramento", "/desmembramento"),
     NavItem("timer", "Análise de SLA", "/sla"),
     NavItem("key-round", "Licenças", "/"),
-    NavItem("book-open", "Bases de Conhecimento", "/kb"),
     NavItem("settings-2", "Configurações", "/configuracoes"),
 ]
 

@@ -3,9 +3,11 @@ pages/configuracoes.py — Tela "Configurações".
 
 Antes "Presets da Requisição" (rota /requisicao-presets); renomeada e
 reorganizada em 2026-09-09 quando a whitelist do bot ("Usuários
-Autorizados") migrou pra cá do pop-up "Telegram" da sidebar — as duas coisas
-são config exclusiva do bot, então a página virou um agrupador com um
-segmented_control de duas abas em vez de duas seções empilhadas.
+Autorizados") migrou pra cá do pop-up "Telegram" da sidebar. Em 2026-09-15
+ganhou a terceira aba: a página "Bases de Conhecimento" (rota /kb) deixou de
+existir como rota própria e virou a aba "Bases de Conhecimento" aqui — as
+três são telas de cadastro sem fluxo/navegador, então faz sentido virarem
+abas de um agrupador em vez de itens separados na sidebar.
 
 Aba "Presets": cadastro dos valores fixos que o /requisicao do bot
 (Telegram) oferece como BOTÃO em vez de pedir texto digitado. CRUD em
@@ -17,6 +19,12 @@ Aba "Usuários Autorizados": whitelist de chat_ids que podem falar com o bot.
 CRUD continua em `bot/state.py` (TelegramState) — não duplicado aqui, só a
 view mudou de lugar.
 
+Aba "Bases de Conhecimento": cadastro de keyword+artigo usado pelos modos
+Criar + Base e Só Base do Desmembramento (tela e bot, ambos lêem
+`data/kb_configs.json` via `services/kb_store.py`). CRUD continua em
+`state/kb_state.py` (KBState) — não duplicado aqui, só a view mudou de
+lugar, igual às outras duas abas.
+
 A aba ativa (`RequisicaoPresetsState.aba`) é estado de UI puro, sem
 persistência — mesmo padrão do `modo` em `state/desmembramento_state.py`
 para o segmented_control daquela página.
@@ -25,11 +33,12 @@ para o segmented_control daquela página.
 import reflex as rx
 
 from state.requisicao_presets_state import RequisicaoPresetsState
+from state.kb_state import KBState
 from bot.state import TelegramState
 from services.requisicao_campos import POR_CHAVE
 from services.requisicao_presets import CAMPOS_COM_PRESET
 from components.layout import page_layout
-from components.botoes import botao_secundario, botao_tabela
+from components.botoes import botao_primario, botao_secundario, botao_tabela
 
 
 def _valor_linha(campo: str):
@@ -122,42 +131,136 @@ def _aba_usuarios_autorizados() -> rx.Component:
             color="#6B7280",
         ),
         rx.vstack(
-            rx.foreach(TelegramState.usuarios, _linha_usuario_bot),
-            rx.cond(
-                TelegramState.usuarios.length() == 0,
-                rx.text("Ninguém liberado ainda.", size="1", color="#6B7280"),
+            rx.vstack(
+                rx.foreach(TelegramState.usuarios, _linha_usuario_bot),
+                rx.cond(
+                    TelegramState.usuarios.length() == 0,
+                    rx.text("Ninguém liberado ainda.", size="1", color="#6B7280"),
+                ),
+                width="100%",
+                spacing="2",
             ),
-            width="100%",
-            spacing="2",
-        ),
-        rx.hstack(
-            rx.input(
-                placeholder="chat_id",
-                value=TelegramState.novo_chat_id,
-                on_change=TelegramState.set_novo_chat_id,
-                width="45%",
+            rx.hstack(
+                rx.input(
+                    placeholder="chat_id",
+                    value=TelegramState.novo_chat_id,
+                    on_change=TelegramState.set_novo_chat_id,
+                    width="45%",
+                ),
+                rx.input(
+                    placeholder="Nome/apelido",
+                    value=TelegramState.novo_nome,
+                    on_change=TelegramState.set_novo_nome,
+                    width="55%",
+                ),
+                width="100%",
+                spacing="2",
             ),
-            rx.input(
-                placeholder="Nome/apelido",
-                value=TelegramState.novo_nome,
-                on_change=TelegramState.set_novo_nome,
-                width="55%",
+            botao_secundario(
+                "Liberar",
+                on_click=TelegramState.adicionar_usuario,
+                width="100%",
             ),
+            rx.text(TelegramState.status, color=TelegramState.status_cor, size="1"),
+            spacing="3",
             width="100%",
-            spacing="2",
+            align_items="start",
+            padding="12px",
+            border=f"1px solid {rx.color('gray', 6)}",
+            border_radius="8px",
         ),
-        botao_secundario(
-            "Liberar",
-            on_click=TelegramState.adicionar_usuario,
-            width="100%",
-        ),
-        rx.text(TelegramState.status, color=TelegramState.status_cor, size="1"),
         spacing="3",
         width="100%",
         align_items="start",
-        padding="12px",
-        border=f"1px solid {rx.color('gray', 6)}",
-        border_radius="8px",
+    )
+
+
+def _linha_kb(item: rx.Var, idx: rx.Var) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(item.nome_artigo),
+        rx.table.cell(rx.code(item.keyword)),
+        rx.table.cell(
+            botao_tabela("Remover", on_click=KBState.remover(idx)),
+        ),
+    )
+
+
+def _dialog_nova_base() -> rx.Component:
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Adicionar Base de Conhecimento"),
+            rx.dialog.description(
+                "Palavra-chave usada na busca da Base de Conhecimento do "
+                "Assyst, e o título exato do artigo que ela deve encontrar.",
+                color="#6B7280",
+                size="2",
+            ),
+            rx.vstack(
+                rx.text("Palavra-chave", weight="bold", size="2"),
+                rx.input(placeholder="ex: kaspersky", value=KBState.novo_keyword,
+                         on_change=KBState.set_novo_keyword, width="100%"),
+                rx.text("Título do artigo", weight="bold", size="2", margin_top="0.5em"),
+                rx.input(placeholder="ex: BC - Instalação do Kaspersky",
+                         value=KBState.novo_artigo, on_change=KBState.set_novo_artigo,
+                         width="100%"),
+                spacing="1",
+                align_items="start",
+                width="100%",
+                margin_top="1em",
+            ),
+            rx.text(KBState.status, color=KBState.status_cor, size="2",
+                    margin_top="0.75em"),
+            rx.hstack(
+                rx.spacer(),
+                rx.dialog.close(botao_secundario("Cancelar")),
+                botao_primario("Adicionar", on_click=KBState.adicionar,
+                               color_scheme="green"),
+                spacing="3",
+                width="100%",
+                margin_top="1.25em",
+                align="center",
+            ),
+            max_width="420px",
+        ),
+        open=KBState.aberto,
+        on_open_change=KBState.set_aberto,
+    )
+
+
+def _aba_base_conhecimento() -> rx.Component:
+    return rx.vstack(
+        rx.hstack(
+            rx.text(
+                "Bases usadas pelos modos Criar + Base e Só Base do "
+                "Desmembramento — na tela e no /base e /desmembrar do bot.",
+                color="#6B7280",
+            ),
+            rx.spacer(),
+            botao_primario("+ Adicionar Base", on_click=KBState.abrir,
+                           color_scheme="green"),
+            width="100%",
+            align="center",
+        ),
+        rx.cond(
+            KBState.entries,
+            rx.table.root(
+                rx.table.header(
+                    rx.table.row(
+                        rx.table.column_header_cell("Título do Artigo"),
+                        rx.table.column_header_cell("Palavra-chave"),
+                        rx.table.column_header_cell(""),
+                    ),
+                ),
+                rx.table.body(rx.foreach(KBState.entries, _linha_kb)),
+                width="100%",
+                variant="surface",
+            ),
+            rx.text("Nenhuma base cadastrada ainda.", size="1", color="#6B7280"),
+        ),
+        _dialog_nova_base(),
+        spacing="4",
+        width="100%",
+        align_items="start",
     )
 
 
@@ -165,6 +268,7 @@ def configuracoes_page() -> rx.Component:
     conteudo = rx.vstack(
         rx.heading("Configurações", size="6"),
         rx.segmented_control.root(
+            rx.segmented_control.item("Bases de Conhecimento", value="kb"),
             rx.segmented_control.item("Presets", value="presets"),
             rx.segmented_control.item("Usuários Autorizados", value="usuarios"),
             value=RequisicaoPresetsState.aba,
@@ -172,12 +276,16 @@ def configuracoes_page() -> rx.Component:
         ),
         rx.match(
             RequisicaoPresetsState.aba,
+            ("kb", _aba_base_conhecimento()),
             ("presets", _aba_presets()),
             ("usuarios", _aba_usuarios_autorizados()),
-            _aba_presets(),
+            _aba_base_conhecimento(),
         ),
         spacing="4",
         width="100%",
-        max_width="640px",
+        # A aba "Bases de Conhecimento" quer a tabela ocupando a página toda
+        # (mesmo comportamento de quando era rota própria, pages/kb.py); as
+        # outras duas são formulários estreitos — só elas ficam com teto.
+        max_width=rx.cond(RequisicaoPresetsState.aba == "kb", "100%", "640px"),
     )
     return page_layout(conteudo)

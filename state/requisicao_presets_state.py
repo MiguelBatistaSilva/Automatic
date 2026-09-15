@@ -8,11 +8,11 @@ usados pelo /requisicao do bot pra virar botão em vez de texto livre. Sem
 fluxo/navegador — é só edição de dados, igual ao KBState.
 
 `aba` é estado de UI puro do segmented_control da página (qual aba está
-selecionada — "presets" ou "usuarios") — não persiste em disco, mesmo padrão
-do `modo` em `state/desmembramento_state.py`. Mora aqui (e não em
-`bot/state.py`, dono da aba "Usuários Autorizados") porque essa é a página
-que o `automatic_app.py` associa à rota, e o valor por padrão da aba
-("presets") é o que essa classe já representa.
+selecionada — "kb", "presets" ou "usuarios") — não persiste em disco, mesmo
+padrão do `modo` em `state/desmembramento_state.py`. Mora aqui (e não em
+`bot/state.py` ou `state/kb_state.py`, donos das outras duas abas) porque
+essa é a página que o `automatic_app.py` associa à rota. Abre em "kb" por
+padrão, já que essa é a primeira aba (reorganizado em 2026-09-15).
 """
 import reflex as rx
 
@@ -25,7 +25,7 @@ class RequisicaoPresetsState(rx.State):
     novos_valores: dict[str, str] = {c: "" for c in CAMPOS_COM_PRESET}
     status: str = ""
     status_cor: str = "#16A34A"
-    aba: str = "presets"
+    aba: str = "kb"
 
     @rx.event
     def on_load(self):
@@ -33,13 +33,13 @@ class RequisicaoPresetsState(rx.State):
         self.presets = requisicao_presets.carregar()
         self.novos_valores = {c: "" for c in CAMPOS_COM_PRESET}
         self.status = ""
-        self.aba = "presets"
+        self.aba = "kb"
 
     @rx.event
     def set_aba(self, v: str | list[str]):
         # O segmented_control declara on_change como str | list[str] (suporta
         # multiselect); aqui é sempre single-select, mas o tipo tem que bater.
-        self.aba = v if isinstance(v, str) else (v[0] if v else "presets")
+        self.aba = v if isinstance(v, str) else (v[0] if v else "kb")
 
     def _salvar_disco(self):
         from services import requisicao_presets

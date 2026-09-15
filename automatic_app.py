@@ -25,7 +25,6 @@ from pages.desmembramento import desmembramento_page
 from pages.atendimento import atendimento_page
 from pages.requisicao import requisicao_page
 from pages.configuracoes import configuracoes_page
-from pages.kb import kb_page
 from senior.page import ponto_page
 from state.desmembramento_state import DesmembramentoState
 from state.kb_state import KBState
@@ -62,15 +61,10 @@ app.add_page(
     configuracoes_page,
     route="/configuracoes",
     title="Automatic — Configurações",
-    # TelegramState.carregar_usuarios: a aba "Usuários Autorizados" que
-    # migrou do pop-up Telegram para esta pagina (ver pages/configuracoes.py).
-    on_load=[RequisicaoPresetsState.on_load, TelegramState.carregar_usuarios],
-)
-app.add_page(
-    kb_page,
-    route="/kb",
-    title="Automatic — Bases de Conhecimento",
-    on_load=KBState.on_load,
+    # TelegramState.carregar_usuarios e KBState.on_load: as abas "Usuários
+    # Autorizados" e "Bases de Conhecimento" migraram pra cá (ver
+    # pages/configuracoes.py) — a rota /kb não existe mais.
+    on_load=[RequisicaoPresetsState.on_load, TelegramState.carregar_usuarios, KBState.on_load],
 )
 app.add_page(
     license_page,

@@ -1,11 +1,20 @@
 """
-state/kb_state.py — Back-end da página Bases de Conhecimento (CRUD).
+state/kb_state.py — Back-end da aba "Bases de Conhecimento" em Configurações.
+
+Antes rota própria (/kb, pages/kb.py); migrou em 2026-09-15 pra virar a
+terceira aba do segmented_control de pages/configuracoes.py, junto de
+"Presets" e "Usuários Autorizados" — mesmo padrão das outras duas.
 
 Lista/adiciona/remove as bases (keyword + nome_artigo) persistidas em `kb_store`.
 Sem fluxo/navegador — é só edição de dados; usa rx.State direto (não FlowRunnerState).
 
 A página Desmembramento relê o kb_store no seu on_load (ao navegar), então não é
 preciso um sinal cruzado como o `kbs_atualizadas` do Qt.
+
+`aberto` controla o pop-up de "+ Adicionar Base" (botão no topo direito da
+tabela) — mesmo padrão do `CredenciaisState`: `abrir()` zera os campos antes
+de mostrar; `adicionar()` só fecha o pop-up (`aberto = False`) se salvar com
+sucesso, senão mantém aberto com o erro visível.
 """
 
 import dataclasses
@@ -25,6 +34,7 @@ class KBState(rx.State):
     novo_artigo: str = ""
     status: str = ""
     status_cor: str = "#16A34A"
+    aberto: bool = False
 
     @rx.event
     def on_load(self):
@@ -34,6 +44,17 @@ class KBState(rx.State):
     def _salvar_disco(self):
         from services import kb_store
         kb_store.salvar([{"keyword": e.keyword, "nome_artigo": e.nome_artigo} for e in self.entries])
+
+    @rx.event
+    def abrir(self):
+        self.novo_keyword = ""
+        self.novo_artigo = ""
+        self.status = ""
+        self.aberto = True
+
+    @rx.event
+    def set_aberto(self, v: bool):
+        self.aberto = v
 
     @rx.event
     def set_novo_keyword(self, v: str):
@@ -59,8 +80,8 @@ class KBState(rx.State):
         self._salvar_disco()
         self.novo_keyword = ""
         self.novo_artigo = ""
-        self.status = "Base adicionada com sucesso!"
-        self.status_cor = "#16A34A"
+        self.status = ""
+        self.aberto = False
 
     @rx.event
     def remover(self, idx: int):
