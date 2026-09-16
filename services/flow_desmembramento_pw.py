@@ -14,6 +14,8 @@ relogin automatico ao expirar a sessao, acumulo de filhos em TXT, e acoes que
 reportam fracasso de verdade (nada de "sucesso" por engano).
 """
 
+import hashlib
+
 from playwright.sync_api import TimeoutError as PWTimeout
 
 from services.browser_pw import (
@@ -52,12 +54,19 @@ _SEL_CONTINUAR = (
 
 
 def _chave_checkpoint(filhos: list[str]) -> str:
-    """Gera a chave do checkpoint BC a partir do primeiro filho da lista.
+    """Gera a chave do checkpoint BC a partir do hash da lista colada.
+
+    Antes era `bc_<primeiro-filho>`: duas listas diferentes que comecassem
+    pelo mesmo chamado colidiam na mesma chave. Trocado em 2026-09-16 pelo
+    mesmo padrao do `req_<hash>` da Requisicao (flow_requisicao_pw.py):
+    mudar UM chamado da lista, ou a ordem deles, vira lote novo, sem ligacao
+    com o anterior (decisao do usuario, mesmo tradeoff aceito la).
 
     Mantido aqui (antes vivia no flow_bc.py) porque a aba de Execucao tambem
     importa esta funcao para consultar o checkpoint antes de iniciar.
     """
-    return f"bc_{filhos[0].strip()}"
+    texto = "\n".join(f.strip() for f in filhos)
+    return "bc_" + hashlib.sha1(texto.encode("utf-8")).hexdigest()[:16]
 
 
 class FluxoDesmembramentoPW:
@@ -424,7 +433,8 @@ class FluxoCriarPW(FluxoDesmembramentoPW):
 class FluxoBCPW(FluxoDesmembramentoPW):
     """Modo So Base: recebe filhos ja criados e aplica a BC em cada um.
 
-    Checkpoint indexado pelo primeiro filho da lista (`bc_<primeiro>`).
+    Checkpoint indexado pelo hash da lista colada (`bc_<hash>`, ver
+    `_chave_checkpoint` acima).
 
     Diferente do modo Criar+Base, aqui NAO se volta a tela do evento depois de
     salvar a base: o passo seguinte e navegar para OUTRO chamado, entao a tela do
