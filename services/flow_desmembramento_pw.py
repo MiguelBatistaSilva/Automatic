@@ -38,7 +38,7 @@ from services.checkpoint import (
 _MSG_CHECKPOINT_ILEGIVEL = (
     "Checkpoint de {chave} existe mas esta ilegivel. ABORTANDO: seguir daqui "
     "faria o fluxo tratar isto como execucao nova e RECRIAR chamados que ja "
-    "existem. Confira o arquivo em data/checkpoints/ antes de rodar de novo."
+    "existem. Confira o arquivo em data/checkpoints/{chave}/ antes de rodar de novo."
 )
 
 # Seletores da tela de edicao do evento (mesmos ids do fluxo Selenium).

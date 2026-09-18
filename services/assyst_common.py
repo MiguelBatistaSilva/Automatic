@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from services.paths import DATA_DIR
+from services.paths import CHECKPOINTS_DIR, DATA_DIR
 
 _URL_HOME = "https://cati.tjce.jus.br/assystweb/application.do"
 _URL_CHAMADO = (
@@ -32,13 +32,19 @@ _URL_REQUISICAO = (
     "#event%2FLogChangeHandler.do%3Fdispatch%3DprepareChange"
     "%26ncAction%3DCLEARHISTORY%26entRef%3DES3"
 )
-_FILHOS_DIR = DATA_DIR
-
-
 def _path_filhos(numero_chamado: str) -> Path:
-    _FILHOS_DIR.mkdir(parents=True, exist_ok=True)
+    """Retorna o caminho do TXT de filhos, na mesma subpasta do checkpoint
+    desse chamado (ver checkpoint._path). Migra sozinho um TXT antigo, solto
+    direto em data/ no formato anterior, sem perder o que ja foi registrado.
+    """
     nome = numero_chamado.strip().replace("/", "_").replace("\\", "_")
-    return _FILHOS_DIR / f"filhos_{nome}.txt"
+    pasta = CHECKPOINTS_DIR / nome
+    pasta.mkdir(parents=True, exist_ok=True)
+    novo = pasta / f"filhos_{nome}.txt"
+    antigo = DATA_DIR / f"filhos_{nome}.txt"
+    if not novo.exists() and antigo.exists():
+        antigo.replace(novo)
+    return novo
 
 
 def _registrar_filho(numero_chamado: str, numero_filho_str: str) -> None:

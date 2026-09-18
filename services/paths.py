@@ -13,8 +13,9 @@ existe localmente (credenciais.json, checkpoints/, usuarios_bot.json — todos n
 .gitignore) simplesmente nao esta no zip, entao sobrevive sem regra nenhuma.
 
 Conteudo de `data/`:
-  - checkpoints/       -> progresso linha a linha (Desmembramento e Requisição de Serviço)
-  - filhos_*.txt       -> numeros dos chamados filhos criados
+  - checkpoints/<ref>/ -> uma subpasta por chamado (ou hash, na Requisição de
+                          Serviço), com o JSON de progresso linha a linha E o
+                          TXT dos filhos criados (Desmembramento) juntos
   - credenciais.json   -> matricula (a SENHA vai para o Cofre do Windows)
   - kb_configs.json    -> Bases de Conhecimento cadastradas
 

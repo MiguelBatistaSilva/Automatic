@@ -151,7 +151,7 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
                     "Checkpoint deste lote existe mas esta ilegivel. ABORTANDO: "
                     "seguir daqui faria o fluxo tratar isto como lote novo e "
                     f"RECRIAR requisições que já existem. Confira o arquivo em "
-                    f"data/checkpoints/{chave}.json antes de rodar de novo.",
+                    f"data/checkpoints/{chave}/ antes de rodar de novo.",
                     "error")]
                 self.rodando = False
             return

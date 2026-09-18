@@ -23,11 +23,24 @@ def _agora() -> str:
 
 
 def _path(numero_chamado: str) -> Path:
-    """Retorna o caminho do arquivo JSON para um chamado especifico."""
-    _CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
+    """Retorna o caminho do arquivo JSON para um chamado especifico.
+
+    Fica dentro de uma subpasta com o nome do proprio chamado (ex.:
+    checkpoints/S2460474/S2460474.json), junto do TXT de filhos que
+    `assyst_common._path_filhos` grava para o mesmo chamado — antes cada um
+    ficava num lugar (json solto aqui, txt solto em data/), espalhando os
+    dois arquivos de uma mesma execucao. Migra sozinho um JSON antigo, solto
+    no formato anterior, para nao perder retomada em andamento na troca.
+    """
     # Sanitiza o numero para uso como nome de arquivo
     nome = numero_chamado.strip().replace("/", "_").replace("\\", "_")
-    return _CHECKPOINTS_DIR / f"{nome}.json"
+    pasta = _CHECKPOINTS_DIR / nome
+    pasta.mkdir(parents=True, exist_ok=True)
+    novo = pasta / f"{nome}.json"
+    antigo = _CHECKPOINTS_DIR / f"{nome}.json"
+    if not novo.exists() and antigo.exists():
+        antigo.replace(novo)
+    return novo
 
 
 def inicializar(numero_chamado: str, total: int) -> None:

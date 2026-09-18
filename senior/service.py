@@ -47,10 +47,31 @@ def validar_horario(texto: str):
 
 
 def _fazer_login_se_preciso(pagina, usuario, senha, log):
-    log("Verificando estado da sessao...", "info")
-    pagina.wait_for_timeout(2000)
+    """Espera ativamente pela tela de login OU pelo botao de ponto (sessao ja
+    ativa) — o que aparecer primeiro.
 
-    if not pagina.locator(SELETOR_USUARIO).is_visible():
+    Antes era um `wait_for_timeout(2000)` fixo seguido de UM UNICO `is_visible()`.
+    Descoberto na marra: quando a sessao NAO esta ativa, o site demora de
+    verdade uns 10-12s para redirecionar da URL do ponto ate a tela de login
+    real (`platform.senior.com.br/login/`, onde `SELETOR_USUARIO` so passa a
+    existir). Com 2s o campo ainda nem existia, o `is_visible()` dava False, e
+    o codigo concluia "sessao ja ativa" e pulava o preenchimento inteiro —
+    sintoma: "nao preenche o usuario". Mesma familia de bug do login do Assyst
+    (checagem instantanea x espera ativa).
+    """
+    log("Verificando estado da sessao...", "info")
+
+    limite = time.time() + TIMEOUT_SEGUNDOS
+    login_necessario = False
+    while time.time() < limite:
+        if pagina.locator(SELETOR_USUARIO).is_visible():
+            login_necessario = True
+            break
+        if any(fr.locator(SELETOR_BOTAO_PONTO).count() > 0 for fr in pagina.frames):
+            break  # ja chegou na tela de ponto: sessao ativa, nao precisa logar
+        pagina.wait_for_timeout(500)
+
+    if not login_necessario:
         log("Sessao salva: usuario ja autenticado pelo perfil.", "info")
         return
 
