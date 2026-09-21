@@ -42,11 +42,6 @@ CHECKPOINTS_DIR = DATA_DIR / "checkpoints"
 APP_LOCAL_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "Automatic"
 PERFIL_NAVEGADOR_DIR = APP_LOCAL_DIR / "perfil_navegador"
 
-# Perfil persistente do Edge usado só pela automação de Ponto (Senior HCM) — site e
-# credencial totalmente à parte do Assyst, por isso pasta própria (mesmo motivo do
-# PERFIL_NAVEGADOR_DIR acima: fora da árvore do projeto, longe do hot-reload).
-PERFIL_PONTO_DIR = APP_LOCAL_DIR / "perfil_ponto"
-
 # Onde uma atualização baixada pelo app (state/update_state.py) fica esperando até
 # ser aplicada — também fora da árvore do projeto, pelo mesmo motivo dos perfis
 # acima: escrever centenas de arquivos dentro do projeto, com o 'reflex run' de
