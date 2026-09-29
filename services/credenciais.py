@@ -1,36 +1,23 @@
 """
 services/credenciais.py — Armazenamento das credenciais do CATI/Assyst.
 
-A matricula fica num JSON simples em data/ (mesmo padrao do kb_store).
+A matricula fica no banco (services/db.py, tabela app_config, chave
+'matricula') desde 2026-09-28 — antes era data/credenciais.json.
 A SENHA nunca vai para o disco: vai para o Cofre de Credenciais do Windows via
 keyring, criptografada pelo SO e amarrada a conta Windows do usuario.
-
-A pasta 'data' e a que o updater precisa excluir ao copiar a versao nova, entao
-as credenciais sobrevivem as atualizacoes do app (ver services/paths.py).
 """
-import json
-
 import keyring
 
-from services.paths import DATA_DIR
+from services import db
 
 # Nome do "servico" no Cofre do Windows. Aparece assim no Gerenciador de
 # Credenciais, entao vale manter legivel.
 SERVICO = "Automatic"
 
-_PATH = DATA_DIR / "credenciais.json"
-
 
 def _ler_matricula() -> str:
-    if not _PATH.exists():
-        return ""
-    try:
-        with open(_PATH, "r", encoding="utf-8") as f:
-            return json.load(f).get("matricula", "")
-    except (json.JSONDecodeError, OSError):
-        # Arquivo corrompido ou ilegivel: trata como "sem credencial salva"
-        # em vez de derrubar o app na abertura.
-        return ""
+    r = db.consultar("SELECT valor FROM app_config WHERE chave = 'matricula'")
+    return r[0]["valor"] if r else ""
 
 
 def carregar() -> tuple[str, str]:
@@ -62,9 +49,9 @@ def salvar(matricula: str, senha: str) -> None:
             pass
 
     keyring.set_password(SERVICO, matricula, senha)
-    _PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(_PATH, "w", encoding="utf-8") as f:
-        json.dump({"matricula": matricula}, f, ensure_ascii=False, indent=2)
+    with db.transacao() as con:
+        con.execute("INSERT OR REPLACE INTO app_config VALUES ('matricula', ?)",
+                    (matricula,))
 
 
 def apagar() -> None:
@@ -74,7 +61,8 @@ def apagar() -> None:
             keyring.delete_password(SERVICO, matricula)
         except keyring.errors.PasswordDeleteError:
             pass
-    _PATH.unlink(missing_ok=True)
+    with db.transacao() as con:
+        con.execute("DELETE FROM app_config WHERE chave = 'matricula'")
 
 
 def tem_credenciais() -> bool:

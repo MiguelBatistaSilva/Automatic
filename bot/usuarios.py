@@ -9,27 +9,19 @@ usuário, 2026-08-17: cadastrar a senha de cada colega não é viável) e mora e
 Guarda tambem um nome/apelido por chat_id — não vem do perfil do Telegram
 (que a pessoa pode mudar a qualquer hora) para os logs ficarem previsíveis.
 """
-import json
-
-from services.paths import DATA_DIR
-
-_PATH = DATA_DIR / "usuarios_bot.json"
+from services import db
 
 
 def _mapa() -> dict:
-    if not _PATH.exists():
-        return {}
-    try:
-        with open(_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        # Arquivo corrompido: trata como "ninguem autorizado" em vez de derrubar
-        # o bot. Numa fronteira de seguranca, falhar fechado e o unico jeito.
-        return {}
+    """chat_id (str) -> nome. Mora no banco (services/db.py) desde 2026-09-28;
+    antes era data/usuarios_bot.json."""
+    return {r["chat_id"]: r["nome"] for r in
+            db.consultar("SELECT chat_id, nome FROM bot_usuarios")}
 
 
 def autorizado(chat_id) -> bool:
-    return str(chat_id) in _mapa()
+    return bool(db.consultar("SELECT 1 FROM bot_usuarios WHERE chat_id = ?",
+                             (str(chat_id),)))
 
 
 def nome_de(chat_id) -> str:
@@ -44,21 +36,16 @@ def listar() -> dict:
 
 def cadastrar(chat_id, nome) -> None:
     """Libera o chat_id a falar com o bot — não envolve credencial nenhuma
-    (ver `credencial_servico.py`, configurada uma vez só para o bot inteiro).
+    (ver `credencial_servico.py`).
     """
     nome = nome.strip()
-    mapa = _mapa()
-    mapa[str(chat_id)] = nome
-    _PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(_PATH, "w", encoding="utf-8") as f:
-        json.dump(mapa, f, ensure_ascii=False, indent=2)
+    with db.transacao() as con:
+        con.execute("INSERT OR REPLACE INTO bot_usuarios VALUES (?, ?)",
+                    (str(chat_id), nome))
     print(f"OK: chat {chat_id} -> {nome!r} liberado(a) para usar o bot")
 
 
 def remover(chat_id) -> None:
-    mapa = _mapa()
-    if mapa.pop(str(chat_id), None) is None:
-        return
-    _PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(_PATH, "w", encoding="utf-8") as f:
-        json.dump(mapa, f, ensure_ascii=False, indent=2)
+    with db.transacao() as con:
+        con.execute("DELETE FROM bot_usuarios WHERE chat_id = ?",
+                    (str(chat_id),))

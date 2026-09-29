@@ -9,19 +9,21 @@ descobriria as 14:30, quando nada acontecesse.
 NAO CONFUNDIR COM O CHECKPOINT dos outros fluxos. O checkpoint registra o que JA
 FOI FEITO, para poder retomar de onde parou. A agenda registra o que AINDA VAI
 SER FEITO. Sao direcoes opostas no tempo.
+
+ONDE MORA: tabela `tarefas` do banco (services/db.py), tipo 'atendimento',
+desde 2026-09-28 — antes era data/agenda_bot.json. A tabela ja tem o formato
+da futura fila de tarefas de todos os fluxos; a interface deste modulo (Item,
+adicionar, listar, separar_vencidos...) nao mudou. O RLock que existia aqui
+saiu: cada operacao e uma transacao BEGIN IMMEDIATE, que serializa inclusive
+entre processos (o lock so valia dentro de um).
 """
 import json
-import threading
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass
 
-from services.paths import DATA_DIR
+from services import db
 
-_PATH = DATA_DIR / "agenda_bot.json"
-
-# O laco de fundo e os comandos do usuario mexem na mesma lista, em threads
-# diferentes. Sem o lock, dois "salvar" simultaneos perdem um dos dois.
-_LOCK = threading.RLock()
+TIPO = "atendimento"
 
 PENDENTE = "pendente"
 EXECUTANDO = "executando"
@@ -47,36 +49,26 @@ class Item:
     detalhe: str = ""
 
 
-def _ler() -> list:
-    if not _PATH.exists():
-        return []
-    try:
-        with open(_PATH, "r", encoding="utf-8") as f:
-            return [Item(**d) for d in json.load(f)]
-    except (json.JSONDecodeError, OSError, TypeError):
-        # Arquivo corrompido: melhor comecar vazio do que derrubar o bot na
-        # subida. Perde-se a agenda, mas o servico continua de pe.
-        return []
+def _item(r) -> Item:
+    return Item(
+        id=r["id"], chat_id=r["chat_id"], quem=r["quem"],
+        chamado=json.loads(r["dados"]).get("chamado", ""),
+        quando_ts=r["executar_em"], quando_label=r["executar_em_label"],
+        status=r["status"], detalhe=r["detalhe"],
+    )
 
 
-def _gravar(itens) -> None:
-    """Escrita atomica: grava num temporario e substitui.
-
-    Sem isso, uma queda no meio do write deixa um JSON pela metade — que na
-    proxima leitura vira "agenda vazia".
-
-    O temporario termina em ".tmp.json", NAO ".tmp": em desenvolvimento o
-    `reflex run` observa a pasta do projeto INTEIRA para hot-reload e ignora
-    extensoes conhecidas (json, txt, log...) mas NAO ignora ".tmp" — um arquivo
-    terminado em ".tmp" aqui reiniciaria o backend do Reflex a cada agendamento
-    gravado, se os dois processos rodarem na mesma maquina. Mesmo bug e mesma
-    correcao ja aplicada em `services/checkpoint.py`.
-    """
-    _PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = _PATH.parent / (_PATH.name + ".tmp.json")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump([asdict(i) for i in itens], f, ensure_ascii=False, indent=2)
-    tmp.replace(_PATH)
+def _marcar(con, item_id, status, detalhe=None) -> None:
+    if detalhe is None:
+        con.execute(
+            "UPDATE tarefas SET status = ?, "
+            "atualizado_em = datetime('now', 'localtime') WHERE id = ?",
+            (status, item_id))
+    else:
+        con.execute(
+            "UPDATE tarefas SET status = ?, detalhe = ?, "
+            "atualizado_em = datetime('now', 'localtime') WHERE id = ?",
+            (status, detalhe, item_id))
 
 
 def carregar_ao_subir() -> list:
@@ -87,68 +79,73 @@ def carregar_ao_subir() -> list:
     seria mentira, marcar como concluido tambem — vira INDEFINIDO, e a pessoa e
     avisada para conferir na mao.
     """
-    with _LOCK:
-        itens = _ler()
-        duvidosos = [i for i in itens if i.status == EXECUTANDO]
+    with db.transacao() as con:
+        duvidosos = [_item(r) for r in con.execute(
+            "SELECT * FROM tarefas WHERE tipo = ? AND status = ?",
+            (TIPO, EXECUTANDO)).fetchall()]
         for i in duvidosos:
             i.status = INDEFINIDO
             i.detalhe = "O bot caiu durante a execucao"
-        if duvidosos:
-            _gravar(itens)
+            _marcar(con, i.id, i.status, i.detalhe)
         return duvidosos
 
 
 def listar(chat_id=None, apenas_abertos=False) -> list:
-    with _LOCK:
-        itens = _ler()
+    itens = [_item(r) for r in db.consultar(
+        "SELECT * FROM tarefas WHERE tipo = ? ORDER BY executar_em", (TIPO,))]
     if chat_id is not None:
         itens = [i for i in itens if i.chat_id == chat_id]
     if apenas_abertos:
         itens = [i for i in itens if i.status in ABERTOS]
-    return sorted(itens, key=lambda i: i.quando_ts)
+    return itens
 
 
 def adicionar(chat_id, quem, chamado, quando_ts, quando_label) -> Item:
-    with _LOCK:
-        itens = _ler()
-        item = Item(
-            id=str(int(time.time() * 1000)),
-            chat_id=chat_id,
-            quem=quem,
-            chamado=chamado,
-            quando_ts=quando_ts,
-            quando_label=quando_label,
-        )
-        itens.append(item)
-        _gravar(itens)
-        return item
+    item = Item(
+        id=str(int(time.time() * 1000)),
+        chat_id=chat_id,
+        quem=quem,
+        chamado=chamado,
+        quando_ts=quando_ts,
+        quando_label=quando_label,
+    )
+    with db.transacao() as con:
+        con.execute(
+            "INSERT INTO tarefas (id, tipo, chat_id, quem, dados, executar_em, "
+            "executar_em_label, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (item.id, TIPO, chat_id, quem,
+             json.dumps({"chamado": chamado}, ensure_ascii=False),
+             quando_ts, quando_label, item.status))
+    return item
 
 
 def cancelar(item_id, chat_id) -> Item | None:
     """Cancela um item. So o dono cancela — e so enquanto ainda esta PENDENTE."""
-    with _LOCK:
-        itens = _ler()
-        for i in itens:
-            if i.id == item_id and i.chat_id == chat_id and i.status == PENDENTE:
-                i.status = CANCELADO
-                _gravar(itens)
-                return i
-        return None
+    with db.transacao() as con:
+        r = con.execute(
+            "SELECT * FROM tarefas WHERE id = ? AND tipo = ? AND chat_id = ? "
+            "AND status = ?", (item_id, TIPO, chat_id, PENDENTE)).fetchone()
+        if r is None:
+            return None
+        _marcar(con, item_id, CANCELADO)
+        i = _item(r)
+        i.status = CANCELADO
+        return i
 
 
 def separar_vencidos(agora, tolerancia_s) -> tuple:
-    """Devolve (para_rodar, perdidos) e ja marca os dois no arquivo.
+    """Devolve (para_rodar, perdidos) e ja marca os dois no banco.
 
     Perdido e agendamento cujo horario passou ha mais que a tolerancia — o
     chamado precisa iniciar NA hora marcada, entao rodar atrasado seria pior do
     que nao rodar. A tolerancia existe so por causa do intervalo do laco.
     """
-    with _LOCK:
-        itens = _ler()
+    with db.transacao() as con:
         rodar, perdidos = [], []
-        for i in itens:
-            if i.status != PENDENTE or i.quando_ts > agora:
-                continue
+        for r in con.execute(
+                "SELECT * FROM tarefas WHERE tipo = ? AND status = ? "
+                "AND executar_em <= ?", (TIPO, PENDENTE, agora)).fetchall():
+            i = _item(r)
             if agora - i.quando_ts <= tolerancia_s:
                 i.status = EXECUTANDO
                 rodar.append(i)
@@ -156,17 +153,10 @@ def separar_vencidos(agora, tolerancia_s) -> tuple:
                 i.status = PERDIDO
                 i.detalhe = "O bot nao estava no ar na hora marcada"
                 perdidos.append(i)
-        if rodar or perdidos:
-            _gravar(itens)
+            _marcar(con, i.id, i.status, i.detalhe)
         return rodar, perdidos
 
 
 def concluir(item_id, ok, detalhe="") -> None:
-    with _LOCK:
-        itens = _ler()
-        for i in itens:
-            if i.id == item_id:
-                i.status = CONCLUIDO if ok else ERRO
-                i.detalhe = detalhe
-                break
-        _gravar(itens)
+    with db.transacao() as con:
+        _marcar(con, item_id, CONCLUIDO if ok else ERRO, detalhe)

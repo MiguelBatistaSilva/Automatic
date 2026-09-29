@@ -4,13 +4,24 @@ services/checkpoint.py — Gerencia o progresso linha a linha com 3 estados:
   salvo     → chamado criado mas BC ainda nao adicionada
   concluido → chamado criado + BC adicionada
 
-Cada chamado tem seu proprio arquivo JSON em data/checkpoints/{numero}.json
+ONDE MORA: tabelas `checkpoints` e `checkpoint_linhas` do banco
+(services/db.py) desde 2026-09-28. Antes era um JSON por chave em
+data/checkpoints/<chave>/<chave>.json — importado pelo db.py na subida e
+renomeado para .json.migrado. O TXT de filhos (assyst_common) continua em
+arquivo: e o relatorio que abre no Bloco de Notas, nao a rede de seguranca.
+
+O que o banco resolveu do formato antigo: cada marcacao e uma transacao (nao
+existe mais "JSON pela metade" nem a gravacao atomica via .tmp.json, que
+disparava o hot-reload do Reflex), e bot + UI podem marcar ao mesmo tempo sem
+um apagar a marcacao do outro.
+
+A interface (nomes, argumentos e o formato dict das linhas) NAO mudou —
+os tres modos do Desmembramento, a Requisicao e o bot nao foram tocados.
 """
 import json
-import os
 from datetime import datetime
-from pathlib import Path
 
+from services import db
 from services.paths import CHECKPOINTS_DIR as _CHECKPOINTS_DIR
 
 STATUS_PENDENTE  = "pendente"
@@ -22,56 +33,57 @@ def _agora() -> str:
     return datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
 
-def _path(numero_chamado: str) -> Path:
-    """Retorna o caminho do arquivo JSON para um chamado especifico.
-
-    Fica dentro de uma subpasta com o nome do proprio chamado (ex.:
-    checkpoints/S2460474/S2460474.json), junto do TXT de filhos que
-    `assyst_common._path_filhos` grava para o mesmo chamado — antes cada um
-    ficava num lugar (json solto aqui, txt solto em data/), espalhando os
-    dois arquivos de uma mesma execucao. Migra sozinho um JSON antigo, solto
-    no formato anterior, para nao perder retomada em andamento na troca.
-    """
-    # Sanitiza o numero para uso como nome de arquivo
-    nome = numero_chamado.strip().replace("/", "_").replace("\\", "_")
-    pasta = _CHECKPOINTS_DIR / nome
-    pasta.mkdir(parents=True, exist_ok=True)
-    novo = pasta / f"{nome}.json"
-    antigo = _CHECKPOINTS_DIR / f"{nome}.json"
-    if not novo.exists() and antigo.exists():
-        antigo.replace(novo)
-    return novo
+def _existe(con, numero_chamado: str) -> bool:
+    return con.execute("SELECT 1 FROM checkpoints WHERE chave = ?",
+                       (numero_chamado,)).fetchone() is not None
 
 
 def inicializar(numero_chamado: str, total: int) -> None:
-    """Cria um checkpoint novo com todas as linhas como pendente."""
-    dados = {
-        "numero_chamado": numero_chamado,
-        "total":          total,
-        "criado_em":      _agora(),
-        "atualizado_em":  _agora(),
-        "concluido":      False,
-        "linhas": [
-            {"index": i, "status": STATUS_PENDENTE}
-            for i in range(total)
-        ],
-    }
-    _salvar_dados(numero_chamado, dados)
+    """Cria um checkpoint novo com todas as linhas como pendente (substitui
+    o que houver para a chave — e o "Do zero" dos dialogos)."""
+    agora = _agora()
+    with db.transacao() as con:
+        con.execute("DELETE FROM checkpoint_linhas WHERE chave = ?", (numero_chamado,))
+        con.execute("DELETE FROM checkpoints WHERE chave = ?", (numero_chamado,))
+        con.execute("INSERT INTO checkpoints VALUES (?, ?, ?, ?, 0)",
+                    (numero_chamado, total, agora, agora))
+        con.executemany(
+            "INSERT INTO checkpoint_linhas (chave, idx, status) VALUES (?, ?, ?)",
+            [(numero_chamado, i, STATUS_PENDENTE) for i in range(total)])
+
+
+def _atualizar_linha(con, numero_chamado, index, status, numero_filho=None,
+                     **extra) -> bool:
+    r = con.execute(
+        "SELECT extra FROM checkpoint_linhas WHERE chave = ? AND idx = ?",
+        (numero_chamado, index)).fetchone()
+    if r is None:
+        return False
+    dados = json.loads(r["extra"])
+    dados.update(extra)
+    if numero_filho is None:
+        con.execute(
+            "UPDATE checkpoint_linhas SET status = ?, extra = ? "
+            "WHERE chave = ? AND idx = ?",
+            (status, json.dumps(dados, ensure_ascii=False), numero_chamado, index))
+    else:
+        con.execute(
+            "UPDATE checkpoint_linhas SET status = ?, numero_filho = ?, extra = ? "
+            "WHERE chave = ? AND idx = ?",
+            (status, numero_filho, json.dumps(dados, ensure_ascii=False),
+             numero_chamado, index))
+    return True
 
 
 def marcar_salvo(numero_chamado: str, index: int, numero_filho: str = "") -> None:
     """Marca linha como salva (chamado criado, BC pendente). Salva o numero do filho."""
-    dados = _carregar_dados(numero_chamado)
-    if not dados:
-        return
-    for linha in dados["linhas"]:
-        if linha["index"] == index:
-            linha["status"]       = STATUS_SALVO
-            linha["salvo_em"]     = _agora()
-            linha["numero_filho"] = numero_filho
-            break
-    dados["atualizado_em"] = _agora()
-    _salvar_dados(numero_chamado, dados)
+    with db.transacao() as con:
+        if not _existe(con, numero_chamado):
+            return
+        _atualizar_linha(con, numero_chamado, index, STATUS_SALVO,
+                         numero_filho=numero_filho, salvo_em=_agora())
+        con.execute("UPDATE checkpoints SET atualizado_em = ? WHERE chave = ?",
+                    (_agora(), numero_chamado))
 
 
 def numero_filho(numero_chamado: str, index: int) -> str:
@@ -90,46 +102,47 @@ def marcar_concluido_linha(numero_chamado: str, index: int, **extra) -> None:
     Servico) que precisam reconstruir a tabela de resultados inteira ao
     retomar um lote, nao so saber "concluida sim/nao".
     """
-    dados = _carregar_dados(numero_chamado)
-    if not dados:
-        return
-    for linha in dados["linhas"]:
-        if linha["index"] == index:
-            linha["status"]       = STATUS_CONCLUIDO
-            linha["concluido_em"] = _agora()
-            linha.update(extra)
-            break
-    todas = all(l["status"] == STATUS_CONCLUIDO for l in dados["linhas"])
-    dados["concluido"]     = todas
-    dados["atualizado_em"] = _agora()
-    _salvar_dados(numero_chamado, dados)
+    with db.transacao() as con:
+        if not _existe(con, numero_chamado):
+            return
+        _atualizar_linha(con, numero_chamado, index, STATUS_CONCLUIDO,
+                         concluido_em=_agora(), **extra)
+        falta = con.execute(
+            "SELECT 1 FROM checkpoint_linhas WHERE chave = ? AND status != ?",
+            (numero_chamado, STATUS_CONCLUIDO)).fetchone()
+        con.execute(
+            "UPDATE checkpoints SET concluido = ?, atualizado_em = ? WHERE chave = ?",
+            (int(falta is None), _agora(), numero_chamado))
 
 
 def carregar(numero_chamado: str) -> dict | None:
     return _carregar_dados(numero_chamado)
 
 
+def _path_legado(numero_chamado: str):
+    """Onde o JSON do formato antigo estaria (sem criar pasta nenhuma)."""
+    nome = numero_chamado.strip().replace("/", "_").replace("\\", "_")
+    return (_CHECKPOINTS_DIR / nome / f"{nome}.json",
+            _CHECKPOINTS_DIR / f"{nome}.json")
+
+
 def esta_corrompido(numero_chamado: str) -> bool:
-    """O arquivo existe mas nao da para ler? (NAO confundir com "nao existe".)
+    """O checkpoint existe mas nao da para ler? (NAO confundir com "nao existe".)
 
     `_carregar_dados` devolve None nos DOIS casos, e quem chama nao consegue
     distinguir "chamado novo" de "checkpoint quebrado". Como o fluxo inicializa
-    tudo como pendente quando conclui "chamado novo", um arquivo ilegivel o fazia
-    RECRIAR todos os filhos ja criados — em silencio, com o log dizendo apenas
-    "Inicializando checkpoint...", que e a mesma frase de uma execucao legitima
-    do zero.
+    tudo como pendente quando conclui "chamado novo", um checkpoint ilegivel o
+    fazia RECRIAR todos os filhos ja criados — em silencio.
 
-    Por isso quem for decidir inicializar precisa perguntar isto ANTES.
+    No banco nao existe "meio gravado". O que sobra e o JSON do formato
+    antigo que o db.py NAO conseguiu importar (ilegivel) — ou que um processo
+    ainda com codigo antigo gravou depois da importacao. Nos dois casos a
+    resposta segura e a mesma: existe algo nao lido para esta chave, entao
+    nao e "chamado novo". Por isso quem for inicializar pergunta isto ANTES.
     """
-    p = _path(numero_chamado)
-    if not p.exists():
+    if _carregar_dados(numero_chamado) is not None:
         return False
-    try:
-        with open(p, "r", encoding="utf-8") as f:
-            json.load(f)
-        return False
-    except Exception:
-        return True
+    return any(p.exists() for p in _path_legado(numero_chamado))
 
 
 def existe_pendente(numero_chamado: str) -> bool:
@@ -186,50 +199,36 @@ def resumo(numero_chamado: str) -> str:
 
 
 def limpar(numero_chamado: str) -> None:
-    """Remove o arquivo de checkpoint de um chamado especifico."""
-    p = _path(numero_chamado)
-    if p.exists():
-        p.unlink()
+    """Remove o checkpoint de um chamado especifico."""
+    with db.transacao() as con:
+        con.execute("DELETE FROM checkpoint_linhas WHERE chave = ?", (numero_chamado,))
+        con.execute("DELETE FROM checkpoints WHERE chave = ?", (numero_chamado,))
 
 
 def _carregar_dados(numero_chamado: str) -> dict | None:
-    p = _path(numero_chamado)
-    if not p.exists():
-        return None
-    try:
-        with open(p, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
-
-
-def _salvar_dados(numero_chamado: str, dados: dict) -> None:
-    """Grava o checkpoint de forma ATOMICA (temporario + os.replace).
-
-    O `open(p, "w")` ZERA o arquivo antes de escrever: morrer nesse instante
-    (backend do Reflex reiniciando, maquina desligando) deixava um JSON pela
-    metade. `_carregar_dados` nao le esse arquivo, devolve None, e o fluxo
-    concluia "chamado novo" e recriava TODOS os filhos ja criados.
-
-    Com a troca atomica o arquivo bom so deixa de existir quando o novo ja esta
-    inteiro no disco. O pior caso passa a ser "perdi a ultima linha marcada" —
-    que a retomada resolve — em vez de "corrompi o checkpoint".
-
-    Sem `fsync` de proposito: ele protegeria contra queda de energia, mas custa
-    em TODA linha marcada, e a morte real aqui e o processo sendo derrubado —
-    para essa, o `os.replace` sozinho basta.
-    """
-    p = _path(numero_chamado)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    # `p.name + ".tmp.json"` e nao `with_suffix`: o numero do chamado pode conter
-    # ponto, e `with_suffix` comeria o trecho depois dele. Termina em ".json" (e
-    # nao ".tmp") de proposito: em desenvolvimento o `reflex run` observa a pasta
-    # do projeto INTEIRA para hot-reload e ignora extensoes conhecidas (json,
-    # txt, log...) mas NAO ignora ".tmp" — um arquivo terminado em ".tmp" aqui
-    # disparava o reload do backend a cada linha marcada, matando a thread do
-    # worker no meio do fluxo (era exatamente o que travava o Desmembramento
-    # logo apos "Inicializando checkpoint...", sem excecao nenhuma no log).
-    tmp = p.parent / (p.name + ".tmp.json")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(dados, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, p)  # atomico no Windows (mesmo volume)
+    """Monta o mesmo dict do antigo JSON: numero_chamado, total, criado_em,
+    atualizado_em, concluido e linhas [{index, status, numero_filho?, ...}]."""
+    with db.leitura() as con:
+        cab = con.execute("SELECT * FROM checkpoints WHERE chave = ?",
+                          (numero_chamado,)).fetchone()
+        if cab is None:
+            return None
+        rows = con.execute(
+            "SELECT * FROM checkpoint_linhas WHERE chave = ? ORDER BY idx",
+            (numero_chamado,)).fetchall()
+    linhas = []
+    for r in rows:
+        linha = {"index": r["idx"], "status": r["status"]}
+        extra = json.loads(r["extra"])
+        if r["numero_filho"] or "salvo_em" in extra:
+            linha["numero_filho"] = r["numero_filho"]
+        linha.update(extra)
+        linhas.append(linha)
+    return {
+        "numero_chamado": cab["chave"],
+        "total":          cab["total"],
+        "criado_em":      cab["criado_em"],
+        "atualizado_em":  cab["atualizado_em"],
+        "concluido":      bool(cab["concluido"]),
+        "linhas":         linhas,
+    }

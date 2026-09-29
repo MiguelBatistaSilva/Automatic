@@ -17,7 +17,8 @@ Conteudo de `data/`:
                           Serviço), com o JSON de progresso linha a linha E o
                           TXT dos filhos criados (Desmembramento) juntos
   - credenciais.json   -> matricula (a SENHA vai para o Cofre do Windows)
-  - kb_configs.json    -> Bases de Conhecimento cadastradas
+  - *.json.migrado     -> backups dos JSONs ja importados para o SQLite
+                          (o banco fica em APP_LOCAL_DIR — ver services/db.py)
 
 O QUE **NAO** PODE FICAR EM `data/`: qualquer coisa que escreva muito arquivo,
 com o perfil do Chrome da aba Licencas. Motivo concreto, descoberto na marra: em

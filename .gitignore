@@ -18,6 +18,11 @@ __pycache__/
 
 docs/
 
+data/kb_configs.json
+data/requisicao_presets.json
+data/agenda_bot.json
+
+
 # C extensions
 *.so
 
@@ -207,6 +212,8 @@ data/credencial_bot.json
 data/usuarios_bot.json
 data/checkpoints/
 data/filhos_*.txt
+# Backups dos JSONs importados para o SQLite (services/db.py).
+data/*.migrado
 
 # Auto-atualizador (atualizar.py): backup local antes de trocar os arquivos, e
 # o log de cada tentativa. Gerados na maquina, nao fazem sentido no repositorio.

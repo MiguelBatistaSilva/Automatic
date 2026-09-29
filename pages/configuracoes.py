@@ -21,7 +21,7 @@ view mudou de lugar.
 
 Aba "Bases de Conhecimento": cadastro de keyword+artigo usado pelos modos
 Criar + Base e Só Base do Desmembramento (tela e bot, ambos lêem
-`data/kb_configs.json` via `services/kb_store.py`). CRUD continua em
+o banco SQLite via `services/kb_store.py`). CRUD continua em
 `state/kb_state.py` (KBState) — não duplicado aqui, só a view mudou de
 lugar, igual às outras duas abas.
 

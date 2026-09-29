@@ -20,55 +20,22 @@ motivo de antes — aquele guarda a matrícula de quem usa o APP DESKTOP naquela
 máquina, e trocar de conta ali apaga a senha anterior do cofre. Nome de
 serviço próprio no Cofre do Windows (`SERVICO_BOT`) evita qualquer colisão.
 
-Formato do arquivo (`data/credencial_bot.json`): {chat_id (str): matricula}.
-MIGRAÇÃO AUTOMÁTICA: se o arquivo ainda estiver no formato antigo
-(`{"matricula": "..."}`, uma credencial só), a primeira leitura converte para
-o novo formato associando essa matrícula ao chat_id do Miguel (dono da
-credencial que já existia) e regrava o arquivo — sem precisar de script
-separado nem de qualquer pessoa recadastrar o que já funcionava.
+ONDE MORA: tabela `bot_credenciais` do banco (services/db.py), {chat_id:
+matricula}, desde 2026-09-28. Antes era data/credencial_bot.json — a
+importação desse arquivo (inclusive do formato antigo de credencial única,
+de antes de 2026-08-26) é feita uma vez só pelo próprio db.py.
 """
-import json
-
 import keyring
 
-from services.paths import DATA_DIR
+from services import db
 
 SERVICO_BOT = "Automatic-Bot"
 
-# chat_id do Miguel (usuarios_bot.json) — dono da credencial única que já
-# existia antes da migração para credencial por pessoa (2026-08-26).
-_CHAT_ID_MIGRACAO = "1070692564"
-
-_PATH = DATA_DIR / "credencial_bot.json"
-
 
 def _ler_mapa() -> dict[str, str]:
-    """{chat_id (str): matricula}. Migra do formato antigo na primeira leitura."""
-    if not _PATH.exists():
-        return {}
-    try:
-        with open(_PATH, "r", encoding="utf-8") as f:
-            dados = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        # Arquivo corrompido: trata como "ninguem configurado" em vez de
-        # derrubar o bot na subida.
-        return {}
-
-    if "matricula" in dados:
-        # Formato antigo (credencial unica). A senha ja esta no keyring sob
-        # essa matricula (nome do servico nao mudou) — so falta associar ao
-        # chat_id do dono e regravar no formato novo.
-        mapa = {_CHAT_ID_MIGRACAO: dados["matricula"]}
-        _gravar_mapa(mapa)
-        return mapa
-
-    return dados
-
-
-def _gravar_mapa(mapa: dict[str, str]) -> None:
-    _PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(_PATH, "w", encoding="utf-8") as f:
-        json.dump(mapa, f, ensure_ascii=False, indent=2)
+    """{chat_id (str): matricula}."""
+    return {r["chat_id"]: r["matricula"] for r in
+            db.consultar("SELECT chat_id, matricula FROM bot_credenciais")}
 
 
 def carregar_de(chat_id) -> tuple[str, str]:
@@ -122,8 +89,9 @@ def salvar_de(chat_id, matricula: str, senha: str) -> None:
             pass
 
     keyring.set_password(SERVICO_BOT, matricula, senha)
-    mapa[chat_id] = matricula
-    _gravar_mapa(mapa)
+    with db.transacao() as con:
+        con.execute("INSERT OR REPLACE INTO bot_credenciais VALUES (?, ?)",
+                    (chat_id, matricula))
 
 
 def remover_de(chat_id) -> None:
@@ -134,7 +102,8 @@ def remover_de(chat_id) -> None:
     matricula = mapa.pop(chat_id, None)
     if matricula is None:
         return
-    _gravar_mapa(mapa)
+    with db.transacao() as con:
+        con.execute("DELETE FROM bot_credenciais WHERE chat_id = ?", (chat_id,))
     if matricula not in mapa.values():
         try:
             keyring.delete_password(SERVICO_BOT, matricula)
