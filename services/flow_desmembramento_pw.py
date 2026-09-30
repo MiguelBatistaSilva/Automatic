@@ -72,9 +72,14 @@ def _chave_checkpoint(filhos: list[str]) -> str:
 class FluxoDesmembramentoPW:
     """Base comum dos tres modos. Guarda a sessao e concentra as acoes."""
 
-    def __init__(self, page, usuario: str, senha: str, log):
+    # Nome do modo gravado no checkpoint (pagina "Meus fluxos").
+    FLUXO = ""
+
+    def __init__(self, page, usuario: str, senha: str, log, origem: str = "ui"):
         self.page = page
         self.usuario = usuario
+        # 'ui' ou 'bot' — so vai para o checkpoint, nao muda o fluxo.
+        self.origem = origem
         self.senha = senha
         self.log = log
         # Erguido pelo `_adicionar_bc` quando a base foi aplicada mas a tela nao
@@ -256,6 +261,8 @@ class FluxoDesmembramentoPW:
 class FluxoCompletoPW(FluxoDesmembramentoPW):
     """Modo Criar + Base: cria o filho (marca SALVO) e aplica a BC (CONCLUIDO)."""
 
+    FLUXO = "desmembramento_completo"
+
     def executar(self, df, descricao_base: str, numero_chamado: str,
                  kb_function, iniciar_do_zero: bool = False) -> None:
         total = len(df)
@@ -268,7 +275,8 @@ class FluxoCompletoPW(FluxoDesmembramentoPW):
             return
         if iniciar_do_zero or (not existe_pendente(numero_chamado) and not foi_concluido(numero_chamado)):
             self.log("Inicializando checkpoint...", "info")
-            inicializar(numero_chamado, total)
+            inicializar(numero_chamado, total, fluxo=self.FLUXO, origem=self.origem,
+                        matricula=self.usuario)
         else:
             salvos = sum(1 for i in range(total) if status_linha(numero_chamado, i) == STATUS_SALVO)
             concluidos = sum(1 for i in range(total) if status_linha(numero_chamado, i) == STATUS_CONCLUIDO)
@@ -362,6 +370,8 @@ class FluxoCriarPW(FluxoDesmembramentoPW):
     intermediario). Sem o log [DEBUG] que ficara pendente no flow_3n Selenium.
     """
 
+    FLUXO = "desmembramento_criar"
+
     def executar(self, df, descricao_base: str, numero_chamado: str,
                  iniciar_do_zero: bool = False) -> None:
         total = len(df)
@@ -374,7 +384,8 @@ class FluxoCriarPW(FluxoDesmembramentoPW):
             return
         if iniciar_do_zero or (not existe_pendente(numero_chamado) and not foi_concluido(numero_chamado)):
             self.log("Inicializando checkpoint...", "info")
-            inicializar(numero_chamado, total)
+            inicializar(numero_chamado, total, fluxo=self.FLUXO, origem=self.origem,
+                        matricula=self.usuario)
         else:
             concluidos = sum(1 for i in range(total) if status_linha(numero_chamado, i) == STATUS_CONCLUIDO)
             pendentes = sum(1 for i in range(total) if status_linha(numero_chamado, i) == STATUS_PENDENTE)
@@ -442,6 +453,8 @@ class FluxoBCPW(FluxoDesmembramentoPW):
     `voltar_ao_evento=False` que a aba passa ao `executar_kb_unica_pw`.
     """
 
+    FLUXO = "desmembramento_bc"
+
     def executar(self, filhos: list[str], kb_function,
                  iniciar_do_zero: bool = False) -> None:
         filhos = [f.strip() for f in filhos if f.strip()]
@@ -458,7 +471,8 @@ class FluxoBCPW(FluxoDesmembramentoPW):
             return
         if iniciar_do_zero or (not existe_pendente(chave) and not foi_concluido(chave)):
             self.log("Inicializando checkpoint BC...", "info")
-            inicializar(chave, total)
+            inicializar(chave, total, fluxo=self.FLUXO, origem=self.origem,
+                        matricula=self.usuario, referencias=filhos)
         else:
             concluidos = sum(1 for i in range(total) if status_linha(chave, i) == STATUS_CONCLUIDO)
             self.log(f"Retomando execucao BC: {concluidos} concluidas, {total - concluidos} pendentes.", "status")

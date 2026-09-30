@@ -22,8 +22,12 @@ from pages.desmembramento import desmembramento_page
 from pages.atendimento import atendimento_page
 from pages.requisicao import requisicao_page
 from pages.configuracoes import configuracoes_page
+from pages.meus_fluxos import meus_fluxos_page
+from pages.assistente import assistente_page
 from state.desmembramento_state import DesmembramentoState
 from state.kb_state import KBState
+from state.meus_fluxos_state import MeusFluxosState
+from state.assistente_state import AssistenteState
 from state.requisicao_presets_state import RequisicaoPresetsState
 from bot.state import TelegramState
 
@@ -52,6 +56,20 @@ app.add_page(
     route="/requisicao",
     title="Automatic — Requisição de Serviço",
 )
+# Raiz = Assistente: é a página em que o app abre (decisão do usuário,
+# 2026-09-30). Licenças, que era a raiz, foi para /licencas.
+app.add_page(
+    assistente_page,
+    route="/",
+    title="Automatic — Assistente",
+    on_load=AssistenteState.on_load,
+)
+app.add_page(
+    meus_fluxos_page,
+    route="/meus-fluxos",
+    title="Automatic — Meus fluxos",
+    on_load=MeusFluxosState.on_load,
+)
 app.add_page(
     configuracoes_page,
     route="/configuracoes",
@@ -63,7 +81,7 @@ app.add_page(
 )
 app.add_page(
     license_page,
-    route="/",
+    route="/licencas",
     title="Automatic — Licenças",
 )
 app.add_page(

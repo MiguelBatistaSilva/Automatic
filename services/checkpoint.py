@@ -33,30 +33,45 @@ def _agora() -> str:
     return datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
 
-def _existe(con, numero_chamado: str) -> bool:
-    return con.execute("SELECT 1 FROM checkpoints WHERE chave = ?",
-                       (numero_chamado,)).fetchone() is not None
+def _rodada(con, chave: str) -> int | None:
+    """Id da rodada VIGENTE da chave — a mais recente. As anteriores sao so
+    historico (pagina "Meus fluxos"); nenhuma funcao de retomada olha para elas."""
+    r = con.execute("SELECT id FROM checkpoints WHERE chave = ? "
+                    "ORDER BY id DESC LIMIT 1", (chave,)).fetchone()
+    return r["id"] if r else None
 
 
-def inicializar(numero_chamado: str, total: int) -> None:
-    """Cria um checkpoint novo com todas as linhas como pendente (substitui
-    o que houver para a chave — e o "Do zero" dos dialogos)."""
+def inicializar(numero_chamado: str, total: int, *, fluxo: str = "",
+                origem: str = "", matricula: str = "",
+                referencias: list[str] | None = None) -> None:
+    """Abre uma rodada NOVA com todas as linhas como pendente — e o "Do zero"
+    dos dialogos. A rodada anterior da mesma chave NAO e apagada (desde
+    2026-09-29): fica no historico, e a nova passa a ser a vigente.
+
+    `fluxo`/`origem` ('ui'/'bot')/`matricula` identificam a rodada na pagina
+    "Meus fluxos". `referencias[i]` e o chamado da linha i, quando conhecido
+    de antemao (modo So Base: a chave e um hash, sem ela nao se sabe quem e quem).
+    """
     agora = _agora()
+    refs = list(referencias or [])
+    refs += [""] * (total - len(refs))
     with db.transacao() as con:
-        con.execute("DELETE FROM checkpoint_linhas WHERE chave = ?", (numero_chamado,))
-        con.execute("DELETE FROM checkpoints WHERE chave = ?", (numero_chamado,))
-        con.execute("INSERT INTO checkpoints VALUES (?, ?, ?, ?, 0)",
-                    (numero_chamado, total, agora, agora))
+        cid = con.execute(
+            "INSERT INTO checkpoints (chave, fluxo, origem, matricula, total, "
+            "criado_em, atualizado_em, concluido) VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+            (numero_chamado, fluxo, origem, matricula, total, agora, agora)
+        ).lastrowid
         con.executemany(
-            "INSERT INTO checkpoint_linhas (chave, idx, status) VALUES (?, ?, ?)",
-            [(numero_chamado, i, STATUS_PENDENTE) for i in range(total)])
+            "INSERT INTO checkpoint_linhas (checkpoint_id, idx, status, referencia) "
+            "VALUES (?, ?, ?, ?)",
+            [(cid, i, STATUS_PENDENTE, refs[i]) for i in range(total)])
 
 
-def _atualizar_linha(con, numero_chamado, index, status, numero_filho=None,
+def _atualizar_linha(con, cid, index, status, numero_filho=None,
                      **extra) -> bool:
     r = con.execute(
-        "SELECT extra FROM checkpoint_linhas WHERE chave = ? AND idx = ?",
-        (numero_chamado, index)).fetchone()
+        "SELECT extra FROM checkpoint_linhas WHERE checkpoint_id = ? AND idx = ?",
+        (cid, index)).fetchone()
     if r is None:
         return False
     dados = json.loads(r["extra"])
@@ -64,26 +79,27 @@ def _atualizar_linha(con, numero_chamado, index, status, numero_filho=None,
     if numero_filho is None:
         con.execute(
             "UPDATE checkpoint_linhas SET status = ?, extra = ? "
-            "WHERE chave = ? AND idx = ?",
-            (status, json.dumps(dados, ensure_ascii=False), numero_chamado, index))
+            "WHERE checkpoint_id = ? AND idx = ?",
+            (status, json.dumps(dados, ensure_ascii=False), cid, index))
     else:
         con.execute(
             "UPDATE checkpoint_linhas SET status = ?, numero_filho = ?, extra = ? "
-            "WHERE chave = ? AND idx = ?",
+            "WHERE checkpoint_id = ? AND idx = ?",
             (status, numero_filho, json.dumps(dados, ensure_ascii=False),
-             numero_chamado, index))
+             cid, index))
     return True
 
 
 def marcar_salvo(numero_chamado: str, index: int, numero_filho: str = "") -> None:
     """Marca linha como salva (chamado criado, BC pendente). Salva o numero do filho."""
     with db.transacao() as con:
-        if not _existe(con, numero_chamado):
+        cid = _rodada(con, numero_chamado)
+        if cid is None:
             return
-        _atualizar_linha(con, numero_chamado, index, STATUS_SALVO,
+        _atualizar_linha(con, cid, index, STATUS_SALVO,
                          numero_filho=numero_filho, salvo_em=_agora())
-        con.execute("UPDATE checkpoints SET atualizado_em = ? WHERE chave = ?",
-                    (_agora(), numero_chamado))
+        con.execute("UPDATE checkpoints SET atualizado_em = ? WHERE id = ?",
+                    (_agora(), cid))
 
 
 def numero_filho(numero_chamado: str, index: int) -> str:
@@ -103,16 +119,17 @@ def marcar_concluido_linha(numero_chamado: str, index: int, **extra) -> None:
     retomar um lote, nao so saber "concluida sim/nao".
     """
     with db.transacao() as con:
-        if not _existe(con, numero_chamado):
+        cid = _rodada(con, numero_chamado)
+        if cid is None:
             return
-        _atualizar_linha(con, numero_chamado, index, STATUS_CONCLUIDO,
+        _atualizar_linha(con, cid, index, STATUS_CONCLUIDO,
                          concluido_em=_agora(), **extra)
         falta = con.execute(
-            "SELECT 1 FROM checkpoint_linhas WHERE chave = ? AND status != ?",
-            (numero_chamado, STATUS_CONCLUIDO)).fetchone()
+            "SELECT 1 FROM checkpoint_linhas WHERE checkpoint_id = ? AND status != ?",
+            (cid, STATUS_CONCLUIDO)).fetchone()
         con.execute(
-            "UPDATE checkpoints SET concluido = ?, atualizado_em = ? WHERE chave = ?",
-            (int(falta is None), _agora(), numero_chamado))
+            "UPDATE checkpoints SET concluido = ?, atualizado_em = ? WHERE id = ?",
+            (int(falta is None), _agora(), cid))
 
 
 def carregar(numero_chamado: str) -> dict | None:
@@ -199,36 +216,78 @@ def resumo(numero_chamado: str) -> str:
 
 
 def limpar(numero_chamado: str) -> None:
-    """Remove o checkpoint de um chamado especifico."""
+    """Remove TODAS as rodadas da chave, historico incluido (as linhas vao
+    junto pelo ON DELETE CASCADE)."""
     with db.transacao() as con:
-        con.execute("DELETE FROM checkpoint_linhas WHERE chave = ?", (numero_chamado,))
         con.execute("DELETE FROM checkpoints WHERE chave = ?", (numero_chamado,))
 
 
+def _linha_dict(r) -> dict:
+    linha = {"index": r["idx"], "status": r["status"]}
+    extra = json.loads(r["extra"])
+    if r["numero_filho"] or "salvo_em" in extra:
+        linha["numero_filho"] = r["numero_filho"]
+    if r["referencia"]:
+        linha["referencia"] = r["referencia"]
+    linha.update(extra)
+    return linha
+
+
 def _carregar_dados(numero_chamado: str) -> dict | None:
-    """Monta o mesmo dict do antigo JSON: numero_chamado, total, criado_em,
-    atualizado_em, concluido e linhas [{index, status, numero_filho?, ...}]."""
+    """Monta o mesmo dict do antigo JSON (da rodada vigente): numero_chamado,
+    total, criado_em, atualizado_em, concluido e linhas [{index, status,
+    numero_filho?, ...}]."""
     with db.leitura() as con:
-        cab = con.execute("SELECT * FROM checkpoints WHERE chave = ?",
-                          (numero_chamado,)).fetchone()
-        if cab is None:
+        cid = _rodada(con, numero_chamado)
+        if cid is None:
             return None
+        cab = con.execute("SELECT * FROM checkpoints WHERE id = ?", (cid,)).fetchone()
         rows = con.execute(
-            "SELECT * FROM checkpoint_linhas WHERE chave = ? ORDER BY idx",
-            (numero_chamado,)).fetchall()
-    linhas = []
-    for r in rows:
-        linha = {"index": r["idx"], "status": r["status"]}
-        extra = json.loads(r["extra"])
-        if r["numero_filho"] or "salvo_em" in extra:
-            linha["numero_filho"] = r["numero_filho"]
-        linha.update(extra)
-        linhas.append(linha)
+            "SELECT * FROM checkpoint_linhas WHERE checkpoint_id = ? ORDER BY idx",
+            (cid,)).fetchall()
     return {
         "numero_chamado": cab["chave"],
         "total":          cab["total"],
         "criado_em":      cab["criado_em"],
         "atualizado_em":  cab["atualizado_em"],
         "concluido":      bool(cab["concluido"]),
-        "linhas":         linhas,
+        "linhas":         [_linha_dict(r) for r in rows],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Historico (pagina "Meus fluxos")
+# --------------------------------------------------------------------------- #
+
+def historico(matricula: str, limite: int = 200) -> list[dict]:
+    """Rodadas da matricula, da mais recente para a mais antiga, cada uma com
+    as suas linhas. `vigente` diz se e a rodada que um "Retomar" continuaria
+    (False = substituida por um "Do zero" posterior da mesma chave)."""
+    with db.leitura() as con:
+        cabs = con.execute(
+            "SELECT c.*, (c.id = (SELECT MAX(id) FROM checkpoints WHERE chave = c.chave)) "
+            "AS vigente FROM checkpoints c WHERE c.matricula = ? "
+            "ORDER BY c.id DESC LIMIT ?", (matricula, limite)).fetchall()
+        ids = [c["id"] for c in cabs]
+        rows = con.execute(
+            f"SELECT * FROM checkpoint_linhas WHERE checkpoint_id IN "
+            f"({','.join('?' * len(ids))}) ORDER BY checkpoint_id, idx",
+            ids).fetchall() if ids else []
+    por_rodada: dict[int, list[dict]] = {}
+    for r in rows:
+        por_rodada.setdefault(r["checkpoint_id"], []).append(_linha_dict(r))
+    return [
+        {
+            "id":            c["id"],
+            "chave":         c["chave"],
+            "fluxo":         c["fluxo"],
+            "origem":        c["origem"],
+            "total":         c["total"],
+            "criado_em":     c["criado_em"],
+            "atualizado_em": c["atualizado_em"],
+            "concluido":     bool(c["concluido"]),
+            "vigente":       bool(c["vigente"]),
+            "linhas":        por_rodada.get(c["id"], []),
+        }
+        for c in cabs
+    ]

@@ -24,11 +24,13 @@ class NavItem:
 
 
 NAV_ITEMS: list[NavItem] = [
+    NavItem("sparkles", "Assistente", "/"),
     NavItem("file-plus", "Requisição de Serviço", "/requisicao"),
     NavItem("circle-play", "Iniciar Atendimento", "/atendimento"),
     NavItem("copy", "Desmembramento", "/desmembramento"),
     NavItem("timer", "Análise de SLA", "/sla"),
-    NavItem("key-round", "Licenças", "/"),
+    NavItem("history", "Meus fluxos", "/meus-fluxos"),
+    NavItem("key-round", "Licenças", "/licencas"),
     NavItem("settings-2", "Configurações", "/configuracoes"),
 ]
 
@@ -42,7 +44,7 @@ def _e_ativo(href: str):
     """Item ativo? Compara com a rota atual — menos a raiz.
 
     A raiz ("/") nao pode ser comparada por igualdade: o caminho que o router
-    devolve nela nao e "/" (nem vazio), entao o item Licencas nunca acendia. Aqui
+    devolve nela nao e "/" (nem vazio), entao o item da raiz (hoje o Assistente) nunca acendia. Aqui
     ela e ativa por EXCLUSAO — quando a rota atual nao e nenhuma das outras. Assim
     o realce funciona seja qual for a string que a raiz produza.
     """
@@ -58,13 +60,12 @@ def _menu_item(item: NavItem) -> rx.Component:
     is_active = _e_ativo(item.href)
     return rx.link(
         rx.hstack(
-            rx.icon(item.icon, size=16, color=rx.color("gray", 11), flex_shrink="0"),
+            rx.icon(item.icon, size=18, color=rx.color("gray", 11), flex_shrink="0"),
             rx.cond(
                 ~SidebarState.collapsed,
                 rx.text(
                     item.label,
-                    size="1",
-                    font_size="13px",  # size="1" = 12px; +1px (o "2" já pula p/ 14px)
+                    size="2",  # 14px — era 13px e a sidebar parecia apertada
                     color=rx.color("gray", 11),
                     font_weight=rx.cond(is_active, "600", "400"),
                     white_space="nowrap",
@@ -72,12 +73,12 @@ def _menu_item(item: NavItem) -> rx.Component:
                 rx.fragment(),
             ),
             align="center",
-            spacing="2",
+            spacing="3",
             padding_y="7px",
             # Contraída: ícone centrado na coluna (alinha com o toggle e o menu de opções).
-            padding_x=rx.cond(SidebarState.collapsed, "0", "9px"),
+            padding_x=rx.cond(SidebarState.collapsed, "0", "12px"),
             justify_content=rx.cond(SidebarState.collapsed, "center", "flex-start"),
-            border_radius="6px",
+            border_radius="8px",
             width="100%",
             background_color=rx.cond(is_active, rx.color("gray", 4), "transparent"),
             _hover={"background_color": rx.cond(is_active, rx.color("gray", 4), rx.color("gray", 3))},
@@ -93,7 +94,7 @@ def _header() -> rx.Component:
     expanded = rx.hstack(
         rx.text(
             "Automatic",
-            size="4",
+            size="5",
             font_weight="700",
             color=rx.color("gray", 12),
             white_space="nowrap",
@@ -110,8 +111,8 @@ def _header() -> rx.Component:
         ),
         width="100%",
         align="center",
-        padding="10px 8px",
-        min_height="44px",
+        padding="12px 12px",
+        min_height="52px",
     )
 
     collapsed = rx.box(
@@ -136,9 +137,9 @@ def _nav() -> rx.Component:
     return rx.vstack(
         *[_menu_item(item) for item in NAV_ITEMS],
         spacing="0",
-        gap="1px",  # os tokens do Radix pulam de 4 em 4px; 1px vai inline mesmo
+        gap="2px",
         width="100%",
-        padding_x="4px",
+        padding_x="8px",
     )
 
 

@@ -109,7 +109,7 @@ def caminho_filhos(chamado_pai):
 
 
 def criar_filhos(chamado_pai, csv_texto, descricao, matricula, senha,
-                 kb_nome=None, log=None, iniciar_do_zero=False) -> dict:
+                 kb_nome=None, log=None, iniciar_do_zero=False, origem="bot") -> dict:
     """Cria os chamados filhos a partir do CSV.
 
     kb_nome=None  -> modo "So Criar"      (FluxoCriarPW)
@@ -146,12 +146,12 @@ def criar_filhos(chamado_pai, csv_texto, descricao, matricula, senha,
 
     with NavegadorPW(log) as page:
         if kb_nome:
-            FluxoCompletoPW(page, matricula, senha, log).executar(
+            FluxoCompletoPW(page, matricula, senha, log, origem=origem).executar(
                 df=df, descricao_base=descricao, numero_chamado=chamado_pai,
                 kb_function=kb_function, iniciar_do_zero=iniciar_do_zero,
             )
         else:
-            FluxoCriarPW(page, matricula, senha, log).executar(
+            FluxoCriarPW(page, matricula, senha, log, origem=origem).executar(
                 df=df, descricao_base=descricao, numero_chamado=chamado_pai,
                 iniciar_do_zero=iniciar_do_zero,
             )
@@ -183,7 +183,7 @@ def criar_filhos(chamado_pai, csv_texto, descricao, matricula, senha,
 
 
 def aplicar_base(filhos, kb_nome, matricula, senha,
-                 log=None, iniciar_do_zero=False) -> dict:
+                 log=None, iniciar_do_zero=False, origem="bot") -> dict:
     """Aplica a Base de Conhecimento em cada chamado filho da lista.
 
     NAO cria chamado: os filhos precisam existir. Devolve um resumo montado a
@@ -210,7 +210,7 @@ def aplicar_base(filhos, kb_nome, matricula, senha,
     chave = _chave_checkpoint(filhos)
 
     with NavegadorPW(log) as page:
-        FluxoBCPW(page, matricula, senha, log).executar(
+        FluxoBCPW(page, matricula, senha, log, origem=origem).executar(
             filhos=filhos, kb_function=kb_function, iniciar_do_zero=iniciar_do_zero
         )
 

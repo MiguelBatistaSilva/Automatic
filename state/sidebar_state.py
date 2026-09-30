@@ -16,7 +16,7 @@ class SidebarState(rx.State):
     def active_route(self) -> str:
         """A URL atual — destaca o item de menu da página em que você está.
 
-        Normalizada: sem barra no fim e com "" virando "/", senão a raiz (Licenças)
+        Normalizada: sem barra no fim e com "" virando "/", senão a raiz (Assistente)
         nunca casa com o href "/" e fica sem realce.
         """
         caminho = (self.router.page.path or "").rstrip("/")

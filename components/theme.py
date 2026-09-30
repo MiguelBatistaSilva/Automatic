@@ -4,7 +4,7 @@
 # ──────────────────────────────────────────────
 
 # Sidebar
-SIDEBAR_EXPANDED = "260px"
+SIDEBAR_EXPANDED = "272px"
 SIDEBAR_COLLAPSED = "56px"
 
 # Botões — tamanhos do Radix: "1" ~24px, "2" ~32px, "3" ~40px, "4" ~48px.

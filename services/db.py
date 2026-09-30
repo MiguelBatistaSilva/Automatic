@@ -123,6 +123,53 @@ _ESQUEMA: list[str] = [
         valor  TEXT NOT NULL
     );
     """,
+    # v5 — 2026-09-29: checkpoints viram HISTORICO (pagina "Meus fluxos").
+    # Antes a chave era a PK e o "Do zero" apagava a rodada anterior; agora
+    # cada rodada ganha um `id` e a chave pode repetir — quem retoma olha so a
+    # rodada mais recente da chave (maior id). `fluxo`/`origem`/`matricula`
+    # dizem o que rodou, de onde (ui/bot) e com qual login. `referencia` e o
+    # chamado da linha quando ele e conhecido de antemao (modo So Base).
+    # As rodadas antigas recebem o fluxo deduzido pela chave; origem/matricula
+    # ficam vazias (nao ha como saber).
+    """
+    CREATE TABLE checkpoints_v5 (
+        id             INTEGER PRIMARY KEY,
+        chave          TEXT NOT NULL,
+        fluxo          TEXT NOT NULL DEFAULT '',
+        origem         TEXT NOT NULL DEFAULT '',
+        matricula      TEXT NOT NULL DEFAULT '',
+        total          INTEGER NOT NULL,
+        criado_em      TEXT NOT NULL,
+        atualizado_em  TEXT NOT NULL,
+        concluido      INTEGER NOT NULL DEFAULT 0
+    );
+    INSERT INTO checkpoints_v5 (chave, fluxo, total, criado_em, atualizado_em, concluido)
+        SELECT chave,
+               CASE WHEN chave LIKE 'bc\\_%' ESCAPE '\\' THEN 'desmembramento_bc'
+                    WHEN chave LIKE 'req\\_%' ESCAPE '\\' THEN 'requisicao'
+                    ELSE 'desmembramento' END,
+               total, criado_em, atualizado_em, concluido
+        FROM checkpoints;
+    CREATE TABLE checkpoint_linhas_v5 (
+        checkpoint_id  INTEGER NOT NULL REFERENCES checkpoints_v5 (id) ON DELETE CASCADE,
+        idx            INTEGER NOT NULL,
+        status         TEXT NOT NULL,
+        numero_filho   TEXT NOT NULL DEFAULT '',
+        referencia     TEXT NOT NULL DEFAULT '',
+        extra          TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY (checkpoint_id, idx)
+    );
+    INSERT INTO checkpoint_linhas_v5 (checkpoint_id, idx, status, numero_filho, extra)
+        SELECT c.id, l.idx, l.status, l.numero_filho, l.extra
+        FROM checkpoint_linhas l JOIN checkpoints_v5 c ON c.chave = l.chave;
+    DROP TABLE checkpoint_linhas;
+    DROP TABLE checkpoints;
+    ALTER TABLE checkpoints_v5 RENAME TO checkpoints;
+    ALTER TABLE checkpoint_linhas_v5 RENAME TO checkpoint_linhas;
+    CREATE INDEX checkpoints_chave ON checkpoints (chave, id);
+    CREATE INDEX checkpoints_matricula ON checkpoints (matricula, id);
+    CREATE INDEX checkpoint_linhas_filho ON checkpoint_linhas (numero_filho);
+    """,
 ]
 
 _init_lock = threading.Lock()
@@ -345,16 +392,21 @@ def _importar_checkpoints(con: sqlite3.Connection) -> list[Path]:
                        (chave,)).fetchone():
             continue  # o banco ja manda nesta chave; o arquivo fica como esta
         linhas = dados.get("linhas", [])
-        con.execute(
-            "INSERT INTO checkpoints VALUES (?, ?, ?, ?, ?)",
-            (chave, dados.get("total", len(linhas)), dados.get("criado_em", ""),
-             dados.get("atualizado_em", ""), int(bool(dados.get("concluido")))))
+        fluxo = ("desmembramento_bc" if chave.startswith("bc_") else
+                 "requisicao" if chave.startswith("req_") else "desmembramento")
+        cid = con.execute(
+            "INSERT INTO checkpoints (chave, fluxo, total, criado_em, "
+            "atualizado_em, concluido) VALUES (?, ?, ?, ?, ?, ?)",
+            (chave, fluxo, dados.get("total", len(linhas)), dados.get("criado_em", ""),
+             dados.get("atualizado_em", ""), int(bool(dados.get("concluido"))))
+        ).lastrowid
         for l in linhas:
             extra = {k: v for k, v in l.items()
                      if k not in ("index", "status", "numero_filho")}
             con.execute(
-                "INSERT INTO checkpoint_linhas VALUES (?, ?, ?, ?, ?)",
-                (chave, l["index"], l["status"], l.get("numero_filho", ""),
+                "INSERT INTO checkpoint_linhas (checkpoint_id, idx, status, "
+                "numero_filho, extra) VALUES (?, ?, ?, ?, ?)",
+                (cid, l["index"], l["status"], l.get("numero_filho", ""),
                  json.dumps(extra, ensure_ascii=False)))
         renomear.append(p)
     return renomear

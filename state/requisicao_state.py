@@ -136,6 +136,18 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
                 self.rodando = False
             return
 
+        # Credenciais ANTES do checkpoint: a matricula vai gravada na rodada
+        # (pagina "Meus fluxos").
+        from services import credenciais
+        matricula, senha = credenciais.carregar()
+        if not matricula or not senha:
+            async with self:
+                self.logs = self.logs + [self._linha(
+                    "Credenciais nao cadastradas (configure em Opções → Credenciais).",
+                    "error")]
+                self.rodando = False
+            return
+
         # -- CHECKPOINT — decide sozinho (sem dialogo): lote novo, retomar ou ja
         # concluido. A chave vem do PROPRIO TEXTO colado (nao ha chamado-pai
         # pra ancorar, diferente do Desmembramento) — ver `_chave_checkpoint`.
@@ -188,17 +200,9 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
                     f"Retomando lote anterior: {len(concluidas_antes)} de {total} "
                     "já concluídas.", "info")]
         else:
-            checkpoint.inicializar(chave, total)
-
-        from services import credenciais
-        matricula, senha = credenciais.carregar()
-        if not matricula or not senha:
-            async with self:
-                self.logs = self.logs + [self._linha(
-                    "Credenciais nao cadastradas (configure em Opções → Credenciais).",
-                    "error")]
-                self.rodando = False
-            return
+            checkpoint.inicializar(
+                chave, total, fluxo="requisicao", origem="ui", matricula=matricula,
+                referencias=[r.get("usuario_afetado", "") for r in requisicoes])
 
         def worker(log, emit):
             from services.browser_pw import NavegadorPW, _fazer_login_pw

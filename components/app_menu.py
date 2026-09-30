@@ -25,14 +25,14 @@ from bot.dialog import telegram_dialog
 def _trigger() -> rx.Component:
     """Botão que abre o menu. Expandido mostra o rótulo; contraído, só o ícone centrado."""
     return rx.button(
-        rx.icon("settings", size=16, flex_shrink="0"),
+        rx.icon("settings", size=18, flex_shrink="0"),
         rx.cond(
             ~SidebarState.collapsed,
             rx.fragment(
                 rx.text(
                     "Opções",
                     size="1",
-                    font_size="13px",  # acompanha os itens de navegação
+                    font_size="14px",  # acompanha os itens de navegação
                     white_space="nowrap",
                     overflow="hidden",
                     flex="1",
@@ -45,7 +45,7 @@ def _trigger() -> rx.Component:
         variant="soft",
         color_scheme="gray",
         width=rx.cond(SidebarState.collapsed, "36px", "100%"),
-        height="36px",
+        height="40px",
         padding_x=rx.cond(SidebarState.collapsed, "0", "9px"),
         justify_content=rx.cond(SidebarState.collapsed, "center", "flex-start"),
         cursor="pointer",
