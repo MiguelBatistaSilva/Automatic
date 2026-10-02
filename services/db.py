@@ -170,6 +170,46 @@ _ESQUEMA: list[str] = [
     CREATE INDEX checkpoints_matricula ON checkpoints (matricula, id);
     CREATE INDEX checkpoint_linhas_filho ON checkpoint_linhas (numero_filho);
     """,
+    # v6 — 2026-10-01: tipos de solicitação da Requisição — o "guia" que o
+    # Assistente usa para deduzir Item/Categoria/Resumo/descrição de pedidos
+    # como "atualização de java nos tombos ...". Editável em Configurações.
+    # `sinonimos`: palavras que o técnico usa para pedir este tipo (vírgula).
+    # `descricao`: modelo; {tombo} vira os 6 dígitos de cada tombo e
+    # {edificio} o edifício do pedido.
+    # Nasce com os tipos que o usuário pediu nesta conversa (30/09).
+    # ATENÇÃO: nada de ';' nos textos — o script é quebrado por ';'.
+    """
+    CREATE TABLE requisicao_tipos (
+        id         INTEGER PRIMARY KEY,
+        nome       TEXT NOT NULL,
+        sinonimos  TEXT NOT NULL DEFAULT '',
+        item       TEXT NOT NULL,
+        categoria  TEXT NOT NULL DEFAULT 'Configuração',
+        resumo     TEXT NOT NULL DEFAULT 'Requisição de Serviço',
+        descricao  TEXT NOT NULL
+    );
+    INSERT INTO requisicao_tipos (nome, sinonimos, item, descricao) VALUES
+        ('Atualização de Java', 'java, atualizar java, instalar java',
+         'Softwares e Aplicativos',
+         'Solicito atualização de Java na máquina de tombo: {tombo}.'),
+        ('Limpeza de disco', 'limpeza de disco, limpar disco, disco cheio',
+         'Computador',
+         'Solicito limpeza de disco na máquina de tombo: {tombo}.'),
+        ('Visita técnica preventiva', 'preventiva, visita técnica, manutenção preventiva',
+         'Computador',
+         'Solicito visita técnica preventiva nas máquinas da unidade. Segue o número do tombo: {tombo}.'),
+        ('Instalação de micro', 'instalar micro, instalação de computador, instalar computador, micro novo',
+         'Computador',
+         'Solicito instalação do micro de tombo {tombo} na unidade {edificio}.')
+    """,
+    # v7 — 2026-10-01: a tabela da v6 sai. Os tipos de solicitação viraram
+    # arquivo de texto na base de conhecimento do Assistente
+    # (services/agente/conhecimento/tipos_solicitacao.md) — conhecimento
+    # centralizado num lugar só, levado a todos pelo updater (decisão do
+    # usuário). Conferido antes: só havia os 4 tipos originais, já no arquivo.
+    """
+    DROP TABLE IF EXISTS requisicao_tipos
+    """,
 ]
 
 _init_lock = threading.Lock()

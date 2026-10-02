@@ -20,6 +20,7 @@ Ver memoria: project_flow_atendimento, project_ckeditor_fix, project_sla_regras.
 """
 
 from services.browser_pw import _navegar_para_chamado_pw
+from services.ckeditor_pw import AZUL_MARINHO, paragrafo, preencher_formatado_popup, trecho
 
 # Os `except Exception` deste modulo sao largos DE PROPOSITO (como no fluxo
 # Selenium original). O Playwright levanta PWTimeout so na espera estourada:
@@ -137,8 +138,13 @@ def iniciar_atendimento(page, log, numero_chamado: str,
         log(f"O pop-up da ação não abriu: {e}", "error")
         return False
 
-    # 6. Preencher a descricao no pop-up (mira o editor do pop-up)
-    if not _preencher_descricao_dialog(page, log, descricao):
+    # 6. Preencher a descricao no pop-up (mira o editor do pop-up), em AZUL
+    # MARINHO — padrao de texto da auditoria (2026-09-30). Digitando nao da
+    # para colorir, entao entra pela API do CKEditor (services/ckeditor_pw.py,
+    # a mesma validada no Atendimento Programado). O `_preencher_descricao_dialog`
+    # (digitacao, sem cor) continua acima, sem uso, caso precise voltar.
+    texto = paragrafo(trecho(descricao, AZUL_MARINHO))
+    if not preencher_formatado_popup(page, log, texto):
         log("Nao foi possivel preencher a descricao da acao.", "error")
         return False
 

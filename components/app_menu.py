@@ -16,10 +16,10 @@ import reflex as rx
 from state.sidebar_state import SidebarState
 from state.credenciais_state import CredenciaisState
 from state.sobre_state import SobreState
-from bot.state import TelegramState
+from state.api_keys_state import ApiKeysState
 from components.dialog_credenciais import credenciais_dialog
 from components.dialog_sobre import sobre_dialog
-from bot.dialog import telegram_dialog
+from components.dialog_api_keys import api_keys_dialog
 
 
 def _trigger() -> rx.Component:
@@ -67,7 +67,8 @@ def _item(icon: str, label: str, **props) -> rx.Component:
 def _menu() -> rx.Component:
     return rx.dropdown_menu.content(
         _item("key-round", "Credenciais", on_click=CredenciaisState.abrir),
-        _item("send", "Telegram", on_click=TelegramState.abrir),
+        # Era "Telegram"; virou "API Keys" (Groq do Assistente + token do bot) em 02/10.
+        _item("key-square", "API Keys", on_click=ApiKeysState.abrir),
         _item("info", "Sobre", on_click=SobreState.abrir),
         rx.dropdown_menu.separator(),
         rx.dropdown_menu.item(
@@ -95,7 +96,7 @@ def app_menu() -> rx.Component:
             modal=False,
         ),
         credenciais_dialog(),
-        telegram_dialog(),
+        api_keys_dialog(),
         sobre_dialog(),
         width="100%",
         display="flex",

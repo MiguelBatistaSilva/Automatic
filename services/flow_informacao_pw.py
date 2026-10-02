@@ -18,6 +18,7 @@ Ver memoria: project_flow_atendimento, project_ckeditor_fix.
 """
 
 from services.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
+from services.ckeditor_pw import preencher_formatado_popup, texto_livre
 
 # Excepts largos DE PROPOSITO, mesmo motivo do flow_atendimento_pw: o
 # Playwright levanta `playwright.sync_api.Error` (não só PWTimeout) em
@@ -126,8 +127,11 @@ def adicionar_informacao(page, log, numero_chamado: str, informacao: str,
         log(f"O pop-up da ação não abriu: {e}", "error")
         return False, info
 
-    # 6. Preencher o texto no pop-up (mira o editor do pop-up)
-    if not _preencher_texto_dialog(page, log, informacao):
+    # 6. Preencher o texto no pop-up (mira o editor do pop-up), em AZUL
+    # MARINHO — padrao de texto da auditoria (2026-09-30), via API do CKEditor
+    # (services/ckeditor_pw.py, a mesma do Atendimento Programado). O
+    # _preencher_texto_dialog (digitacao, sem cor) continua acima, sem uso.
+    if not preencher_formatado_popup(page, log, texto_livre(informacao)):
         log("Nao foi possivel preencher o texto da informacao.", "error")
         return False, info
 

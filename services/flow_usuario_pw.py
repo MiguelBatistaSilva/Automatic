@@ -17,6 +17,9 @@ Ver memoria: project_flow_fornecedor_bot, project_flow_informacao_bot.
 """
 
 from services.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
+from services.ckeditor_pw import (
+    AZUL_MARINHO, VERMELHO, paragrafo, preencher_formatado_popup, texto_livre, trecho,
+)
 
 _SEL_MENU_ACOES = "#menuActions"
 _SEL_ACOES_RELOGIO = "td.dijitMenuItemLabel:text-is('Ações de relógio')"
@@ -56,6 +59,42 @@ def _preencher_texto_dialog(page, log, texto: str) -> bool:
     except Exception as e:
         log(f"Erro ao preencher o texto da informacao: {e}", "error")
         return False
+
+
+def montar_texto(nome: str, descricao: str, testado: bool = False) -> str:
+    """Modelo da auditoria para 'Aguardando Info do Usuário *' (2026-09-30).
+
+    Azul marinho; em VERMELHO só o nome do usuário e a descrição (o que o
+    técnico escreveu — cada linha vira um parágrafo). O fecho "Testado pelo
+    usuário? (X) Não" é o motivo de aguardar o usuário.
+
+    `testado=True` marca "(X) Sim": é o mesmo modelo usado no RESOLVIDO
+    (services/flow_resolver_pw.py — "o script de resolução é o mesmo",
+    usuário, 01/10). O padrão False mantém o Aguardando Usuário como era.
+    """
+    a, v = AZUL_MARINHO, VERMELHO
+    vazio = "<p>&nbsp;</p>"
+    # Um procedimento só fica NA MESMA LINHA de "Descrever ação tomada:";
+    # vários viram lista embaixo (pedido do usuário, 02/10 — antes era sempre
+    # lista, até para uma frase).
+    linhas = [l.strip() for l in descricao.strip().split("\n") if l.strip()]
+    if len(linhas) == 1:
+        acao = [paragrafo(trecho("Descrever ação tomada: ", a),
+                          trecho(linhas[0].lstrip("-").strip(), v))]
+    else:
+        acao = [paragrafo(trecho("Descrever ação tomada: ", a)),
+                texto_livre(descricao.strip(), v)]
+    return "".join([
+        paragrafo(trecho("Acompanhado do(a) usuário(a) ", a), trecho(nome, v),
+                  trecho(", foi realizado o procedimento abaixo:", a)),
+        vazio,
+        *acao,
+        vazio,
+        paragrafo(trecho("Testado pelo usuário?", a)),
+        paragrafo(trecho("(X) Sim" if testado else "( ) Sim", a)),
+        paragrafo(trecho(("( )" if testado else "(X)")
+                         + " Não. Conclusão da solicitação pendente de testes do usuário.", a)),
+    ])
 
 
 def aguardar_info_usuario(page, log, numero_chamado: str, informacao: str,
@@ -118,8 +157,15 @@ def aguardar_info_usuario(page, log, numero_chamado: str, informacao: str,
         log(f"O pop-up da ação não abriu: {e}", "error")
         return False, info
 
-    # 6. Preencher o texto no pop-up (mira o editor do pop-up)
-    if not _preencher_texto_dialog(page, log, informacao):
+    # 6. Preencher o texto no pop-up (mira o editor do pop-up) no MODELO da
+    # auditoria (2026-09-30): azul marinho, com o nome e a descricao em
+    # vermelho — ver `montar_texto`. Entra pela API do CKEditor
+    # (services/ckeditor_pw.py); o _preencher_texto_dialog (digitacao, sem
+    # cor) continua acima, sem uso. O nome e obrigatorio no modelo.
+    if not info["usuario"]:
+        log("Nao consegui ler o Usuario afetado do chamado.", "error")
+        return False, info
+    if not preencher_formatado_popup(page, log, montar_texto(info["usuario"], informacao)):
         log("Nao foi possivel preencher o texto da informacao.", "error")
         return False, info
 

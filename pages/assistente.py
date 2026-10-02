@@ -9,6 +9,7 @@ O back-end está em `state/assistente_state.py`.
 import reflex as rx
 
 from state.assistente_state import AssistenteState
+from state.api_keys_state import ApiKeysState
 from components.layout import page_layout
 from components.botoes import botao_primario
 
@@ -46,10 +47,62 @@ def _icone_estado(m) -> rx.Component:
     )
 
 
+def _icone_passo(estado) -> rx.Component:
+    return rx.match(
+        estado,
+        ("rodando", rx.spinner(size="1")),
+        ("ok", rx.icon("check", size=13, color=rx.color("green", 10))),
+        ("erro", rx.icon("x", size=13, color=rx.color("red", 10))),
+        ("pulado", rx.icon("minus", size=13, color=_CINZA)),
+        rx.icon("circle", size=11, color=_CINZA),
+    )
+
+
+def _logs_vivos() -> rx.Component:
+    return rx.vstack(
+        rx.foreach(
+            AssistenteState.logs_vivos,
+            lambda l: rx.text(l, size="1", color=rx.color("gray", 9),
+                              font_family="monospace", white_space="pre-wrap"),
+        ),
+        spacing="0",
+    )
+
+
+def _passo(m, p) -> rx.Component:
+    """Um passo do plano. Num plano de um passo só, o título já é o do
+    cartão — aqui aparece só o resumo (e os logs enquanto roda)."""
+    return rx.vstack(
+        rx.cond(
+            m.multi,
+            rx.hstack(
+                _icone_passo(p.estado),
+                rx.text(p.titulo, size="2", weight="medium", color=rx.color("gray", 11)),
+                rx.cond(p.estado == "pulado",
+                        rx.text("· não executado", size="1", color=_CINZA)),
+                align="center",
+                spacing="2",
+            ),
+        ),
+        rx.cond(
+            p.corpo != "",
+            rx.box(rx.markdown(p.corpo), font_size="13px", color=_CINZA,
+                   line_height="1.5", padding_left=rx.cond(m.multi, "21px", "0")),
+        ),
+        rx.cond(
+            p.estado == "rodando",
+            rx.box(_logs_vivos(), padding_left=rx.cond(m.multi, "21px", "0")),
+        ),
+        spacing="1",
+        align_items="stretch",
+        width="100%",
+    )
+
+
 def _cartao(m, indice) -> rx.Component:
-    """A ação do fluxo, no estilo discreto do Claude/Gemini: sem caixa — um
-    título pequeno em cinza e, recuado com um fio à esquerda, o resumo, os
-    botões e (enquanto roda) as últimas linhas de log."""
+    """O plano (um ou mais passos), no estilo discreto do Claude/Gemini: sem
+    caixa — um título pequeno em cinza e, recuado com um fio à esquerda, os
+    passos (cada um com o seu andamento), os botões e os logs do que roda."""
     return rx.vstack(
         rx.hstack(
             _icone_estado(m),
@@ -64,11 +117,7 @@ def _cartao(m, indice) -> rx.Component:
             spacing="2",
         ),
         rx.vstack(
-            rx.cond(
-                m.corpo != "",
-                rx.box(rx.markdown(m.corpo), font_size="13px", color=_CINZA,
-                       line_height="1.5"),
-            ),
+            rx.foreach(m.passos, lambda p: _passo(m, p)),
             rx.cond(
                 m.aviso != "",
                 rx.hstack(
@@ -84,16 +133,6 @@ def _cartao(m, indice) -> rx.Component:
                 ("pendente", rx.hstack(
                     rx.foreach(m.botoes, lambda b: _botao(indice, b)),
                     spacing="2", flex_wrap="wrap", margin_top="2px",
-                )),
-                ("rodando", rx.vstack(
-                    rx.foreach(
-                        AssistenteState.logs_vivos,
-                        lambda l: rx.text(l, size="1", color=rx.color("gray", 9),
-                                          font_family="monospace",
-                                          white_space="pre-wrap"),
-                    ),
-                    spacing="0",
-                    margin_top="2px",
                 )),
                 rx.fragment(),
             ),
@@ -169,24 +208,53 @@ def _sugestoes() -> rx.Component:
     )
 
 
+def _seletor_modelo() -> rx.Component:
+    """Escolha do modelo de IA, dentro da caixa de texto (como no Claude).
+    Modelo sem chave aparece desabilitado; o cadastro é em Opções → API Keys.
+    Sem troca automática: o pedido vai SEMPRE pelo modelo escolhido aqui."""
+    return rx.select.root(
+        rx.select.trigger(variant="ghost", color_scheme="gray", radius="full",
+                          cursor="pointer", title="Modelo de IA"),
+        rx.select.content(
+            rx.foreach(
+                AssistenteState.modelos,
+                lambda o: rx.select.item(
+                    rx.cond(o.habilitado, o.rotulo, o.rotulo + " (sem chave)"),
+                    value=o.id, disabled=~o.habilitado),
+            ),
+        ),
+        value=AssistenteState.modelo,
+        on_change=AssistenteState.set_modelo,
+        size="2",
+        disabled=AssistenteState.pensando,
+    )
+
+
 def _caixa_texto() -> rx.Component:
-    """Cilindro de uma linha com a seta na ponta direita. Enter envia (é um
-    <input> dentro de <form>, o próprio navegador faz o submit)."""
+    """Cilindro com a seta na ponta direita. Enter envia; Shift+Enter quebra
+    a linha e a caixa CRESCE (até ~8 linhas, depois rola) — pedido de 02/10.
+    Antes era um <input> de uma linha só, que não aceitava quebra."""
     return rx.form(
         rx.hstack(
-            rx.input(
-                placeholder="Pergunte ou peça alguma coisa",
+            rx.text_area(
+                placeholder="Pergunte ou peça alguma coisa  (Shift+Enter quebra a linha)",
                 value=AssistenteState.entrada,
                 on_change=AssistenteState.set_entrada,
                 disabled=AssistenteState.pensando,
-                auto_complete=False,
+                enter_key_submit=True,
+                auto_height=True,
+                rows="1",
+                resize="none",
                 size="3",
                 flex="1",
                 min_width="0",
+                max_height="200px",
                 # Sem a borda/fundo do Radix: quem desenha o cilindro é o box de fora.
                 style={"box-shadow": "none", "background": "transparent",
-                       "outline": "none", "font-size": "15px"},
+                       "outline": "none", "font-size": "15px",
+                       "padding-top": "10px", "padding-bottom": "10px"},
             ),
+            _seletor_modelo(),
             rx.icon_button(
                 rx.icon("arrow-up", size=20),
                 type="submit",
@@ -199,13 +267,16 @@ def _caixa_texto() -> rx.Component:
                 flex_shrink="0",
                 disabled=AssistenteState.pensando | (AssistenteState.entrada.strip() == ""),
             ),
-            align="center",
+            # "end": com várias linhas, a seta fica embaixo, ao lado da última.
+            align="end",
             spacing="2",
             width="100%",
-            height="64px",
-            padding="0 8px 0 14px",
+            min_height="64px",
+            padding="8px 8px 8px 14px",
             border=f"1px solid {rx.color('gray', 6)}",
-            border_radius="9999px",
+            # Com uma linha continua parecendo cilindro (raio = metade dos
+            # 64px); ao crescer, vira uma caixa de cantos bem arredondados.
+            border_radius="32px",
             background=rx.color("gray", 1),
             box_shadow="0 2px 12px rgba(0,0,0,0.06)",
         ),
@@ -219,7 +290,7 @@ def _pensando() -> rx.Component:
     return rx.cond(
         AssistenteState.pensando,
         rx.hstack(rx.spinner(size="2"),
-                  rx.text("Pensando...", size="2", color=rx.color("gray", 11)),
+                  rx.text(AssistenteState.status_pensando, size="2", color=rx.color("gray", 11)),
                   align="center", spacing="2", width="100%"),
     )
 
@@ -285,23 +356,18 @@ def _em_conversa() -> rx.Component:
 
 
 def _sem_chave() -> rx.Component:
+    """Sem chave da Groq nesta máquina: o cadastro é no menu Opções → API
+    Keys (02/10) — aqui só o aviso e o atalho."""
     return rx.center(
-        rx.callout.root(
-            rx.callout.icon(rx.icon("key-round")),
-            rx.vstack(
-                rx.text("Cole a chave da API da Groq (começa com gsk_). Ela fica no "
-                        "Cofre de Credenciais do Windows.", size="2"),
-                rx.hstack(
-                    rx.input(type="password", placeholder="gsk_...",
-                             value=AssistenteState.nova_chave,
-                             on_change=AssistenteState.set_nova_chave, width="100%"),
-                    botao_primario("Salvar", on_click=AssistenteState.salvar_chave),
-                    width="100%",
-                ),
-                spacing="2",
-                width="100%",
-            ),
-            width="100%",
+        rx.vstack(
+            rx.icon("key-square", size=28, color=rx.color("gray", 10)),
+            rx.text("Para usar o Assistente, cadastre a chave de um modelo (Groq ou Gemini).",
+                    weight="medium", text_align="center"),
+            rx.text("Menu Opções → API Keys. Cada técnico usa a sua chave.",
+                    size="2", color=rx.color("gray", 10), text_align="center"),
+            botao_primario("Cadastrar chave", on_click=ApiKeysState.abrir),
+            spacing="3",
+            align="center",
             max_width=_LARGURA,
         ),
         width="100%",
