@@ -47,7 +47,7 @@ class Modelo:
 
 
 MODELOS: dict[str, Modelo] = {m.id: m for m in [
-    Modelo("groq", "Groq · rápido", "groq",
+    Modelo("groq", "Groq · GPT-OSS 120B", "groq",
            "https://api.groq.com/openai/v1/chat/completions",
            # gpt-oss-120b: suporta ferramentas e extraiu certo os pedidos em
            # português nos testes (~1 s por resposta).

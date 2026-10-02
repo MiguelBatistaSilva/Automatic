@@ -151,7 +151,7 @@ def _cartao(m, indice) -> rx.Component:
 
 # Coluna central da conversa, como no ChatGPT: o texto não se espalha pela
 # tela inteira, mas a rolagem fica na largura toda (barra encostada na borda).
-_LARGURA = "760px"
+_LARGURA = "860px"  # era 760px; caixa "um pouco mais comprida" (02/10)
 
 
 def _mensagem(m, indice) -> rx.Component:
@@ -214,7 +214,9 @@ def _seletor_modelo() -> rx.Component:
     Sem troca automática: o pedido vai SEMPRE pelo modelo escolhido aqui."""
     return rx.select.root(
         rx.select.trigger(variant="ghost", color_scheme="gray", radius="full",
-                          cursor="pointer", title="Modelo de IA"),
+                          cursor="pointer", title="Modelo de IA",
+                          # Um pouco afastado da seta (02/10).
+                          margin_right="12px"),
         rx.select.content(
             rx.foreach(
                 AssistenteState.modelos,
@@ -256,10 +258,10 @@ def _caixa_texto() -> rx.Component:
             ),
             _seletor_modelo(),
             rx.icon_button(
-                rx.icon("arrow-up", size=20),
+                rx.icon("arrow-up", size=16),
                 type="submit",
                 radius="full",
-                size="3",
+                size="3",  # círculo maior; a seta (ícone 16) continua pequena (02/10)
                 # "iris": o azul puxado para o roxo da paleta do Radix.
                 color_scheme="iris",
                 variant="solid",
