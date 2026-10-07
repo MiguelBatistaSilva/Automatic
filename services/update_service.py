@@ -1,16 +1,17 @@
 """
 services/update_service.py — Checagem e download de atualização, sem UI.
 
-Duas responsabilidades, ambas seguras de rodar com o app Reflex ABERTO (nenhuma
-delas toca em arquivo nenhum do projeto):
-  - verificar(): compara a versão instalada com o manifesto remoto (version.json
-    publicado no GitHub).
-  - baixar_e_preparar(): baixa o zip da versão nova e extrai para
-    UPDATE_STAGING_DIR (fora da árvore do projeto — ver services/paths.py).
+Usado pelo `atualizar.py --baixar` (chamado pelo `atualizar_automatic.bat`,
+com o app FECHADO — desde 07/10 não há mais atualização pela tela):
+  - versao_remota(): lê o version.json publicado no GitHub.
+  - baixar_e_preparar(): baixa o zip e extrai para UPDATE_STAGING_DIR (fora
+    da árvore do projeto); quem copia por cima do projeto é o atualizar.py.
 
-APLICAR de fato (trocar os arquivos do projeto pelos baixados) é outra etapa,
-feita por `atualizar.py` na raiz, sempre com o app FECHADO — ver o docstring de
-lá para o porquê dessa separação.
+Tudo por urllib, NÃO requests: na rede do TJCE (inspeção TLS corporativa) o
+certificado raiz está no repositório do Windows, que o urllib usa, mas não no
+bundle do certifi do requests. O download já tinha migrado por isso; a checagem
+de versão continuava no requests e, quando falhava, respondia "nada novo" em
+silêncio — agora o erro sobe para quem chamou mostrar.
 """
 import json
 import shutil
@@ -19,14 +20,12 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-import requests
-
 from services.paths import UPDATE_STAGING_DIR
 
 VERSION_URL = "https://raw.githubusercontent.com/MiguelBatistaSilva/Automatic/main/version.json"
 
 
-def _versao_maior(remota: str, local: str) -> bool:
+def versao_maior(remota: str, local: str) -> bool:
     try:
         r = tuple(int(x) for x in remota.strip().split("."))
         l = tuple(int(x) for x in local.strip().split("."))
@@ -35,22 +34,13 @@ def _versao_maior(remota: str, local: str) -> bool:
         return False
 
 
-def verificar(versao_atual: str) -> tuple[str, str] | None:
-    """Consulta o manifesto remoto. Devolve (versao_remota, download_url) se
-    houver versão maior que a instalada; senão None (inclusive em erro de rede
-    — sem internet ou GitHub fora do ar não deve travar o pop-up, só dizer que
-    não achou nada novo)."""
-    try:
-        r = requests.get(VERSION_URL, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        remota = data.get("version", "")
-        url = data.get("download_url", "")
-        if remota and url and _versao_maior(remota, versao_atual):
-            return remota, url
-    except Exception:
-        return None
-    return None
+def versao_remota() -> tuple[str, str]:
+    """(versão, url do zip) publicadas no GitHub. LEVANTA em erro de rede —
+    quem chama decide o que dizer ao técnico."""
+    req = urllib.request.Request(VERSION_URL, headers={"User-Agent": "Automatic-Updater"})
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    return data.get("version", ""), data.get("download_url", "")
 
 
 def baixar_e_preparar(download_url: str, versao_alvo: str, log) -> bool:

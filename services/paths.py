@@ -43,10 +43,7 @@ CHECKPOINTS_DIR = DATA_DIR / "checkpoints"
 APP_LOCAL_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "Automatic"
 PERFIL_NAVEGADOR_DIR = APP_LOCAL_DIR / "perfil_navegador"
 
-# Onde uma atualização baixada pelo app (state/update_state.py) fica esperando até
-# ser aplicada — também fora da árvore do projeto, pelo mesmo motivo dos perfis
-# acima: escrever centenas de arquivos dentro do projeto, com o 'reflex run' de
-# olho na pasta inteira, dispararia o hot-reload no meio do download. Quem
-# efetivamente troca os arquivos do projeto é `atualizar.py` (raiz), sempre com o
-# app fechado — ver o docstring de lá.
+# Onde a atualização baixada (atualizar_automatic.bat -> atualizar.py --baixar)
+# fica extraída até ser copiada por cima do projeto — fora da árvore do projeto,
+# para nunca deixar um download pela metade misturado aos arquivos do app.
 UPDATE_STAGING_DIR = APP_LOCAL_DIR / "update_pendente"

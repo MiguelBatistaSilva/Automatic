@@ -7,10 +7,8 @@ páginas; a estrutura (pages/, state/, components/) vive na raiz do projeto:
 (e não importa reflex — é essa fronteira que permitiu trocar o PyQt6 pelo Reflex).
 Credenciais e Sobre NÃO são rotas: são diálogos (pop-up) montados na sidebar —
 ver `components/dialog_credenciais.py` e `components/dialog_sobre.py`.
-Atualização (ícone na topbar, components/topbar.py — acima do conteúdo, separada
-da sidebar) também não é rota: verificar/baixar rodam aqui dentro
-(state/update_state.py), mas quem troca os arquivos de fato é `atualizar.py` na
-raiz, sempre com o app fechado — ver o docstring de lá.
+Atualização não passa pela tela (desde 07/10): é o `atualizar_automatic.bat`,
+com o app fechado — ver `atualizar.py`.
 Rode com `reflex run`. O PyQt6 foi removido — esta é a única UI.
 """
 

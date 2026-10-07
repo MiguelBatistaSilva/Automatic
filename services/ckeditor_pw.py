@@ -14,6 +14,7 @@ O nome da instância NÃO é fixado: é descoberto pelo iframe na hora.
 """
 
 import html
+import re
 
 AZUL_MARINHO = "#000080"
 VERMELHO = "#FF0000"
@@ -101,9 +102,34 @@ def texto_livre(texto: str, cor: str = AZUL_MARINHO) -> str:
     )
 
 
+_RE_PARAGRAFO = re.compile(r"<p>(.*?)</p>", re.S)
+
+
+def compactar(conteudo_html: str) -> str:
+    """Parágrafos -> UM parágrafo com quebras de linha (<br>, o Shift+Enter).
+
+    No CKEditor do Assyst cada <p> tem margem em cima e embaixo: um parágrafo
+    por linha, mais os `<p>&nbsp;</p>` das linhas em branco, ficava com cara
+    de espaçamento duplo (reclamação do usuário no script do Resolvido, 07/10).
+    Linha em branco continua existindo (vira <br><br>), só sem a margem extra.
+
+    Feito AQUI, na entrada do editor, e não em cada montar_texto: vale para
+    todos os textos formatados sem mexer nos arquivos de fluxo. Conteúdo que
+    não seja só uma sequência de <p> passa intacto.
+    """
+    if _RE_PARAGRAFO.sub("", conteudo_html).strip():  # tem algo além de <p>s
+        return conteudo_html
+    linhas = ["" if l.strip() == "&nbsp;" else l
+              for l in _RE_PARAGRAFO.findall(conteudo_html)]
+    if len(linhas) < 2:
+        return conteudo_html
+    return "<p>" + "<br>".join(linhas) + "</p>"
+
+
 def preencher_formatado_popup(page, log, conteudo_html: str) -> bool:
     """Coloca `conteudo_html` no editor do pop-up de ação (o último da tela) e
     confere lendo de volta. True se o editor ficou com o conteúdo."""
+    conteudo_html = compactar(conteudo_html)
     try:
         # Espera o editor DO POP-UP existir. Esperar "o último iframe visível"
         # (como antes) passava na hora quando o editor do pop-up ainda não
