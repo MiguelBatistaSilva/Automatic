@@ -9,7 +9,8 @@ Caminho (passos do usuário, seletores do HTML que ele mandou):
   2. Marcar Incidentes, Problemas, Mudanças, Requisições de Serviço;
   3. Marcar Stand Alone, Pacotes, Componentes (já vêm marcados);
   4. Aba 'Atribuição' -> 'Departamento de Serviço atribuído' = a fila;
-  5. Marcar 'Somente Departamento de Serviço atribuído' -> Salvar (`#btSave`,
+  5. 'Somente Departamento de Serviço atribuído' DESMARCADO (07/10: marcado,
+     a fila só mostra chamados sem técnico) -> Salvar (`#btSave`,
      que só ABRE o pop-up — não grava nada);
   6. Pop-up: Código = Nome = a fila;
   7. Perfil de coluna (select nativo);
@@ -76,13 +77,16 @@ def _visivel(page, sel: str):
 
 # ------------------------------------------------------------------ peças
 
-def _marcar(page, log, name: str, rotulo: str) -> bool:
-    """Garante a caixa MARCADA. Checkbox do Dojo: o estado está no
-    `aria-checked`; clicar numa já marcada a desmarcaria."""
+def _marcar(page, log, name: str, rotulo: str, marcado: bool = True) -> bool:
+    """Garante a caixa MARCADA (ou desmarcada, com `marcado=False`).
+    Checkbox do Dojo: o estado está no `aria-checked`; clicar sempre
+    inverteria o que já estava certo."""
     caixa = _visivel(page, f"input[name='{name}']")
+    quero = "true" if marcado else "false"
+    acao = "marcado" if marcado else "desmarcado"
     try:
         caixa.wait_for(state="visible", timeout=10000)
-        if caixa.get_attribute("aria-checked") == "true":
+        if caixa.get_attribute("aria-checked") == quero:
             return True
         try:
             caixa.click(timeout=2000)
@@ -92,15 +96,15 @@ def _marcar(page, log, name: str, rotulo: str) -> bool:
             # O click() do DOM dispara o mesmo evento que o Dojo escuta.
             caixa.evaluate("el => el.click()")
     except Exception as e:
-        log(f"Não consegui marcar '{rotulo}': {e}", "error")
+        log(f"Não consegui deixar '{rotulo}' {acao}: {e}", "error")
         return False
     fim = time.monotonic() + 3
     while time.monotonic() < fim:
-        if caixa.get_attribute("aria-checked") == "true":
-            log(f"'{rotulo}' marcado.", "success")
+        if caixa.get_attribute("aria-checked") == quero:
+            log(f"'{rotulo}' {acao}.", "success")
             return True
         page.wait_for_timeout(200)
-    log(f"'{rotulo}' continua desmarcado depois do clique.", "error")
+    log(f"'{rotulo}' não ficou {acao} depois do clique.", "error")
     return False
 
 
@@ -233,8 +237,10 @@ def configurar_fila(page, log, fila: str, perfil: str, modo_teste: bool = False,
     if _norm(escolhido) == _norm(fila):
         fila = escolhido
 
-    # 5. Somente Departamento -> Salvar (abre o pop-up; não grava)
-    if not _marcar(page, log, *_SO_DEPARTAMENTO):
+    # 5. 'Somente Departamento' DESMARCADO (07/10): marcado, a fila só mostra
+    #    os chamados SEM técnico atribuído; desmarcado, mostra todos — o ideal.
+    #    Vem desmarcado por padrão; aqui só se garante. -> Salvar (abre o pop-up)
+    if not _marcar(page, log, *_SO_DEPARTAMENTO, marcado=False):
         return False
     try:
         page.locator(_SEL_SALVAR_CONSULTA).click(timeout=10000)
