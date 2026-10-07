@@ -658,6 +658,24 @@ def _sessao_expirada_pw(page) -> bool:
         return False
 
 
+def _tela_de_login_pw(page) -> bool:
+    """A sessao caiu? Mais abrangente que `_sessao_expirada_pw`: tambem acusa a
+    tela de login SEM o banner de logout (o Assyst nem sempre mostra o banner).
+    Usar so DEPOIS de uma falha — com a sessao viva o campo de usuario nao
+    existe, mas logo apos o login a tela ainda pode estar trocando. NUNCA levanta.
+
+    Por ora so a Requisicao usa (decisao do usuario, 05/10); o Desmembramento
+    segue com `_sessao_expirada_pw`.
+    """
+    try:
+        if page.locator(_SEL_SESSAO_EXPIRADA).count() > 0:
+            return True
+        campo = page.locator(_SEL_USERNAME)
+        return campo.count() > 0 and campo.first.is_visible()
+    except Exception:
+        return False
+
+
 def _digitos(texto: str) -> str:
     """So os digitos — usado para comparar numeros de chamado sem depender do
     prefixo (o usuario digita 'S2123456', 'r2123456' ou so '123456')."""

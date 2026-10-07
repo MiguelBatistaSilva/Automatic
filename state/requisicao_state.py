@@ -37,6 +37,9 @@ from services.flow_requisicao_pw import parse_entrada
 from services.requisicao_campos import ORDEM_COLUNAS, POR_CHAVE, SEPARADOR
 from state.flow_runner import FlowRunnerState
 
+# Relogins por execução quando a sessão do Assyst cai no meio do lote.
+_MAX_RELOGINS = 3
+
 # Ajuda da tela, DERIVADA do contrato (nunca escrita à mão): se a ordem mudar no
 # catálogo, a tela acompanha sozinha em vez de mentir.
 # `EXEMPLO_ORDEM` são os rótulos na ordem — vira o placeholder da caixa.
@@ -205,7 +208,9 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
                 referencias=[r.get("usuario_afetado", "") for r in requisicoes])
 
         def worker(log, emit):
-            from services.browser_pw import NavegadorPW, _fazer_login_pw
+            from services.browser_pw import (
+                NavegadorPW, _fazer_login_pw, _tela_de_login_pw,
+            )
             from services.flow_requisicao_pw import criar_requisicao
             from services import checkpoint as cp
 
@@ -226,7 +231,8 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
                             numero="--", status="✗ Falha no login", erro=True))
                     return
 
-                for i, valores in pendentes:
+                relogins = 0
+                for pos, (i, valores) in enumerate(pendentes):
                     # O que o operador COLOU (a matricula). Serve para o log de
                     # progresso e como reserva na tabela: o nome so existe depois
                     # que o type-ahead resolve a matricula na tela.
@@ -238,8 +244,19 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
                     # ter esse botao). Contrato: None = falhou, RequisicaoCriada = ok.
                     resultado = criar_requisicao(page, log, valores)
 
+                    # SESSAO CAIU (05/10 — visto em producao em 29/09: lote de 17
+                    # parou em 9). Só se olha DEPOIS de uma falha: com a sessao
+                    # viva nao ha tela de login e a checagem nao custa nada.
+                    caiu = resultado is None and _tela_de_login_pw(page)
+
                     if resultado is None:
-                        status, erro, mostrado = "✗ Falhou", True, "--"
+                        # A linha em que a sessao caiu NAO e retentada aqui (mesma
+                        # decisao do checkpoint: falha so volta na PROXIMA rodada).
+                        # Se caiu depois do Salvar, o chamado pode ter nascido —
+                        # por isso o aviso para conferir antes de rodar de novo.
+                        status = ("✗ Sessão caiu — confira no Assyst" if caiu
+                                  else "✗ Falhou")
+                        erro, mostrado = True, "--"
                         usuario = colado  # falhou antes de dar para ler o nome
                     else:
                         status, erro, mostrado = "✓ Criada", False, resultado.numero
@@ -253,6 +270,25 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
                     emit("resultado", RequisicaoResultado(
                         linha=str(i), usuario=usuario, numero=mostrado,
                         status=status, erro=erro))
+
+                    if not caiu or pos == len(pendentes) - 1:
+                        continue
+                    # Reloga e segue com as proximas. Teto de relogins: se o
+                    # Assyst derruba a sessao a toda hora, insistir so queima
+                    # linha por linha — melhor parar e deixar tudo pendente.
+                    relogins += 1
+                    if relogins <= _MAX_RELOGINS:
+                        log("Sessão do Assyst caiu — fazendo login de novo "
+                            f"({relogins}/{_MAX_RELOGINS})...", "error")
+                    if relogins > _MAX_RELOGINS or not _fazer_login_pw(
+                            page, matricula, senha, log):
+                        log("Não consegui recuperar a sessão. As linhas restantes "
+                            "ficam pendentes — rode de novo para retomar.", "error")
+                        for j, v in pendentes[pos + 1:]:
+                            emit("resultado", RequisicaoResultado(
+                                linha=str(j), usuario=v.get("usuario_afetado", "--"),
+                                numero="--", status="✗ Sessão caiu", erro=True))
+                        return
 
         async for _ in self._rodar_sync(worker, on_evento=self._on_evento):
             yield

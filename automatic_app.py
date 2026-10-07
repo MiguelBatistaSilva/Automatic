@@ -24,6 +24,8 @@ from pages.requisicao import requisicao_page
 from pages.configuracoes import configuracoes_page
 from pages.meus_fluxos import meus_fluxos_page
 from pages.assistente import assistente_page
+from pages.api_keys import api_keys_page
+from state.api_keys_state import ApiKeysState, ROTA as ROTA_API_KEYS
 from state.desmembramento_state import DesmembramentoState
 from state.kb_state import KBState
 from state.meus_fluxos_state import MeusFluxosState
@@ -78,6 +80,13 @@ app.add_page(
     # Autorizados" e "Bases de Conhecimento" migraram pra cá (ver
     # pages/configuracoes.py) — a rota /kb não existe mais.
     on_load=[RequisicaoPresetsState.on_load, TelegramState.carregar_usuarios, KBState.on_load],
+)
+# Sem item na navegação: abre pelo menu Opções da sidebar (era pop-up até 06/10).
+app.add_page(
+    api_keys_page,
+    route=ROTA_API_KEYS,
+    title="Automatic — API Keys",
+    on_load=ApiKeysState.carregar,
 )
 app.add_page(
     license_page,

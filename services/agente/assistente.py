@@ -22,7 +22,9 @@ import json
 import re
 
 from services.agente import llm
-from services.agente.ferramentas import FERRAMENTAS, Acao, esquemas
+from services.agente.ferramentas import (
+    FERRAMENTAS, Acao, _lista, _lista_curta, esquemas, requisicoes_coladas,
+)
 
 # Idas e vindas com o modelo num pedido: cada passo do plano gasta uma, e
 # consultas locais (listar bases) outras. Cada uma custa ~1.000+ tokens do
@@ -73,27 +75,30 @@ Regras:
 algo sem ter chamado a ferramenta.
 - Não invente dados (números de chamado, tombos, textos, nomes de base). Se \
 faltar algo obrigatório, pergunte ao técnico.
+- TEXTO QUE VAI PARA O CHAMADO (procedimentos do Resolver e do Aguardando \
+Usuário, texto de Informação/Fornecedor, descrição do Desmembramento, motivo \
+do Programar): use SÓ o que o técnico disse, apenas no formato pedido. Se ele \
+não disse, pergunte (ex.: "Qual procedimento coloco na resolução?"). Aplicar \
+uma base NÃO é procedimento: não escreva o texto a partir da base.
+- Pergunte TUDO o que falta ANTES de chamar qualquer ferramenta do pedido — \
+nunca prepare uma parte do pedido e pergunte o resto depois.
 - Quando tiver os dados, chame a ferramenta direto: o técnico confirma num \
 cartão na tela antes de qualquer alteração. Não peça confirmação por texto.
-- Base de Conhecimento citada por um trecho (ex.: "a base de toner"): use listar_bases_conhecimento com esse trecho como filtro. Se sobrar uma só, use essa; se sobrarem várias, pergunte mostrando as opções.
-- Desmembramento: se a descrição não tiver {{tombo}}, o sistema acrescenta o tombo no fim sozinho — não pergunte sobre isso.
-- Se o pedido tiver VÁRIAS ações (ex.: programar um chamado e colocar outro \
-aguardando fornecedor), chame UMA ferramenta para cada ação, todas na mesma \
-resposta e na ordem pedida. Elas viram um plano único que o técnico confirma \
-de uma vez e que roda em sequência; se um passo falhar, os seguintes não rodam.
+- Base de Conhecimento: passe o nome ou as palavras que o técnico disse; o \
+sistema acha a cadastrada. Se ele devolver várias, pergunte qual.
+- Se o pedido tiver VÁRIAS ações, chame UMA ferramenta para cada ação, na \
+ordem pedida. Viram um plano único, confirmado de uma vez; se um passo \
+falhar, os seguintes não rodam. Em cada ação, `ultima_acao` = true só na \
+última do pedido.
 - O resultado das execuções aparece direto na tela para o técnico; você não \
 o recebe. Não tente adivinhar números de chamados criados.
 - Se pedirem algo que nenhuma ferramenta cobre, diga que ainda não sabe fazer.
-
-Investigação (ferramentas marcadas INVESTIGAÇÃO rodam na hora e o resultado \
-volta para você):
-- Os técnicos citam o chamado pelo NOME do usuário ("o chamado da Carla"). \
-Nesse caso, use buscar_chamado_por_usuario antes de qualquer ação. Se vierem \
-vários, pergunte qual (mostrando nome e setor).
-- Antes de RESOLVER um chamado, use verificar_sla.
-- Depois de investigar, conte em UMA linha o que encontrou antes de dizer o \
+- Ferramentas de INVESTIGAÇÃO rodam na hora e o resultado volta para você. \
+Depois de investigar, conte em UMA linha o que encontrou antes de dizer o \
 que vai fazer (ex.: "O chamado está no prazo (restam 2h10). Vou aplicar a \
 base e resolver.").
+- As regras do CATI/Assyst (quando investigar, SLA, formatos) estão na BASE \
+DE CONHECIMENTO abaixo: siga-as.
 
 """
 
@@ -122,12 +127,51 @@ class Resposta:
     texto: str = ""
     # O PLANO: as ações do pedido, na ordem em que vão rodar (vazio = só texto).
     acoes: list[Acao] = dataclasses.field(default_factory=list)
+    # O que o agente fez para chegar aqui (consultas, passos montados), no
+    # passado — aparece no expansor da mensagem, como no Claude (06/10).
+    atividade: list[str] = dataclasses.field(default_factory=list)
+    # Uma linha resumindo a atividade (o rótulo do expansor).
+    resumo: str = ""
 
 
-_AVISOS_INVESTIGA = {
-    "buscar_chamado_por_usuario": "Procurando o chamado na sua fila...",
-    "verificar_sla": "Verificando o SLA...",
-}
+def _alvo(args: dict) -> str:
+    """'de Carla' / 'do S2477461' — o complemento do status vivo."""
+    if args.get("nome"):
+        return f" de {args['nome']}"
+    chamados = _lista(args.get("chamados"))
+    if chamados:
+        return f" do {_lista_curta(chamados, 4)}" if len(chamados) == 1 \
+            else f" dos chamados {_lista_curta(chamados, 4)}"
+    return ""
+
+
+def _status(nome: str, args: dict) -> tuple[str, str]:
+    """(status vivo, linha de atividade) de uma consulta. O vivo no gerúndio
+    ("Verificando o SLA do S2477461..."), a atividade no passado."""
+    alvo = _alvo(args)
+    if nome == "buscar_chamado_por_usuario":
+        return f"Procurando o chamado{alvo} na sua fila...", f"Procurou o chamado{alvo} na fila"
+    if nome == "verificar_sla":
+        return f"Verificando o SLA{alvo}...", f"Verificou o SLA{alvo}"
+    if nome == "listar_bases_conhecimento":
+        filtro = f" ('{args['filtro']}')" if args.get("filtro") else ""
+        return "Consultando as bases de conhecimento...", f"Consultou as bases de conhecimento{filtro}"
+    return "Consultando o Assyst...", f"Consultou o Assyst ({nome})"
+
+
+def _curto(texto: str, limite: int = 160) -> str:
+    texto = " ".join(str(texto).split())
+    return texto if len(texto) <= limite else texto[:limite - 1] + "…"
+
+
+def _resumo(consultas: int, acoes: list[Acao]) -> str:
+    partes = []
+    if consultas:
+        partes.append(f"{consultas} consulta{'s' if consultas > 1 else ''}")
+    if acoes:
+        partes.append(f"{len(acoes)} passo{'s' if len(acoes) > 1 else ''} preparado"
+                      + ("s" if len(acoes) > 1 else ""))
+    return " · ".join(partes)
 
 
 def responder(historico: list[dict], matricula: str = "", senha: str = "",
@@ -152,20 +196,37 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
     ferramentas = esquemas()
     pedido = next((h["content"] for h in reversed(historico)
                    if h["role"] == "user"), "")
+    # Lista de requisições colada (botão "Copiar lista" do cartão): vira o
+    # cartão direto, sem a IA — ela reescreveria o lote (ver requisicoes_coladas).
+    colada = requisicoes_coladas(pedido)
+    if colada is not None:
+        return Resposta(texto="Montei o cartão com a lista exatamente como você colou.",
+                        acoes=[colada],
+                        atividade=["Reconheceu a lista colada — o cartão saiu dela, sem a IA"])
     acoes: list[Acao] = []
     achados: list[str] = []   # resultados do verificar_sla (vão na frase final)
+    atividade: list[str] = []
+    consultas = 0
     faltou = False
     terminou = False          # o modelo marcou ultima_acao=true
+
+    def resposta(texto: str, com_acoes: bool = True) -> Resposta:
+        a = acoes if com_acoes else []
+        return Resposta(texto=texto, acoes=a, atividade=atividade,
+                        resumo=_resumo(consultas, a))
+
     try:
-        for _ in range(_MAX_VOLTAS):
-            avisar("Pensando...")
+        for volta in range(_MAX_VOLTAS):
+            avisar("Pensando..." if volta == 0 else "Decidindo o próximo passo...")
             m = llm.conversar(msgs, ferramentas, modelo_id or llm.PADRAO)
             chamadas = m.get("tool_calls") or []
             texto = (m.get("content") or "").strip()
             if not chamadas:
-                if acoes and not faltou:
-                    return Resposta(texto=texto, acoes=acoes)
-                return Resposta(texto=texto)
+                # Terminou PERGUNTANDO: o pedido está incompleto. Descarta o
+                # que já foi preparado — cartão pela metade (ex.: só a base,
+                # sem o Resolver) pode ser confirmado por engano (06/10).
+                pergunta = texto.rstrip().endswith("?")
+                return resposta(texto, com_acoes=bool(acoes) and not faltou and not pergunta)
 
             msgs.append({"role": "assistant", "content": texto, "tool_calls": chamadas})
             faltou = False
@@ -179,25 +240,38 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
                 if f is None:
                     saida, faltou = f"Ferramenta inexistente: {nome}.", True
                 elif f.local:
+                    vivo, feito = _status(nome, args)
+                    avisar(vivo)
                     saida = f.local(args)
+                    consultas += 1
+                    atividade.append(feito)
                 elif f.investiga:
                     if not matricula or not senha:
                         saida = ("Não dá para consultar o Assyst: credenciais não "
                                  "cadastradas (Opções -> Credenciais). Avise o técnico.")
+                        atividade.append("Não consultou o Assyst: credenciais não cadastradas")
                     else:
-                        avisar(_AVISOS_INVESTIGA.get(nome, "Consultando o Assyst..."))
+                        vivo, feito = _status(nome, args)
                         if sessao is None:
+                            # O login só acontece na 1ª consulta (Sessao.pagina),
+                            # e leva ~6 s: o status diz isso.
+                            vivo = f"Entrando no Assyst e {vivo[0].lower()}{vivo[1:]}"
                             sessao = Sessao(matricula, senha, lambda m, t="info": None)
+                        avisar(vivo)
                         try:
                             saida = f.investiga(args, sessao)
                         except ErroSessao as e:
                             saida = f"Não consegui consultar o Assyst: {e}"
                         except Exception as e:
                             saida = f"Erro ao consultar o Assyst: {e}"
+                        consultas += 1
+                        atividade.append(f"{feito} — {_curto(saida)}")
                 else:
                     r = f.preparar(args)
                     if isinstance(r, str):
                         saida, faltou = r, True  # falta algo: o modelo pergunta
+                        atividade.append(f"Faltou informação para {f.nome.replace('_', ' ')}"
+                                         f" — {_curto(r, 120)}")
                     elif any(x.ferramenta == r.ferramenta and x.args == r.args for x in acoes):
                         # O modelo pediu de novo um passo que já está no plano
                         # (visto em 02/10: dois "Resolver" iguais). Não duplica.
@@ -205,6 +279,8 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
                                  + _preparada(pedido, acoes))
                     else:
                         acoes.append(r)
+                        avisar(f"Montando o passo: {r.titulo}...")
+                        atividade.append(f"Preparou o passo: {r.titulo}")
                         saida = _preparada(pedido, acoes)
                         if args.get("ultima_acao") is True:
                             terminou = True
@@ -215,10 +291,10 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
             # IA só para a frase final (cortada em 02/10 — era a ida que
             # estourava o limite da Groq; ver ferramentas._com_ultima_acao).
             if terminou and acoes and not faltou:
-                return Resposta(texto=_frase_final(achados, acoes), acoes=acoes)
+                return resposta(_frase_final(achados, acoes))
         if acoes and not faltou:
-            return Resposta(texto="", acoes=acoes)
-        return Resposta(texto="Não consegui concluir o pedido. Pode reformular?")
+            return resposta("")
+        return resposta("Não consegui concluir o pedido. Pode reformular?", com_acoes=False)
     finally:
         if sessao is not None:
             sessao.fechar()

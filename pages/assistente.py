@@ -9,7 +9,7 @@ O back-end está em `state/assistente_state.py`.
 import reflex as rx
 
 from state.assistente_state import AssistenteState
-from state.api_keys_state import ApiKeysState
+from state.api_keys_state import ROTA as ROTA_API_KEYS
 from components.layout import page_layout
 from components.botoes import botao_primario
 
@@ -87,7 +87,22 @@ def _passo(m, p) -> rx.Component:
         rx.cond(
             p.corpo != "",
             rx.box(rx.markdown(p.corpo), font_size="13px", color=_CINZA,
-                   line_height="1.5", padding_left=rx.cond(m.multi, "21px", "0")),
+                   line_height="1.5", overflow_x="auto",
+                   padding_left=rx.cond(m.multi, "21px", "0")),
+        ),
+        # Lista da Requisição: colada de volta no chat, vira o MESMO lote (06/10).
+        rx.cond(
+            p.copiar != "",
+            rx.box(
+                rx.button(
+                    rx.icon("copy", size=13), "Copiar lista",
+                    variant="soft", color_scheme="gray", size="1", radius="full",
+                    cursor="pointer",
+                    on_click=[rx.set_clipboard(p.copiar),
+                              rx.toast("Lista copiada. Cole no chat para refazer este mesmo lote.")],
+                ),
+                padding_left=rx.cond(m.multi, "21px", "0"),
+            ),
         ),
         rx.cond(
             p.estado == "rodando",
@@ -99,10 +114,81 @@ def _passo(m, p) -> rx.Component:
     )
 
 
+def _seta(m) -> rx.Component:
+    return rx.cond(m.aberto,
+                   rx.icon("chevron-down", size=14, color=_CINZA),
+                   rx.icon("chevron-right", size=14, color=_CINZA))
+
+
+def _atividade(m) -> rx.Component:
+    """O que o agente fez antes de responder (consultas, passos montados)."""
+    return rx.vstack(
+        rx.foreach(
+            m.atividade,
+            lambda a: rx.hstack(
+                rx.icon("dot", size=14, color=_CINZA, flex_shrink="0"),
+                rx.text(a, size="1", color=_CINZA),
+                spacing="1", align="start",
+            ),
+        ),
+        spacing="1",
+        width="100%",
+    )
+
+
+def _logs_guardados(m) -> rx.Component:
+    """Log completo da execução, para conferir depois (rola por dentro)."""
+    return rx.box(
+        rx.foreach(
+            m.logs,
+            lambda l: rx.text(l, size="1", color=rx.color("gray", 9),
+                              font_family="monospace", white_space="pre-wrap"),
+        ),
+        max_height="260px",
+        overflow_y="auto",
+        width="100%",
+        padding="6px 8px",
+        border_radius="6px",
+        background=rx.color("gray", 2),
+    )
+
+
+def _corpo_recuado(*filhos) -> rx.Component:
+    return rx.vstack(
+        *filhos,
+        spacing="2",
+        align_items="stretch",
+        padding_left="12px",
+        margin_left="6px",
+        border_left=f"2px solid {rx.color('gray', 5)}",
+        width="100%",
+    )
+
+
+def _expansor_atividade(m, indice) -> rx.Component:
+    """Resposta comum (sem cartão) que teve consultas: uma linha recolhida
+    ("1 consulta") que abre a lista do que foi feito — como no Claude."""
+    return rx.vstack(
+        rx.hstack(
+            rx.icon("list-checks", size=14, color=_CINZA),
+            rx.text(rx.cond(m.resumo != "", m.resumo, "Atividade"), size="2", color=_CINZA),
+            _seta(m),
+            align="center", spacing="2", cursor="pointer",
+            on_click=AssistenteState.alternar(indice),
+            _hover={"opacity": "0.75"},
+        ),
+        rx.cond(m.aberto, _corpo_recuado(_atividade(m))),
+        spacing="2",
+        align_items="stretch",
+        width="100%",
+    )
+
+
 def _cartao(m, indice) -> rx.Component:
-    """O plano (um ou mais passos), no estilo discreto do Claude/Gemini: sem
-    caixa — um título pequeno em cinza e, recuado com um fio à esquerda, os
-    passos (cada um com o seu andamento), os botões e os logs do que roda."""
+    """O plano (um ou mais passos), recolhido numa linha como no Claude (06/10):
+    título + resumo ("2 consultas · 1 passo preparado"). Aberto, mostra a
+    atividade do agente, os passos e o log completo da execução. Aviso e
+    botões ficam SEMPRE à vista; rodando, uma linha diz o que está fazendo."""
     return rx.vstack(
         rx.hstack(
             _icone_estado(m),
@@ -113,11 +199,29 @@ def _cartao(m, indice) -> rx.Component:
                 ("feito", rx.text("· concluído", size="2", color=_CINZA)),
                 rx.fragment(),
             ),
+            rx.cond(m.resumo != "", rx.text("· " + m.resumo, size="2", color=_CINZA)),
+            _seta(m),
             align="center",
             spacing="2",
+            cursor="pointer",
+            on_click=AssistenteState.alternar(indice),
+            _hover={"opacity": "0.75"},
+        ),
+        rx.cond(
+            (m.estado == "rodando") & (AssistenteState.status_vivo != ""),
+            rx.text(AssistenteState.status_vivo, size="1", color=rx.color("gray", 9),
+                    padding_left="22px", white_space="nowrap", overflow="hidden",
+                    text_overflow="ellipsis", width="100%"),
+        ),
+        rx.cond(
+            m.aberto,
+            _corpo_recuado(
+                rx.cond(m.atividade.length() > 0, _atividade(m)),
+                rx.foreach(m.passos, lambda p: _passo(m, p)),
+                rx.cond(m.logs.length() > 0, _logs_guardados(m)),
+            ),
         ),
         rx.vstack(
-            rx.foreach(m.passos, lambda p: _passo(m, p)),
             rx.cond(
                 m.aviso != "",
                 rx.hstack(
@@ -138,9 +242,7 @@ def _cartao(m, indice) -> rx.Component:
             ),
             spacing="2",
             align_items="stretch",
-            padding_left="12px",
-            margin_left="6px",
-            border_left=f"2px solid {rx.color('gray', 5)}",
+            padding_left="22px",  # alinhado com o título (depois do ícone)
             width="100%",
         ),
         spacing="2",
@@ -169,6 +271,10 @@ def _mensagem(m, indice) -> rx.Component:
             width="100%",
         ),
         rx.vstack(
+            # Atividade ANTES do texto (como no Claude): só nas respostas
+            # comuns — no cartão ela fica dentro do expansor do próprio plano.
+            rx.cond((m.titulo == "") & (m.atividade.length() > 0),
+                    _expansor_atividade(m, indice)),
             rx.cond(
                 m.texto != "",
                 rx.box(
@@ -367,7 +473,7 @@ def _sem_chave() -> rx.Component:
                     weight="medium", text_align="center"),
             rx.text("Menu Opções → API Keys. Cada técnico usa a sua chave.",
                     size="2", color=rx.color("gray", 10), text_align="center"),
-            botao_primario("Cadastrar chave", on_click=ApiKeysState.abrir),
+            botao_primario("Cadastrar chave", on_click=rx.redirect(ROTA_API_KEYS)),
             spacing="3",
             align="center",
             max_width=_LARGURA,

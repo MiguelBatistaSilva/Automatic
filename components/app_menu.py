@@ -2,7 +2,8 @@
 
 Espelha o `user_menu` do projeto Asset Management (mesmo padrão de dropdown nativo),
 mas aqui não há usuário/login: o menu abre Credenciais e Sobre em POP-UP (diálogos,
-não rotas) e alterna o tema claro/escuro. Adapta-se ao estado colapsado/expandido
+não rotas), leva à página API Keys (/api-keys — só acessível por aqui) e alterna o
+tema claro/escuro. Adapta-se ao estado colapsado/expandido
 da sidebar.
 
 Os diálogos são montados AQUI, irmãos do dropdown (nunca dentro do
@@ -16,10 +17,9 @@ import reflex as rx
 from state.sidebar_state import SidebarState
 from state.credenciais_state import CredenciaisState
 from state.sobre_state import SobreState
-from state.api_keys_state import ApiKeysState
+from state.api_keys_state import ROTA as ROTA_API_KEYS
 from components.dialog_credenciais import credenciais_dialog
 from components.dialog_sobre import sobre_dialog
-from components.dialog_api_keys import api_keys_dialog
 
 
 def _trigger() -> rx.Component:
@@ -67,8 +67,9 @@ def _item(icon: str, label: str, **props) -> rx.Component:
 def _menu() -> rx.Component:
     return rx.dropdown_menu.content(
         _item("key-round", "Credenciais", on_click=CredenciaisState.abrir),
-        # Era "Telegram"; virou "API Keys" (Groq do Assistente + token do bot) em 02/10.
-        _item("key-square", "API Keys", on_click=ApiKeysState.abrir),
+        # Era "Telegram"; virou "API Keys" (Groq do Assistente + token do bot) em
+        # 02/10, e em 06/10 deixou de ser pop-up: é uma PÁGINA, aberta só daqui.
+        _item("key-square", "API Keys", on_click=rx.redirect(ROTA_API_KEYS)),
         _item("info", "Sobre", on_click=SobreState.abrir),
         rx.dropdown_menu.separator(),
         rx.dropdown_menu.item(
@@ -96,7 +97,6 @@ def app_menu() -> rx.Component:
             modal=False,
         ),
         credenciais_dialog(),
-        api_keys_dialog(),
         sobre_dialog(),
         width="100%",
         display="flex",

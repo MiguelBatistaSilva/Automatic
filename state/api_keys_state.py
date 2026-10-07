@@ -1,5 +1,6 @@
 """
-state/api_keys_state.py — Back-end do pop-up "API Keys" (menu Opções).
+state/api_keys_state.py — Back-end da página "API Keys" (/api-keys, aberta
+pelo menu Opções; era pop-up até 06/10).
 
 Junta as chaves de serviços externos num lugar só (2026-10-02, pedido do
 usuário): antes o token do bot tinha o pop-up "Telegram" e a chave da IA era
@@ -10,17 +11,16 @@ colada na própria página do Assistente.
   - Telegram (bot): o token do @BotFather, só na máquina que roda o bot
     (bot/services/credencial_servico.py).
 
-Nenhuma chave vai para o banco, arquivo ou git. O diálogo é CONTROLADO
-(`aberto`): quem abre é o item do menu (`abrir`) ou o aviso da página do
-Assistente quando falta a chave.
+Nenhuma chave vai para o banco, arquivo ou git. `carregar` é o on_load da
+página: lê o Cofre a cada visita (outra tela pode ter mudado a chave).
 """
 
 import reflex as rx
 
+ROTA = "/api-keys"
+
 
 class ApiKeysState(rx.State):
-    aberto: bool = False
-
     groq: str = ""
     mostrar_groq: bool = False
     status_groq: str = ""
@@ -37,7 +37,7 @@ class ApiKeysState(rx.State):
     cor_telegram: str = "#6B7280"
 
     @rx.event
-    def abrir(self):
+    def carregar(self):
         from bot.services import credencial_servico
         from services.agente import llm
 
@@ -55,11 +55,6 @@ class ApiKeysState(rx.State):
         self.status_telegram = ("✓ Token cadastrado." if self.telegram
                                 else "Só é preciso na máquina que roda o bot.")
         self.cor_telegram = "#16A34A" if self.telegram else "#6B7280"
-        self.aberto = True
-
-    @rx.event
-    def set_aberto(self, v: bool):
-        self.aberto = v
 
     @rx.event
     def set_groq(self, v: str):

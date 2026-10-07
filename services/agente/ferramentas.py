@@ -44,6 +44,9 @@ class Acao:
     # "concluido" ou "corrompido" — decide quais botões o cartão mostra.
     checkpoint: str = ""
     aviso: str = ""
+    # Texto do botão "Copiar lista" do cartão. Na Requisição é o lote EXATO:
+    # colado de volta no chat, vira o mesmo lote (ver requisicoes_coladas).
+    copiar: str = ""
 
 
 @dataclasses.dataclass
@@ -87,14 +90,44 @@ def _nomes_bases() -> list[str]:
     return [e["nome_artigo"] for e in kb_store.carregar()]
 
 
+# Palavras que não ajudam a achar a base ("a BASE DE teste DO patch cord").
+_PALAVRAS_VAZIAS = {"a", "o", "as", "os", "de", "da", "do", "das", "dos", "e",
+                    "em", "na", "no", "para", "com", "bc", "base", "via"}
+
+
+def _palavras(texto: str) -> list[str]:
+    return [p for p in re.findall(r"\w+", _sem_acento(texto or ""))
+            if p not in _PALAVRAS_VAZIAS]
+
+
+def _bases_por_palavras(trecho: str) -> list[str]:
+    """Bases cujo nome tem TODAS as palavras do trecho, em qualquer ordem e
+    sem acento (06/10): "teste de patch cord" acha "BC - Teste de Cabo Patch
+    Cord" — a busca pelo trecho inteiro não achava, por causa do "Cabo"."""
+    alvo = _palavras(trecho)
+    if not alvo:
+        return []
+    # Início de palavra: "monitor" acha "Monitores", "instal" acha "Instalação".
+    return [n for n in _nomes_bases()
+            if all(any(w.startswith(p) for w in _palavras(n)) for p in alvo)]
+
+
 def _resolver_base(nome: str) -> tuple[str, str]:
-    """(nome_exato, erro). Aceita diferença de maiúsculas; nunca adivinha além
-    disso — base errada aplicada num chamado não tem desfazer."""
+    """(nome_exato, erro). Aceita o nome exato (sem diferença de maiúsculas)
+    ou, desde 06/10, a ÚNICA base que tem todas as palavras citadas — o nome
+    escolhido aparece no cartão antes de confirmar. Mais de uma: pergunta.
+    Nunca escolhe por semelhança (base errada não tem desfazer)."""
     nomes = _nomes_bases()
     alvo = (nome or "").strip().lower()
     for n in nomes:
         if n.lower() == alvo:
             return n, ""
+    por_palavras = _bases_por_palavras(nome)
+    if len(por_palavras) == 1:
+        return por_palavras[0], ""
+    if len(por_palavras) > 1:
+        return "", (f"Mais de uma base tem '{nome}': {', '.join(por_palavras[:10])}. "
+                    "Pergunte ao técnico qual delas.")
     parecidas = difflib.get_close_matches(nome or "", nomes, n=8, cutoff=0.3)
     parecidas += [n for n in nomes if alvo and alvo in n.lower() and n not in parecidas]
     if parecidas:
@@ -121,9 +154,9 @@ def _ok_falha(ok: bool) -> str:
 
 def _local_bases(args: dict) -> str:
     nomes = _nomes_bases()
-    filtro = (args.get("filtro") or "").strip().lower()
+    filtro = (args.get("filtro") or "").strip()
     if filtro:
-        nomes = [n for n in nomes if filtro in n.lower()]
+        nomes = _bases_por_palavras(filtro)
     if not nomes:
         return "Nenhuma base encontrada."
     return "Bases cadastradas: " + "; ".join(nomes[:80])
@@ -315,17 +348,7 @@ def _prep_requisicoes(args: dict) -> "Acao | str":
     elif checkpoint.existe_pendente(chave):
         estado, aviso = "pendente", "Lote já começado: " + checkpoint.resumo(chave)
 
-    linhas = [f"**Requisições:** {len(reqs)}"]
-    for i, r in enumerate(reqs[:15], 1):
-        partes = [str(r.get(c) or "") for c in ("usuario_afetado", "resumo", "item", "item_b")]
-        atrib = r.get("usuario_atribuido") or r.get("grupo_atribuido") or ""
-        linhas.append(f"{i}. {' · '.join(p for p in partes if p)}"
-                      + (f" → {atrib}" if atrib else ""))
-    if len(reqs) > 15:
-        linhas.append(f"… e mais {len(reqs) - 15}")
-    comum = reqs[0]
-    if comum.get("descricao"):
-        linhas.append(f"**Descrição (1ª):** {comum['descricao']}")
+    linhas = [f"**Requisições:** {len(reqs)}", _bloco_lista(texto)]
     return Acao(
         ferramenta="criar_requisicoes",
         args={"texto": texto},
@@ -335,7 +358,42 @@ def _prep_requisicoes(args: dict) -> "Acao | str":
         pode_simular=True,
         checkpoint=estado,
         aviso=aviso,
+        copiar=texto,
     )
+
+
+def _bloco_lista(texto: str) -> str:
+    """A lista COMPLETA no cartão (pedido de 06/10), para o técnico conferir
+    linha a linha — antes o cartão mostrava só um resumo."""
+    return f"**Lista completa** (é esta que será criada):\n```\n{texto}\n```"
+
+
+def requisicoes_coladas(mensagem: str) -> "Acao | None":
+    """O técnico colou no chat uma lista de requisições (a do botão "Copiar
+    lista")? Então o cartão sai DESTA lista, sem passar pela IA.
+
+    Por quê (06/10): ao pedir "gere a lista de novo", a IA reescreveu o lote
+    com alguma diferença, a chave do checkpoint (hash do texto) mudou e 2
+    requisições foram criadas em dobro. Colada, a lista é a mesma -> mesma
+    chave -> retoma de onde parou.
+
+    Só reconhece se TODAS as linhas não vazias tiverem as colunas completas,
+    como o cartão gera: mensagem com outro texto junto vai para a IA, que
+    pode ter instrução nova ("troque o técnico").
+    """
+    from services.flow_requisicao_pw import parse_entrada
+
+    # Cercas ``` coladas junto com a lista não contam como texto.
+    linhas = [l for l in mensagem.splitlines() if l.strip().strip("`")]
+    n = len(ORDEM_COLUNAS) - 1
+    if not linhas or any(l.count(SEPARADOR) != n for l in linhas):
+        return None
+    try:
+        reqs = parse_entrada("\n".join(linhas))
+    except ValueError:
+        return None
+    r = _prep_requisicoes({"requisicoes": reqs})
+    return r if isinstance(r, Acao) else None
 
 
 def _exec_requisicoes(a: dict, s: Sessao) -> Resultado:
@@ -450,14 +508,12 @@ def _opcoes() -> dict[str, list[str]]:
 def _desc_por_tombo() -> str:
     o = _opcoes()
     return (
-        "Abre Requisições de Serviço a partir de um PEDIDO, uma por tombo. Use "
-        "esta (e não criar_requisicoes) sempre que o pedido citar tombos ou "
-        "for de um tipo de solicitação da base de conhecimento. O sistema "
-        "monta cada requisição: Item B = '*'+tombo, tombo na descrição."
-        + f"\nTécnicos: {', '.join(o['tecnicos'])}."
-        + f"\nFilas: {', '.join(o['filas'])}."
+        "Abre Requisições de Serviço, uma por tombo (o sistema monta cada uma). "
+        "Use para pedidos com tombos ou de um tipo de solicitação da base."
+        # Técnicos e filas saíram (06/10): o código resolve nome parcial e,
+        # se ambíguo/desconhecido, devolve as opções para o modelo perguntar.
+        # Edifícios ficam: nome fora dos Presets não trava, só avisa.
         + f"\nEdifícios: {', '.join(o['edificios'])}."
-        + "\nMatrícula, edifício, fila e técnico vêm do técnico: se faltar, pergunte."
     )
 
 
@@ -530,7 +586,7 @@ def _prep_por_tombo(args: dict) -> "Acao | str":
         f"**Usuário afetado:** {matricula} · **Edifício:** {edificio}",
         f"**Item:** {item} · **Categoria:** {categoria} · **Resumo:** {resumo}",
         f"**Fila:** {fila} · **Técnico:** {tecnico}",
-        f"**Descrição (1ª):** {reqs[0]['descricao']}",
+        _bloco_lista(base.copiar),
     ]
     base.aviso = " ".join(avisos + ([base.aviso] if base.aviso else []))
     return base
@@ -598,6 +654,77 @@ def _exec_fornecedor(a, s):
 def _exec_usuario(a, s):
     from services.flow_usuario_pw import aguardar_info_usuario
     return _exec_lote(aguardar_info_usuario, "Aguardando Info do Usuário", True, True)(a, s)
+
+
+# Retomadas do relógio (06/10): o par de cada pausa — flow_info_recebida_pw.
+def _prep_recebida_usuario(args: dict) -> "Acao | str":
+    r = _prep_lote("info_recebida_usuario", "Info Recebidas do Usuário", False)(args)
+    if isinstance(r, Acao):
+        r.linhas.append("**Texto:** Pendência sanada após informações recebida do(a) "
+                        "senhor(a) **NOME** (lido de cada chamado), atendimento retomado.")
+    return r
+
+
+def _exec_recebida_usuario(a, s):
+    from services.flow_info_recebida_pw import info_recebida_usuario
+    return _exec_lote(info_recebida_usuario, "Info Recebidas do Usuário", False, True)(a, s)
+
+
+def _exec_recebida_fornecedor(a, s):
+    from services.flow_info_recebida_pw import info_recebida_fornecedor
+    return _exec_lote(info_recebida_fornecedor, "Info Recebida do Fornecedor", True, True)(a, s)
+
+
+# --------------------------------------------------------------------------- #
+# Configurar filas (06/10) — consulta salva do monitor; não mexe em chamado
+# --------------------------------------------------------------------------- #
+
+def _prep_config_filas(args: dict) -> "Acao | str":
+    from services.flow_config_fila_pw import COLUNAS_PADRAO, PERFIL_PADRAO
+    filas = [f.strip() for f in (args.get("filas") or []) if str(f).strip()]
+    if not filas:
+        return "Falta a lista de filas a configurar."
+    if not COLUNAS_PADRAO:
+        return "As colunas padrão do perfil ainda não foram definidas no sistema."
+    return Acao(ferramenta="configurar_filas", args={"filas": filas},
+                titulo="Configurar filas",
+                linhas=[f"**Filas:** {len(filas)} ({_lista_curta(filas)})",
+                        f"**Perfil de coluna:** {PERFIL_PADRAO} (criado na 1ª vez, "
+                        "com as colunas padrão; depois reaproveitado)",
+                        "*Código, Nome e Departamento = o nome de cada fila.*"],
+                escreve=True, pode_simular=True)
+
+
+def _exec_config_filas(a, s: Sessao) -> Resultado:
+    """Perfil primeiro (garantir_perfil: cria ou reaproveita); sem ele as
+    filas não têm o que usar, então a falha dele para tudo."""
+    from services.flow_config_fila_pw import PERFIL_PADRAO, configurar_fila, garantir_perfil
+    page = s.pagina()
+    s.log(f"Conferindo o Perfil de coluna {PERFIL_PADRAO}...", "status")
+    try:
+        perfil = garantir_perfil(page, s.log, s.modo_teste)
+    except Exception as e:
+        perfil = None
+        s.log(f"Erro no Perfil de coluna: {e}", "error")
+    if perfil is None:
+        return Resultado(f"❌ **Perfil de coluna {PERFIL_PADRAO}** falhou — nenhuma "
+                         "fila foi configurada. Veja o log.", ok=False)
+    estado = {"existente": "já existia", "criado": "criado",
+              "simulado": "seria criado"}[perfil]
+    feitos, linhas = 0, [f"- ✅ Perfil de coluna **{PERFIL_PADRAO}** ({estado})"]
+    for fila in a["filas"]:
+        s.log(f"Configurando a fila {fila}...", "status")
+        try:
+            ok = configurar_fila(page, s.log, fila, PERFIL_PADRAO, s.modo_teste,
+                                 perfil_novo=perfil == "simulado")
+            erro = "" if ok else " — o fluxo não chegou ao fim"
+        except Exception as e:  # uma fila não derruba as outras
+            ok, erro = False, f" — {e}"
+        feitos += ok
+        linhas.append(f"- {_ok_falha(ok)} {fila}{erro}")
+    sufixo = " (simulação, nada salvo)" if s.modo_teste else ""
+    cab = f"**Configurar filas{sufixo}** — {feitos} de {len(a['filas'])}."
+    return Resultado("\n".join([cab] + linhas), ok=feitos == len(a["filas"]))
 
 
 # --------------------------------------------------------------------------- #
@@ -818,98 +945,88 @@ def _inv_verificar_sla(args: dict, s: Sessao) -> str:
 # Catálogo
 # --------------------------------------------------------------------------- #
 
-_CHAMADOS = {"type": "array", "items": {"type": "string"},
-             "description": "Números dos chamados, ex.: ['1234567', 'R2472843']."}
+# ENXUTO DE PROPÓSITO (06/10): estes esquemas vão em TODA ida ao modelo
+# (~5.200 tokens por ida antes do enxugamento, 70% deles aqui). Regra de
+# negócio NÃO entra aqui: mora em conhecimento/*.md (fonte única). Aqui só o
+# que a ferramenta faz e o formato dos campos.
+_CHAMADOS = {"type": "array", "items": {"type": "string"}}
+# A fila é conferida no código (erro devolve as válidas) — sem `enum` aqui.
+_FILA = {"type": "string", "description": "Fila do SLA."}
 
 FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
     Ferramenta(
         "buscar_chamado_por_usuario",
-        "INVESTIGAÇÃO: acha o número do chamado na fila do técnico pelo NOME do "
-        "usuário afetado (e, se dito, o setor). Use sempre que o técnico citar "
-        "o chamado pelo nome da pessoa ('o chamado da Carla') em vez do número.",
+        "INVESTIGAÇÃO: acha o chamado na fila do técnico pelo nome do usuário afetado.",
         {"type": "object", "properties": {
-            "nome": {"type": "string", "description": "Nome (ou parte) do usuário afetado."},
-            "setor": {"type": "string", "description": "Setor, se o técnico disser."},
+            "nome": {"type": "string"},
+            "setor": {"type": "string"},
         }, "required": ["nome"]},
         preparar=lambda a: "", investiga=_inv_buscar_chamado,
     ),
     Ferramenta(
         "resolver_chamado",
-        "Resolve o chamado (ação 'Resolvido') com o texto padrão da auditoria, "
-        "montado pelo sistema. Use verificar_sla ANTES: chamado ESTOURADO não "
-        "pode ser resolvido (o sistema também recusa).",
+        "Resolve o chamado (ação 'Resolvido'); o sistema monta o texto da auditoria.",
         {"type": "object", "properties": {
             "chamados": _CHAMADOS,
             "procedimentos": {"type": "string", "description":
-                "Um procedimento só: uma frase simples, sem traço (ex.: 'Instalação realizada com sucesso.'). Vários: um por linha, começando com '- ', no particípio, ';' no fim (o último com '.'), ex.: '- Atualizado o antivírus;\\n- Reiniciada a máquina.'"},
-            "fila": {"type": "string", "enum": list(FILAS),
-                     "description": f"Fila do SLA. Padrão: {FILA_PADRAO}."},
+                "Ditos pelo técnico, no formato de Procedimentos da base."},
+            "fila": _FILA,
         }, "required": ["chamados", "procedimentos"]},
         preparar=_prep_resolver, executar=_exec_resolver,
     ),
     Ferramenta(
         "verificar_sla",
-        "INVESTIGAÇÃO: consulta se o chamado está NO PRAZO ou ESTOURADO e "
-        "quanto tempo resta — o resultado volta para você decidir. Use ANTES "
-        "de resolver um chamado.",
+        "INVESTIGAÇÃO: diz se o chamado está NO PRAZO ou ESTOURADO e quanto resta.",
         {"type": "object", "properties": {
             "chamados": _CHAMADOS,
-            "fila": {"type": "string", "enum": list(FILAS),
-                     "description": f"Fila do SLA. Padrão: {FILA_PADRAO}."},
+            "fila": _FILA,
         }, "required": ["chamados"]},
         preparar=lambda a: "", investiga=_inv_verificar_sla,
     ),
     Ferramenta(
         "listar_bases_conhecimento",
-        "Lista as Bases de Conhecimento cadastradas no app (nomes exatos). Use "
-        "antes de desmembrar/aplicar base quando não souber o nome exato.",
-        {"type": "object", "properties": {
-            "filtro": {"type": "string", "description": "Trecho do nome para filtrar (opcional)."}}},
+        "Lista as Bases de Conhecimento cadastradas (filtro: palavras do nome).",
+        {"type": "object", "properties": {"filtro": {"type": "string"}}},
         preparar=lambda a: "", local=_local_bases,
     ),
     Ferramenta(
         "desmembrar",
-        "Desmembramento: cria um chamado FILHO por tombo a partir de um chamado "
-        "PAI. Com 'base', também aplica a Base de Conhecimento em cada filho "
-        "(Criar + Base); sem 'base', só cria (Só Criar).",
+        "Cria um chamado filho por tombo a partir do pai; com 'base', aplica a "
+        "base em cada filho.",
         {"type": "object", "properties": {
             "chamado_pai": {"type": "string"},
-            "tombos": {"type": "array", "items": {"type": "string"},
-                       "description": "Um filho por tombo."},
-            "descricao": {"type": "string",
-                          "description": "Descrição dos filhos. Use {{tombo}} onde o "
-                                         "número do tombo deve entrar."},
-            "base": {"type": "string", "description": "Nome da Base de Conhecimento (opcional)."},
+            "tombos": {"type": "array", "items": {"type": "string"}},
+            "descricao": {"type": "string", "description":
+                          "Dos filhos. {{tombo}} onde entra o tombo (sem ele, vai no fim)."},
+            "base": {"type": "string", "description": "Nome ou palavras da base."},
         }, "required": ["chamado_pai", "tombos", "descricao"]},
         preparar=_prep_desmembrar, executar=_exec_desmembrar,
     ),
     Ferramenta(
         "aplicar_base",
-        "Só Base: aplica uma Base de Conhecimento em chamados que JÁ existem.",
+        "Aplica uma Base de Conhecimento em chamados que já existem.",
         {"type": "object", "properties": {
             "chamados": _CHAMADOS,
-            "base": {"type": "string", "description": "Nome da Base de Conhecimento."},
+            "base": {"type": "string", "description": "Nome ou palavras da base."},
         }, "required": ["chamados", "base"]},
         preparar=_prep_aplicar_base, executar=_exec_aplicar_base,
     ),
     Ferramenta(
         "criar_requisicoes",
-        "Abre Requisições de Serviço (chamados novos), uma por item da lista. "
-        "Quando o técnico pedir várias iguais variando só um campo (ex.: um "
-        "tombo por chamado), repita os demais campos em cada item. Nenhum "
-        "campo pode conter ';'.",
+        "Abre Requisições de Serviço, uma por item da lista (campos repetidos "
+        "em cada item; nenhum com ';'). Pedido com tombos: use "
+        "criar_requisicoes_por_tombo.",
         {"type": "object", "properties": {"requisicoes": {"type": "array", "items": {
             "type": "object", "properties": {
-                "usuario_afetado": {"type": "string", "description": "Matrícula do usuário afetado."},
-                "edificio": {"type": "string", "description": "Ex.: Fórum Clóvis Beviláqua."},
+                "usuario_afetado": {"type": "string", "description": "Matrícula."},
+                "edificio": {"type": "string"},
                 "resumo": {"type": "string"},
                 "descricao": {"type": "string"},
-                "item": {"type": "string", "description": "Ex.: Computador."},
-                "item_b": {"type": "string",
-                           "description": "Tombo com '*' na frente (ex.: *333284) ou um valor de catálogo."},
-                "categoria": {"type": "string", "description": "Ex.: Configuração."},
-                "grupo_atribuido": {"type": "string", "description": "Ex.: 2N CATI FCB."},
-                "usuario_atribuido": {"type": "string", "description": "Nome do técnico."},
+                "item": {"type": "string"},
+                "item_b": {"type": "string"},
+                "categoria": {"type": "string"},
+                "grupo_atribuido": {"type": "string"},
+                "usuario_atribuido": {"type": "string", "description": "Técnico."},
             }, "required": ["usuario_afetado", "item"]}}},
          "required": ["requisicoes"]},
         preparar=_prep_requisicoes, executar=_exec_requisicoes,
@@ -918,45 +1035,43 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
         "criar_requisicoes_por_tombo",
         _desc_por_tombo,  # montada na hora: lê tipos e nomes do banco
         {"type": "object", "properties": {
-            "matricula": {"type": "string", "description": "Matrícula do usuário afetado."},
+            "matricula": {"type": "string", "description": "Do usuário afetado."},
             "edificio": {"type": "string"},
-            "fila": {"type": "string", "description": "Grupo/fila atribuída."},
-            "tecnico": {"type": "string", "description": "Técnico atribuído (pode ser parte do nome)."},
+            "fila": {"type": "string", "description": "Grupo atribuído."},
+            "tecnico": {"type": "string", "description": "Técnico atribuído (nome ou parte)."},
             "tombos": {"type": "array", "items": {"type": "string"},
-                       "description": "Tombos como o técnico escreveu (ex.: FCBVCUSTO265287)."},
-            "tipo": {"type": "string", "description": "Nome exato do tipo de solicitação (base de conhecimento) que bate, se houver."},
-            "item": {"type": "string", "description": "Só se nenhum tipo bater ou o técnico disser outro."},
+                       "description": "Como o técnico escreveu."},
+            "tipo": {"type": "string", "description": "Tipo de solicitação da base que bate."},
+            "item": {"type": "string", "description": "Só se nenhum tipo bater."},
             "categoria": {"type": "string"},
             "resumo": {"type": "string"},
-            "descricao": {"type": "string",
-                          "description": "Só se o técnico pedir um texto diferente do "
-                                         "tipo. Use {tombo} onde entra o tombo."},
+            "descricao": {"type": "string", "description":
+                          "Só se diferente da do tipo. {tombo} onde entra o tombo."},
         }, "required": ["matricula", "edificio", "fila", "tecnico"]},
         preparar=_prep_por_tombo, executar=_exec_requisicoes,
     ),
     Ferramenta(
         "iniciar_atendimento",
-        "Inicia o atendimento (agora) dos chamados informados.",
+        "Inicia o atendimento agora (ação 'Iniciar Atendimento').",
         {"type": "object", "properties": {"chamados": _CHAMADOS}, "required": ["chamados"]},
         preparar=_prep_lote("iniciar_atendimento", "Iniciar Atendimento", False),
         executar=_exec_atendimento,
     ),
     Ferramenta(
         "programar_atendimento",
-        "Registra 'Atendimento Programado' (agenda o atendimento para um dia e "
-        "hora combinados com o usuário), com o motivo. O nome do usuário "
-        "afetado é lido do chamado. NÃO confundir com iniciar_atendimento.",
+        "Agenda o atendimento para dia/hora combinados (ação 'Atendimento "
+        "Programado'); não é iniciar_atendimento.",
         {"type": "object", "properties": {
             "chamados": _CHAMADOS,
-            "dia": {"type": "string", "description": "Dia no formato dd/mm."},
-            "hora": {"type": "string", "description": "Hora no formato hh:mm."},
-            "motivo": {"type": "string", "description": "Breve descrição do motivo."},
+            "dia": {"type": "string", "description": "dd/mm"},
+            "hora": {"type": "string", "description": "hh:mm"},
+            "motivo": {"type": "string"},
         }, "required": ["chamados", "dia", "hora", "motivo"]},
         preparar=_prep_programar, executar=_exec_programar,
     ),
     Ferramenta(
         "adicionar_informacao",
-        "Adiciona o mesmo texto livre (ação 'Adicionar Informação') em vários chamados.",
+        "Registra um texto nos chamados (ação 'Adicionar Informação').",
         {"type": "object", "properties": {"chamados": _CHAMADOS, "texto": {"type": "string"}},
          "required": ["chamados", "texto"]},
         preparar=_prep_lote("adicionar_informacao", "Adicionar Informação", True),
@@ -964,7 +1079,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
     ),
     Ferramenta(
         "aguardar_fornecedor",
-        "Marca os chamados como 'Aguardando Info do Fornecedor', com um texto.",
+        "PAUSA: 'Aguardando Info do Fornecedor', com um texto.",
         {"type": "object", "properties": {"chamados": _CHAMADOS, "texto": {"type": "string"}},
          "required": ["chamados", "texto"]},
         preparar=_prep_lote("aguardar_fornecedor", "Aguardando Info do Fornecedor", True),
@@ -972,32 +1087,53 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
     ),
     Ferramenta(
         "aguardar_usuario",
-        "Marca os chamados como 'Aguardando Info do Usuário' (procedimento "
-        "feito, falta o usuário testar). O texto final segue o modelo da "
-        "auditoria, montado pelo sistema com o nome do usuário lido do chamado; "
-        "'texto' é SÓ a descrição das ações tomadas.",
+        "PAUSA: 'Aguardando Info do Usuário' (feito, falta o usuário testar); "
+        "o sistema monta o texto da auditoria.",
         {"type": "object", "properties": {"chamados": _CHAMADOS, "texto": {
             "type": "string",
-            "description": "Um procedimento só: uma frase simples, sem traço (ex.: 'Instalação realizada com sucesso.'). Vários: um por linha, começando com '- ', no particípio, ';' no fim (o último com '.'), ex.: '- Atualizado o antivírus;\\n- Reiniciada a máquina.' Se houver observação "
-                           "(ex.: pendente de teste), coloque-a no fim após uma "
-                           "linha em branco."}},
+            "description": "Procedimentos ditos pelo técnico, no formato de Procedimentos da base."}},
          "required": ["chamados", "texto"]},
         preparar=_prep_lote("aguardar_usuario", "Aguardando Info do Usuário", True),
         executar=_exec_usuario,
     ),
     Ferramenta(
+        "info_recebida_usuario",
+        "RETOMADA: 'Info Recebidas do Usuário *' (texto fixo, montado pelo sistema).",
+        {"type": "object", "properties": {"chamados": _CHAMADOS},
+         "required": ["chamados"]},
+        preparar=_prep_recebida_usuario,
+        executar=_exec_recebida_usuario,
+    ),
+    Ferramenta(
+        "info_recebida_fornecedor",
+        "RETOMADA: 'Info Recebida do Fornecedor', com um texto.",
+        {"type": "object", "properties": {"chamados": _CHAMADOS, "texto": {"type": "string"}},
+         "required": ["chamados", "texto"]},
+        preparar=_prep_lote("info_recebida_fornecedor", "Info Recebida do Fornecedor", True),
+        executar=_exec_recebida_fornecedor,
+    ),
+    Ferramenta(
+        "configurar_filas",
+        "Configura filas no Assyst (consulta no menu, com o perfil de colunas "
+        "padrão). Não mexe em chamados.",
+        {"type": "object", "properties": {
+            "filas": {"type": "array", "items": {"type": "string"},
+                      "description": "Nomes exatos das filas."},
+        }, "required": ["filas"]},
+        preparar=_prep_config_filas, executar=_exec_config_filas,
+    ),
+    Ferramenta(
         "consultar_minha_fila",
-        "Lista os chamados na fila do técnico logado (só leitura).",
+        "Lista os chamados da fila do técnico (só leitura).",
         {"type": "object", "properties": {}},
         preparar=_prep_fila, executar=_exec_fila,
     ),
     Ferramenta(
         "analisar_sla",
-        "Calcula o SLA (tempo gasto/restante) dos chamados informados (só leitura).",
+        "Mostra ao técnico o SLA (gasto/restante) dos chamados (só leitura).",
         {"type": "object", "properties": {
             "chamados": _CHAMADOS,
-            "fila": {"type": "string", "enum": list(FILAS),
-                     "description": f"Fila do SLA. Padrão: {FILA_PADRAO}."},
+            "fila": _FILA,
         }, "required": ["chamados"]},
         preparar=_prep_sla, executar=_exec_sla,
     ),
@@ -1019,9 +1155,8 @@ def _aceita_null(parametros: dict) -> dict:
 
 _ULTIMA_ACAO = {
     "type": "boolean",
-    "description": "true se esta é a ÚLTIMA ação do pedido do técnico (não há "
-                   "outra ação para preparar depois dela); false se ainda falta "
-                   "alguma ação do pedido.",
+    # Explicado UMA vez no SISTEMA (vai em ~14 ferramentas; era 180 chars cada).
+    "description": "Última ação do pedido?",
 }
 
 
@@ -1071,8 +1206,14 @@ def frase_do_plano(acoes: list[Acao]) -> str:
             partes.append(f"colocar o {ch(a)} aguardando o fornecedor")
         elif f == "aguardar_usuario":
             partes.append(f"colocar o {ch(a)} aguardando o usuário")
+        elif f == "info_recebida_usuario":
+            partes.append(f"retomar o {ch(a)} (info recebida do usuário)")
+        elif f == "info_recebida_fornecedor":
+            partes.append(f"retomar o {ch(a)} (info recebida do fornecedor)")
         elif f == "adicionar_informacao":
             partes.append(f"adicionar a informação no {ch(a)}")
+        elif f == "configurar_filas":
+            partes.append(f"configurar a(s) fila(s) {', '.join(a.args['filas'])}")
         elif f == "desmembrar":
             partes.append(f"desmembrar o {a.args['chamado_pai']} em "
                           f"{len(a.args['tombos'])} filho(s)")

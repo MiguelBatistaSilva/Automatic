@@ -26,6 +26,8 @@ import threading
 import reflex as rx
 
 _LOGS_VISIVEIS = 6
+# Log guardado no expansor do cartão (o resto se perde: é só para conferência).
+_LOGS_GUARDADOS = 400
 
 BOTOES = {
     "confirmar": ("Confirmar", "blue", "solid"),
@@ -55,6 +57,7 @@ class OpcaoModelo:
 class Passo:
     titulo: str
     corpo: str = ""            # as linhas do passo num markdown só
+    copiar: str = ""           # texto do botão "Copiar lista" ("" = sem botão)
     estado: str = ""           # "" | rodando | ok | erro | pulado
 
 
@@ -70,6 +73,12 @@ class Mensagem:
     botoes: list[Botao] = dataclasses.field(default_factory=list)
     estado: str = ""           # "" | pendente | rodando | feito | cancelado
     erro: bool = False
+    # Expansor no estilo do Claude (06/10): uma linha de resumo; aberto, mostra
+    # a atividade do agente, os passos e o log completo da execução.
+    atividade: list[str] = dataclasses.field(default_factory=list)
+    resumo: str = ""
+    logs: list[str] = dataclasses.field(default_factory=list)
+    aberto: bool = False
 
 
 def _botoes(acoes) -> tuple[list[Botao], str]:
@@ -163,6 +172,12 @@ class AssistenteState(rx.State):
         self.modelo = modelo_id
 
     @rx.event
+    def alternar(self, indice: int):
+        """Abre/fecha o expansor da mensagem."""
+        if 0 <= indice < len(self.mensagens):
+            self._marcar(indice, aberto=not self.mensagens[indice].aberto)
+
+    @rx.event
     def nova_conversa(self):
         if self.rodando:
             return rx.toast.warning("Espere a execução atual terminar.")
@@ -237,7 +252,9 @@ class AssistenteState(rx.State):
         async with self:
             self.pensando = False
             if not r.acoes:
-                self.mensagens = self.mensagens + [Mensagem(papel="assistant", texto=r.texto)]
+                self.mensagens = self.mensagens + [Mensagem(
+                    papel="assistant", texto=r.texto,
+                    atividade=r.atividade, resumo=r.resumo)]
                 self._historico = self._historico + [{"role": "assistant", "content": r.texto}]
                 return
             escreve = any(a.escreve for a in r.acoes)
@@ -246,8 +263,10 @@ class AssistenteState(rx.State):
             cartao = Mensagem(
                 papel="assistant", texto=r.texto,
                 titulo=f"Plano — {len(r.acoes)} passos" if multi else r.acoes[0].titulo,
-                passos=[Passo(titulo=a.titulo, corpo="  \n".join(a.linhas)) for a in r.acoes],
+                passos=[Passo(titulo=a.titulo, corpo="  \n".join(a.linhas),
+                              copiar=a.copiar) for a in r.acoes],
                 multi=multi, aviso=aviso,
+                atividade=r.atividade, resumo=r.resumo,
                 botoes=botoes if escreve else [],
                 estado="pendente" if escreve else "rodando",
             )
@@ -327,6 +346,8 @@ class AssistenteState(rx.State):
                 if tipo == "log":
                     self.status_vivo = dado
                     self.logs_vivos = (self.logs_vivos + [dado])[-_LOGS_VISIVEIS:]
+                    logs = self.mensagens[indice].logs
+                    self._marcar(indice, logs=(logs + [dado])[-_LOGS_GUARDADOS:])
                 elif tipo == "passo":
                     i, estado = dado
                     self._marcar_passo(indice, i, estado)
