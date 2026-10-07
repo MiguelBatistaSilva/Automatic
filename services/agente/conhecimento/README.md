@@ -1,22 +1,28 @@
 # Base de conhecimento do Assistente
 
 Tudo o que o Assistente precisa SABER sobre o CATI e o Assyst mora aqui, em
-arquivos de texto — um assunto por arquivo. Criada em 2026-10-01 para
-centralizar o que estava espalhado (prompt no código, descrição das
-ferramentas, tabela "Tipos de Solicitação" em Configurações).
+arquivos de texto. Criada em 2026-10-01; organizada POR DOMÍNIO em 07/10.
 
-Como funciona:
-- Todo arquivo `.md` desta pasta (menos este README) vai para as instruções
-  do Assistente, na ordem alfabética do nome do arquivo.
-- `tipos_solicitacao.md` também é LIDO PELO CÓDIGO (ferramenta de Requisição
+Organização:
+- Cada SUBPASTA é um domínio: `chamados/`, `requisicao/`, `filas/` ... — um
+  assunto por arquivo dentro dela, com um título `# Título` na 1ª linha.
+- Arquivo na RAIZ (ex.: `como_os_tecnicos_pedem.md`) vale para todos os
+  pedidos.
+
+Como o Assistente usa:
+- Um roteador (services/agente/roteador.py) vê de que domínio é o pedido e
+  manda à IA só as ferramentas e os arquivos DAQUELE domínio, mais os da
+  raiz. Na dúvida, manda tudo.
+- A IA sempre recebe o ÍNDICE de todos os assuntos; se precisar de um de
+  outro domínio, lê com a ferramenta `consultar_conhecimento`.
+- `requisicao/tipos_solicitacao.md` também é LIDO PELO CÓDIGO (Requisição
   por tombo): respeite o formato descrito lá.
-- Para ensinar algo novo ao Assistente: edite ou crie um arquivo aqui. A
-  atualização do app leva para todos os técnicos.
+
+Para ensinar algo novo: edite ou crie um arquivo na pasta do domínio certo.
+Domínio NOVO (ex.: documentos): crie a subpasta E avise quem programa — o
+nome precisa existir também no roteador e no `dominio=` das ferramentas.
+A atualização do app leva para todos os técnicos.
 
 Não escreva aqui:
 - Senhas, chaves, matrículas ou dados de usuários.
 - O passo a passo de clique dos fluxos (isso é código, em services/flow_*).
-
-Quando a base crescer muito, o Assistente passa a buscar só os trechos
-relevantes de cada pedido (RAG) em vez de receber tudo — por isso, um
-assunto por arquivo e títulos claros.

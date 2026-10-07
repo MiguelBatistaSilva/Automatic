@@ -65,6 +65,10 @@ class Ferramenta:
     # SLA estourado -> não resolver). Só leitura, e o texto devolvido leva o
     # MÍNIMO (número do chamado, tempo do SLA; nome só de quem o técnico citou).
     investiga: Callable[[dict, "Sessao"], str] | None = None
+    # DOMÍNIO (07/10): só vai para a IA quando o pedido é desse domínio (ver
+    # services/agente/roteador.py). Mesmo nome da subpasta em conhecimento/.
+    # "geral" = vai sempre.
+    dominio: str = "geral"
 
 
 # --------------------------------------------------------------------------- #
@@ -151,6 +155,20 @@ def _ok_falha(ok: bool) -> str:
 # --------------------------------------------------------------------------- #
 # Bases de Conhecimento (local)
 # --------------------------------------------------------------------------- #
+
+def _local_conhecimento(args: dict) -> str:
+    """Um assunto da base de conhecimento — para o que está FORA do domínio
+    do pedido (o do domínio já vem nas instruções)."""
+    from services.agente import conhecimento
+    return conhecimento.ler(args.get("assunto") or "")
+
+
+def _desc_conhecimento() -> str:
+    from services.agente import conhecimento
+    return ("Lê um assunto da base de conhecimento do CATI (regras, nomes, "
+            "como fazer). Use quando o pedido precisar de um assunto que não "
+            "está nas instruções. Assuntos:\n" + conhecimento.indice())
+
 
 def _local_bases(args: dict) -> str:
     nomes = _nomes_bases()
@@ -955,6 +973,15 @@ _FILA = {"type": "string", "description": "Fila do SLA."}
 
 FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
     Ferramenta(
+        "consultar_conhecimento",
+        _desc_conhecimento,  # montada na hora: o índice dos assuntos
+        {"type": "object", "properties": {
+            "assunto": {"type": "string", "description": "Chave do índice (ex.: chamados/sla)."},
+        }, "required": ["assunto"]},
+        preparar=lambda a: "", local=_local_conhecimento,
+        dominio="geral",
+    ),
+    Ferramenta(
         "buscar_chamado_por_usuario",
         "INVESTIGAÇÃO: acha o chamado na fila do técnico pelo nome do usuário afetado.",
         {"type": "object", "properties": {
@@ -962,6 +989,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "setor": {"type": "string"},
         }, "required": ["nome"]},
         preparar=lambda a: "", investiga=_inv_buscar_chamado,
+        dominio="chamados",
     ),
     Ferramenta(
         "resolver_chamado",
@@ -973,6 +1001,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "fila": _FILA,
         }, "required": ["chamados", "procedimentos"]},
         preparar=_prep_resolver, executar=_exec_resolver,
+        dominio="chamados",
     ),
     Ferramenta(
         "verificar_sla",
@@ -982,12 +1011,14 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "fila": _FILA,
         }, "required": ["chamados"]},
         preparar=lambda a: "", investiga=_inv_verificar_sla,
+        dominio="chamados",
     ),
     Ferramenta(
         "listar_bases_conhecimento",
         "Lista as Bases de Conhecimento cadastradas (filtro: palavras do nome).",
         {"type": "object", "properties": {"filtro": {"type": "string"}}},
         preparar=lambda a: "", local=_local_bases,
+        dominio="chamados",
     ),
     Ferramenta(
         "desmembrar",
@@ -1001,6 +1032,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "base": {"type": "string", "description": "Nome ou palavras da base."},
         }, "required": ["chamado_pai", "tombos", "descricao"]},
         preparar=_prep_desmembrar, executar=_exec_desmembrar,
+        dominio="chamados",
     ),
     Ferramenta(
         "aplicar_base",
@@ -1010,6 +1042,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "base": {"type": "string", "description": "Nome ou palavras da base."},
         }, "required": ["chamados", "base"]},
         preparar=_prep_aplicar_base, executar=_exec_aplicar_base,
+        dominio="chamados",
     ),
     Ferramenta(
         "criar_requisicoes",
@@ -1030,6 +1063,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             }, "required": ["usuario_afetado", "item"]}}},
          "required": ["requisicoes"]},
         preparar=_prep_requisicoes, executar=_exec_requisicoes,
+        dominio="requisicao",
     ),
     Ferramenta(
         "criar_requisicoes_por_tombo",
@@ -1049,6 +1083,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
                           "Só se diferente da do tipo. {tombo} onde entra o tombo."},
         }, "required": ["matricula", "edificio", "fila", "tecnico"]},
         preparar=_prep_por_tombo, executar=_exec_requisicoes,
+        dominio="requisicao",
     ),
     Ferramenta(
         "iniciar_atendimento",
@@ -1056,6 +1091,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
         {"type": "object", "properties": {"chamados": _CHAMADOS}, "required": ["chamados"]},
         preparar=_prep_lote("iniciar_atendimento", "Iniciar Atendimento", False),
         executar=_exec_atendimento,
+        dominio="chamados",
     ),
     Ferramenta(
         "programar_atendimento",
@@ -1068,6 +1104,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "motivo": {"type": "string"},
         }, "required": ["chamados", "dia", "hora", "motivo"]},
         preparar=_prep_programar, executar=_exec_programar,
+        dominio="chamados",
     ),
     Ferramenta(
         "adicionar_informacao",
@@ -1076,6 +1113,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
          "required": ["chamados", "texto"]},
         preparar=_prep_lote("adicionar_informacao", "Adicionar Informação", True),
         executar=_exec_informacao,
+        dominio="chamados",
     ),
     Ferramenta(
         "aguardar_fornecedor",
@@ -1084,6 +1122,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
          "required": ["chamados", "texto"]},
         preparar=_prep_lote("aguardar_fornecedor", "Aguardando Info do Fornecedor", True),
         executar=_exec_fornecedor,
+        dominio="chamados",
     ),
     Ferramenta(
         "aguardar_usuario",
@@ -1095,6 +1134,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
          "required": ["chamados", "texto"]},
         preparar=_prep_lote("aguardar_usuario", "Aguardando Info do Usuário", True),
         executar=_exec_usuario,
+        dominio="chamados",
     ),
     Ferramenta(
         "info_recebida_usuario",
@@ -1103,6 +1143,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
          "required": ["chamados"]},
         preparar=_prep_recebida_usuario,
         executar=_exec_recebida_usuario,
+        dominio="chamados",
     ),
     Ferramenta(
         "info_recebida_fornecedor",
@@ -1111,6 +1152,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
          "required": ["chamados", "texto"]},
         preparar=_prep_lote("info_recebida_fornecedor", "Info Recebida do Fornecedor", True),
         executar=_exec_recebida_fornecedor,
+        dominio="chamados",
     ),
     Ferramenta(
         "configurar_filas",
@@ -1121,12 +1163,14 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
                       "description": "Nomes exatos das filas."},
         }, "required": ["filas"]},
         preparar=_prep_config_filas, executar=_exec_config_filas,
+        dominio="filas",
     ),
     Ferramenta(
         "consultar_minha_fila",
         "Lista os chamados da fila do técnico (só leitura).",
         {"type": "object", "properties": {}},
         preparar=_prep_fila, executar=_exec_fila,
+        dominio="chamados",
     ),
     Ferramenta(
         "analisar_sla",
@@ -1136,6 +1180,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "fila": _FILA,
         }, "required": ["chamados"]},
         preparar=_prep_sla, executar=_exec_sla,
+        dominio="chamados",
     ),
 ]}
 
@@ -1174,13 +1219,16 @@ def _com_ultima_acao(f: Ferramenta, parametros: dict) -> dict:
             "required": list(parametros.get("required", [])) + ["ultima_acao"]}
 
 
-def esquemas() -> list[dict]:
+def esquemas(dominios: "set[str] | None" = None) -> list[dict]:
+    """As ferramentas para a IA: as dos `dominios` + as "geral".
+    None = todas (o roteador não reconheceu o pedido)."""
     return [
         {"type": "function", "function": {
             "name": f.nome,
             "description": f.descricao() if callable(f.descricao) else f.descricao,
             "parameters": _aceita_null(_com_ultima_acao(f, f.parametros))}}
         for f in FERRAMENTAS.values()
+        if dominios is None or f.dominio == "geral" or f.dominio in dominios
     ]
 
 

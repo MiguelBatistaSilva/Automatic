@@ -98,18 +98,28 @@ Depois de investigar, conte em UMA linha o que encontrou antes de dizer o \
 que vai fazer (ex.: "O chamado está no prazo (restam 2h10). Vou aplicar a \
 base e resolver.").
 - As regras do CATI/Assyst (quando investigar, SLA, formatos) estão na BASE \
-DE CONHECIMENTO abaixo: siga-as.
+DE CONHECIMENTO abaixo: siga-as. Ela traz o assunto do pedido; se precisar \
+de outro assunto do índice, use consultar_conhecimento.
 
 """
 
 
-def _instrucoes() -> str:
-    """Comportamento (SISTEMA) + o que ele SABE do CATI/Assyst (a base de
-    conhecimento em services/agente/conhecimento/, lida a cada pedido) + a
-    data de hoje."""
+def _instrucoes(dominios: "set[str] | None" = None) -> str:
+    """Comportamento (SISTEMA) + o que ele SABE do CATI/Assyst — só a parte
+    da base dos `dominios` do pedido (None = inteira) e o ÍNDICE de todos os
+    assuntos (o resto ele busca com consultar_conhecimento) + a data."""
     from services.agente import conhecimento
     return (SISTEMA + "\n\n=== BASE DE CONHECIMENTO DO CATI ===\n\n"
-            + conhecimento.texto() + "\n" + _hoje())
+            + conhecimento.texto(dominios)
+            + "\n\n=== ÍNDICE DE TODOS OS ASSUNTOS ===\n" + conhecimento.indice()
+            + "\n" + _hoje())
+
+
+# Resposta de quem não achou ferramenta para o pedido. Com o roteador ligado
+# isso pode ser falta de ferramenta NO RECORTE (pedido mal classificado):
+# aí refaz uma vez com tudo — ver `responder`.
+_NAO_SABE = re.compile(r"n[ãa]o sei fazer|n[ãa]o (tenho|h[áa]) (uma |nenhuma )?ferramenta"
+                       r"|n[ãa]o consigo fazer|ainda n[ãa]o (sei|consigo)", re.I)
 
 
 _DIAS = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
@@ -156,6 +166,10 @@ def _status(nome: str, args: dict) -> tuple[str, str]:
     if nome == "listar_bases_conhecimento":
         filtro = f" ('{args['filtro']}')" if args.get("filtro") else ""
         return "Consultando as bases de conhecimento...", f"Consultou as bases de conhecimento{filtro}"
+    if nome == "consultar_conhecimento":
+        assunto = args.get("assunto") or ""
+        return (f"Lendo o que sei sobre {assunto}...",
+                f"Leu a base do Assistente ('{assunto}')")
     return "Consultando o Assyst...", f"Consultou o Assyst ({nome})"
 
 
@@ -188,12 +202,15 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
     `responder` precisa rodar inteiro na MESMA thread — Playwright sync).
     `avisar(texto)` mostra na tela o que está sendo investigado.
     """
+    from services.agente.roteador import dominios as rotear
     from services.agente.sessao import ErroSessao, Sessao
 
     avisar = avisar or (lambda t: None)
     sessao = None
-    msgs = [{"role": "system", "content": _instrucoes()}] + historico
-    ferramentas = esquemas()
+    # Só as ferramentas e a base do domínio do pedido (roteador, 07/10).
+    doms = rotear(historico)
+    msgs = [{"role": "system", "content": _instrucoes(doms)}] + historico
+    ferramentas = esquemas(doms)
     pedido = next((h["content"] for h in reversed(historico)
                    if h["role"] == "user"), "")
     # Lista de requisições colada (botão "Copiar lista" do cartão): vira o
@@ -221,6 +238,15 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
             m = llm.conversar(msgs, ferramentas, modelo_id or llm.PADRAO)
             chamadas = m.get("tool_calls") or []
             texto = (m.get("content") or "").strip()
+            if not chamadas and doms is not None and not acoes and _NAO_SABE.search(texto):
+                # Rede de segurança do roteador: "não sei fazer" com as
+                # ferramentas RECORTADAS pode ser só classificação errada.
+                # Refaz UMA vez com todas — o roteador nunca pode bloquear.
+                doms = None
+                msgs[0] = {"role": "system", "content": _instrucoes()}
+                ferramentas = esquemas()
+                atividade.append("Não achou no assunto do pedido — procurou em todas as ferramentas")
+                continue
             if not chamadas:
                 # Terminou PERGUNTANDO: o pedido está incompleto. Descarta o
                 # que já foi preparado — cartão pela metade (ex.: só a base,
