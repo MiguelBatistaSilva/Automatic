@@ -210,6 +210,33 @@ _ESQUEMA: list[str] = [
     """
     DROP TABLE IF EXISTS requisicao_tipos
     """,
+    # v8 — 2026-10-08: registro dos pedidos ao Assistente (services/agente/
+    # registro.py) — diagnóstico, estudo dos pedidos reais (viram casos do
+    # eval) e medição. Só nesta máquina; apagado sozinho depois de 30 dias.
+    # `chamadas` e `resultado` são JSON. `desfecho`: resposta | pendente |
+    # executou | confirmou | simulou | retomou | refez | cancelou | erro.
+    """
+    CREATE TABLE agente_pedidos (
+        id             INTEGER PRIMARY KEY,
+        quando         TEXT NOT NULL,
+        matricula      TEXT NOT NULL DEFAULT '',
+        modelo         TEXT NOT NULL DEFAULT '',
+        pedido         TEXT NOT NULL DEFAULT '',
+        dominios       TEXT NOT NULL DEFAULT '',
+        rede           INTEGER NOT NULL DEFAULT 0,
+        idas           INTEGER NOT NULL DEFAULT 0,
+        tokens_entrada INTEGER NOT NULL DEFAULT 0,
+        tokens_saida   INTEGER NOT NULL DEFAULT 0,
+        ms             INTEGER NOT NULL DEFAULT 0,
+        chamadas       TEXT NOT NULL DEFAULT '[]',
+        resposta       TEXT NOT NULL DEFAULT '',
+        plano          TEXT NOT NULL DEFAULT '',
+        desfecho       TEXT NOT NULL DEFAULT '',
+        resultado      TEXT NOT NULL DEFAULT '[]',
+        erro           TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX agente_pedidos_quando ON agente_pedidos (quando)
+    """,
 ]
 
 _init_lock = threading.Lock()

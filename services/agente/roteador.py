@@ -30,9 +30,13 @@ DOMINIOS: dict[str, re.Pattern] = {
         r"|fornecedor|aguard|retom|pausa|informac|program|procediment"
         r"|minha fila|\bfila do\b|estourad|prazo"),
     "requisicao": re.compile(r"requisic|tombo|patrimon|matricula"),
+    # Verbo antes OU depois de "fila" ("configura a fila X" / "a fila X
+    # configurada"), ou a fila indo para o Assyst/menu. Frases achadas pelo
+    # eval_roteador.py em 08/10.
     "filas": re.compile(
-        r"(configur|cri[ae]|adicion|mont|cadastr)\w*\b.{0,40}\bfilas?\b"
-        r"|\bfilas?\b.{0,40}\bno assyst\b|perfil de coluna"),
+        r"(configur|cri[ae]|adicion|mont|cadastr|coloc)\w*\b.{0,40}\bfilas?\b"
+        r"|\bfilas?\b.{0,60}\b(configurad|criad|adicionad|cadastrad)"
+        r"|\bfilas?\b.{0,40}\bno (meu )?(assyst|menu)\b|perfil de coluna"),
 }
 
 

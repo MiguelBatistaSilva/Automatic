@@ -124,6 +124,11 @@ def _botoes(acoes) -> tuple[list[Botao], str]:
     return [Botao(c, *BOTOES[c]) for c in cods], " ".join(avisos)
 
 
+# Botão do cartão -> desfecho no registro dos pedidos.
+_DESFECHO = {"confirmar": "confirmou", "simular": "simulou",
+             "retomar": "retomou", "do_zero": "refez"}
+
+
 class AssistenteState(rx.State):
     mensagens: list[Mensagem] = []
     entrada: str = ""
@@ -146,6 +151,8 @@ class AssistenteState(rx.State):
     # esperando clique, por índice da mensagem-cartão.
     _historico: list[dict] = []
     _planos: dict[int, list] = {}
+    # Índice da mensagem-cartão -> id da linha em agente_pedidos (registro).
+    _registros: dict[int, int] = {}
 
     @rx.event
     def on_load(self):
@@ -184,6 +191,7 @@ class AssistenteState(rx.State):
         self.mensagens = []
         self._historico = []
         self._planos = {}
+        self._registros = {}
 
     # ------------------------------------------------------------------ chat
     @rx.event(background=True)
@@ -231,23 +239,31 @@ class AssistenteState(rx.State):
                 yield
                 continue
             break
+        from services.agente import registro
         try:
             if tipo == "erro":
                 raise dado
             r = dado
         except ErroLLM as e:
+            registro.gravar_pedido(matricula, modelo_id, texto, desfecho="erro", erro=str(e))
             async with self:
                 self.mensagens = self.mensagens + [
                     Mensagem(papel="assistant", texto=str(e), erro=True)]
                 self.pensando = False
             return
         except Exception as e:  # nunca deixar o chat travado em "pensando"
+            registro.gravar_pedido(matricula, modelo_id, texto, desfecho="erro",
+                                   erro=f"inesperado: {e}")
             async with self:
                 self.mensagens = self.mensagens + [
                     Mensagem(papel="assistant", texto=f"Erro inesperado: {e}", erro=True)]
                 self.pensando = False
             return
 
+        escreve = any(a.escreve for a in r.acoes)
+        id_reg = registro.gravar_pedido(
+            matricula, modelo_id, texto, r,
+            desfecho="resposta" if not r.acoes else ("pendente" if escreve else "executou"))
         rodar_ja = None
         async with self:
             self.pensando = False
@@ -257,7 +273,6 @@ class AssistenteState(rx.State):
                     atividade=r.atividade, resumo=r.resumo)]
                 self._historico = self._historico + [{"role": "assistant", "content": r.texto}]
                 return
-            escreve = any(a.escreve for a in r.acoes)
             botoes, aviso = _botoes(r.acoes)
             multi = len(r.acoes) > 1
             cartao = Mensagem(
@@ -273,6 +288,8 @@ class AssistenteState(rx.State):
             indice = len(self.mensagens)
             self.mensagens = self.mensagens + [cartao]
             self._planos = {**self._planos, indice: list(r.acoes)}
+            if id_reg:
+                self._registros = {**self._registros, indice: id_reg}
             nomes = ", ".join(a.titulo for a in r.acoes)
             nota = (f"[Mostrei o plano ({nomes}) para o técnico confirmar.]"
                     if escreve else f"[Executando: {nomes}.]")
@@ -281,7 +298,9 @@ class AssistenteState(rx.State):
                 rodar_ja = indice
         yield
         if rodar_ja is not None:
-            async for _ in self._executar(rodar_ja, "confirmar"):
+            # "auto": roda como Confirmar, mas o registro mantém "executou"
+            # (ninguém clicou — plano só de leitura).
+            async for _ in self._executar(rodar_ja, "auto"):
                 yield
 
     @rx.event(background=True)
@@ -290,18 +309,23 @@ class AssistenteState(rx.State):
             yield
 
     async def _executar(self, indice: int, botao: str):
+        from services.agente import registro
         ocupado = False
         async with self:
             acoes = self._planos.get(indice)
             if acoes is None or indice >= len(self.mensagens):
                 return
+            id_reg = self._registros.get(indice)
             if botao == "cancelar":
+                registro.marcar_desfecho(id_reg, "cancelou")
                 self._marcar(indice, estado="cancelado")
                 self._historico = self._historico + [
                     {"role": "assistant", "content": "[O técnico cancelou o plano.]"}]
                 self._planos = {k: v for k, v in self._planos.items() if k != indice}
                 return
             ocupado = self.rodando
+        if not ocupado and botao in _DESFECHO:
+            registro.marcar_desfecho(id_reg, _DESFECHO[botao])
         if ocupado:
             # yield FORA do `async with self` (dentro dele o Reflex segura a
             # trava do state enquanto o evento estiver parado no yield).
@@ -355,7 +379,7 @@ class AssistenteState(rx.State):
                         self.logs_vivos = []
                 elif tipo == "resultado":
                     i, r = dado
-                    resultados.append((acoes[i].titulo, r.ok))
+                    resultados.append((acoes[i].titulo, r.ok, r.texto))
                     self._marcar_passo(indice, i, "ok" if r.ok else "erro")
                     texto = r.texto
                     if not r.ok and self.logs_vivos:
@@ -382,6 +406,10 @@ class AssistenteState(rx.State):
         self._marcar(indice, passos=passos)
 
     def _encerrar(self, indice: int, acoes, resultados, erro_geral: str = ""):
+        from services.agente import registro
+        registro.gravar_resultado(
+            self._registros.get(indice),
+            [{"passo": t, "ok": ok, "texto": txt} for t, ok, txt in resultados], erro_geral)
         self._marcar(indice, estado="feito")
         if erro_geral:
             self.mensagens = self.mensagens + [
@@ -390,7 +418,7 @@ class AssistenteState(rx.State):
         if erro_geral:
             nota = f"[O plano não rodou: {erro_geral}]"
         else:
-            feitos = ", ".join(f"{t} ({'ok' if ok else 'falhou'})" for t, ok in resultados)
+            feitos = ", ".join(f"{t} ({'ok' if ok else 'falhou'})" for t, ok, _ in resultados)
             pulados = len(acoes) - len(resultados)
             nota = (f"[Plano executado: {feitos}"
                     + (f"; {pulados} passo(s) não rodaram por causa da falha" if pulados else "")

@@ -20,6 +20,7 @@ import dataclasses
 import datetime
 import json
 import re
+import time
 
 from services.agente import llm
 from services.agente.ferramentas import (
@@ -142,6 +143,9 @@ class Resposta:
     atividade: list[str] = dataclasses.field(default_factory=list)
     # Uma linha resumindo a atividade (o rótulo do expansor).
     resumo: str = ""
+    # Para o registro dos pedidos (services/agente/registro.py): domínios,
+    # rede de segurança, idas/tokens/tempo e cada ferramenta chamada.
+    metricas: dict = dataclasses.field(default_factory=dict)
 
 
 def _alvo(args: dict) -> str:
@@ -211,6 +215,9 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
     doms = rotear(historico)
     msgs = [{"role": "system", "content": _instrucoes(doms)}] + historico
     ferramentas = esquemas(doms)
+    met = {"dominios": ",".join(sorted(doms)) if doms else "*", "rede": False,
+           "idas": 0, "tokens_entrada": 0, "tokens_saida": 0, "chamadas": []}
+    inicio = time.monotonic()
     pedido = next((h["content"] for h in reversed(historico)
                    if h["role"] == "user"), "")
     # Lista de requisições colada (botão "Copiar lista" do cartão): vira o
@@ -219,7 +226,8 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
     if colada is not None:
         return Resposta(texto="Montei o cartão com a lista exatamente como você colou.",
                         acoes=[colada],
-                        atividade=["Reconheceu a lista colada — o cartão saiu dela, sem a IA"])
+                        atividade=["Reconheceu a lista colada — o cartão saiu dela, sem a IA"],
+                        metricas={**met, "dominios": "colada"})
     acoes: list[Acao] = []
     achados: list[str] = []   # resultados do verificar_sla (vão na frase final)
     atividade: list[str] = []
@@ -230,12 +238,17 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
     def resposta(texto: str, com_acoes: bool = True) -> Resposta:
         a = acoes if com_acoes else []
         return Resposta(texto=texto, acoes=a, atividade=atividade,
-                        resumo=_resumo(consultas, a))
+                        resumo=_resumo(consultas, a),
+                        metricas={**met, "ms": int((time.monotonic() - inicio) * 1000)})
 
     try:
         for volta in range(_MAX_VOLTAS):
             avisar("Pensando..." if volta == 0 else "Decidindo o próximo passo...")
             m = llm.conversar(msgs, ferramentas, modelo_id or llm.PADRAO)
+            uso = m.get("_uso") or {}
+            met["idas"] += 1
+            met["tokens_entrada"] += uso.get("prompt_tokens") or 0
+            met["tokens_saida"] += uso.get("completion_tokens") or 0
             chamadas = m.get("tool_calls") or []
             texto = (m.get("content") or "").strip()
             if not chamadas and doms is not None and not acoes and _NAO_SABE.search(texto):
@@ -243,6 +256,7 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
                 # ferramentas RECORTADAS pode ser só classificação errada.
                 # Refaz UMA vez com todas — o roteador nunca pode bloquear.
                 doms = None
+                met["rede"] = True
                 msgs[0] = {"role": "system", "content": _instrucoes()}
                 ferramentas = esquemas()
                 atividade.append("Não achou no assunto do pedido — procurou em todas as ferramentas")
@@ -310,6 +324,8 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
                         saida = _preparada(pedido, acoes)
                         if args.get("ultima_acao") is True:
                             terminou = True
+                met["chamadas"].append({"ferramenta": nome, "args": args,
+                                        "saida": _curto(saida, 200)})
                 if nome == "verificar_sla":
                     achados.append(saida)
                 msgs.append({"role": "tool", "tool_call_id": c["id"], "content": saida})

@@ -37,13 +37,39 @@ _SERVICO = "Automatic-IA"
 
 
 @dataclasses.dataclass(frozen=True)
+class Plataforma:
+    """Quem fornece a chave. A página API Keys desenha um cartão por
+    plataforma a partir daqui (08/10): plataforma nova = uma entrada aqui +
+    o(s) modelo(s) dela em MODELOS — sem mexer na página nem no state."""
+    id: str            # o "usuário" da chave no Cofre do Windows
+    nome: str
+    link: str          # onde o técnico cria a chave
+    ajuda: str
+    placeholder: str
+    prefixo: str = ""  # conferido ao salvar ("" = sem conferência)
+    aviso: str = ""    # ex.: uso dos dados no plano grátis (LGPD)
+
+
+PLATAFORMAS: dict[str, Plataforma] = {p.id: p for p in [
+    Plataforma("groq", "Groq", "https://console.groq.com/keys",
+               "Cada técnico usa a sua. Crie em console.groq.com → API Keys.",
+               "gsk_...", prefixo="gsk_"),
+    # Sem prefixo: o Google tem mais de um formato de chave (a do usuário
+    # começa com "AQ.", não "AIza" — 02/10). Quem confere de verdade é a
+    # primeira chamada ao modelo.
+    Plataforma("gemini", "Gemini (Google)", "https://aistudio.google.com/apikey",
+               "Opcional. Crie em aistudio.google.com → Get API key.",
+               "chave do Google AI Studio"),
+]}
+
+
+@dataclasses.dataclass(frozen=True)
 class Modelo:
     id: str            # o que fica gravado como escolha
     rotulo: str        # o que aparece no seletor
-    plataforma: str    # nome amigável, e também o "usuário" da chave no Cofre
+    plataforma: str    # id em PLATAFORMAS (e o "usuário" da chave no Cofre)
     url: str
     modelo: str        # nome do modelo na API da plataforma
-    prefixo_chave: str
 
 
 MODELOS: dict[str, Modelo] = {m.id: m for m in [
@@ -51,7 +77,7 @@ MODELOS: dict[str, Modelo] = {m.id: m for m in [
            "https://api.groq.com/openai/v1/chat/completions",
            # gpt-oss-120b: suporta ferramentas e extraiu certo os pedidos em
            # português nos testes (~1 s por resposta).
-           "openai/gpt-oss-120b", "gsk_"),
+           "openai/gpt-oss-120b"),
     Modelo("gemini", "Gemini · Flash Lite", "gemini",
            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
            # Apelido "lite-latest" (sempre o Flash Lite mais novo): o Google
@@ -59,7 +85,7 @@ MODELOS: dict[str, Modelo] = {m.id: m for m in [
            # 02/10) e o Flash cheio estava sobrecarregado (503). Testado em
            # 02/10: ~1,6 s, chamou DUAS ferramentas numa resposta só e acertou
            # os pedidos de plano, Requisição e Resolver (com SLA antes).
-           "gemini-flash-lite-latest", ""),
+           "gemini-flash-lite-latest"),
 ]}
 PADRAO = "groq"
 
@@ -157,7 +183,12 @@ def conversar(mensagens: list[dict], ferramentas: list[dict],
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 dados = json.load(resp)
-            return dados["choices"][0]["message"]
+            msg = dados["choices"][0]["message"]
+            # Tokens gastos nesta ida (formato OpenAI: prompt_tokens /
+            # completion_tokens) — para o registro dos pedidos. Chave com "_":
+            # o assistente.py monta a mensagem que volta à IA sem ela.
+            msg["_uso"] = dados.get("usage") or {}
+            return msg
         except urllib.error.HTTPError as e:
             detalhe = e.read()[:400].decode("utf-8", "replace")
             if e.code in (401, 403):
