@@ -264,6 +264,9 @@ class AssistenteState(rx.State):
         id_reg = registro.gravar_pedido(
             matricula, modelo_id, texto, r,
             desfecho="resposta" if not r.acoes else ("pendente" if escreve else "executou"))
+        # O que foi consultado no Assyst e vale para o resto da conversa (de
+        # quem é o chamado): vai no histórico, para a IA não buscar de novo.
+        ja = "".join(f"\n[Já consultado: {l}]" for l in r.lembrar)
         rodar_ja = None
         async with self:
             self.pensando = False
@@ -271,7 +274,8 @@ class AssistenteState(rx.State):
                 self.mensagens = self.mensagens + [Mensagem(
                     papel="assistant", texto=r.texto,
                     atividade=r.atividade, resumo=r.resumo)]
-                self._historico = self._historico + [{"role": "assistant", "content": r.texto}]
+                self._historico = self._historico + [
+                    {"role": "assistant", "content": r.texto + ja}]
                 return
             botoes, aviso = _botoes(r.acoes)
             multi = len(r.acoes) > 1
@@ -293,7 +297,7 @@ class AssistenteState(rx.State):
             nomes = ", ".join(a.titulo for a in r.acoes)
             nota = (f"[Mostrei o plano ({nomes}) para o técnico confirmar.]"
                     if escreve else f"[Executando: {nomes}.]")
-            self._historico = self._historico + [{"role": "assistant", "content": nota}]
+            self._historico = self._historico + [{"role": "assistant", "content": nota + ja}]
             if not escreve:
                 rodar_ja = indice
         yield

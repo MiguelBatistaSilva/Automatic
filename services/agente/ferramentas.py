@@ -116,6 +116,15 @@ def _bases_por_palavras(trecho: str) -> list[str]:
             if all(any(w.startswith(p) for w in _palavras(n)) for p in alvo)]
 
 
+# Vai junto de toda dúvida sobre base (08/10): num pedido com DUAS bases
+# ("a do Itom e a da Nomenclatura") a IA consultou só a primeira e INVENTOU
+# nomes para a segunda ("BC - Nomenclatura de Equipamentos", que não existe).
+_SO_NOMES_REAIS = (" ANTES de perguntar: se o pedido cita OUTRAS bases, chame "
+                   "aplicar_base para cada uma também, e pergunte tudo de uma vez. "
+                   "Cite SÓ nomes de base que vieram das ferramentas — nunca invente "
+                   "exemplos.")
+
+
 def _resolver_base(nome: str) -> tuple[str, str]:
     """(nome_exato, erro). Aceita o nome exato (sem diferença de maiúsculas)
     ou, desde 06/10, a ÚNICA base que tem todas as palavras citadas — o nome
@@ -131,15 +140,15 @@ def _resolver_base(nome: str) -> tuple[str, str]:
         return por_palavras[0], ""
     if len(por_palavras) > 1:
         return "", (f"Mais de uma base tem '{nome}': {', '.join(por_palavras[:10])}. "
-                    "Pergunte ao técnico qual delas.")
+                    "Pergunte ao técnico qual delas." + _SO_NOMES_REAIS)
     parecidas = difflib.get_close_matches(nome or "", nomes, n=8, cutoff=0.3)
     parecidas += [n for n in nomes if alvo and alvo in n.lower() and n not in parecidas]
     if parecidas:
         return "", ("Base de Conhecimento não encontrada: "
                     f"'{nome}'. Parecidas: {', '.join(parecidas[:10])}. "
-                    "Pergunte ao técnico qual delas.")
+                    "Pergunte ao técnico qual delas." + _SO_NOMES_REAIS)
     return "", (f"Base de Conhecimento não encontrada: '{nome}'. Use "
-                "listar_bases_conhecimento para ver as cadastradas.")
+                "listar_bases_conhecimento para ver as cadastradas." + _SO_NOMES_REAIS)
 
 
 def _lista_curta(itens: list[str], limite: int = 12) -> str:
@@ -678,14 +687,19 @@ def _exec_usuario(a, s):
 def _prep_recebida_usuario(args: dict) -> "Acao | str":
     r = _prep_lote("info_recebida_usuario", "Info Recebidas do Usuário", False)(args)
     if isinstance(r, Acao):
+        nome = (args.get("nome") or "").strip()
+        r.args["nome"] = nome
+        quem = f"**{nome}**" if nome else "**NOME** (lido de cada chamado)"
         r.linhas.append("**Texto:** Pendência sanada após informações recebida do(a) "
-                        "senhor(a) **NOME** (lido de cada chamado), atendimento retomado.")
+                        f"senhor(a) {quem}, atendimento retomado.")
     return r
 
 
 def _exec_recebida_usuario(a, s):
+    import functools
     from services.flow_info_recebida_pw import info_recebida_usuario
-    return _exec_lote(info_recebida_usuario, "Info Recebidas do Usuário", False, True)(a, s)
+    funcao = functools.partial(info_recebida_usuario, nome=a.get("nome", ""))
+    return _exec_lote(funcao, "Info Recebidas do Usuário", False, True)(a, s)
 
 
 def _exec_recebida_fornecedor(a, s):
@@ -1036,10 +1050,13 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
     ),
     Ferramenta(
         "aplicar_base",
-        "Aplica uma Base de Conhecimento em chamados que já existem.",
+        "Aplica uma Base de Conhecimento em chamados que já existem. Uma chamada "
+        "por base.",
         {"type": "object", "properties": {
             "chamados": _CHAMADOS,
-            "base": {"type": "string", "description": "Nome ou palavras da base."},
+            "base": {"type": "string", "description":
+                     "As palavras que o técnico disse (ex.: 'memória'); o sistema acha "
+                     "a base ou devolve as opções. Não peça o nome completo antes."},
         }, "required": ["chamados", "base"]},
         preparar=_prep_aplicar_base, executar=_exec_aplicar_base,
         dominio="chamados",
@@ -1139,8 +1156,12 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
     Ferramenta(
         "info_recebida_usuario",
         "RETOMADA: 'Info Recebidas do Usuário *' (texto fixo, montado pelo sistema).",
-        {"type": "object", "properties": {"chamados": _CHAMADOS},
-         "required": ["chamados"]},
+        {"type": "object", "properties": {
+            "chamados": _CHAMADOS,
+            "nome": {"type": "string", "description":
+                     "Só se o técnico disser OUTRO nome para o texto (quem passou a "
+                     "informação). Sem isso, vai o usuário do chamado."},
+        }, "required": ["chamados"]},
         preparar=_prep_recebida_usuario,
         executar=_exec_recebida_usuario,
         dominio="chamados",

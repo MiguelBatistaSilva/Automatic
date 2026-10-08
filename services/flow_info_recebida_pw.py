@@ -147,15 +147,20 @@ def _executar_acao(page, log, numero_chamado: str, rotulo: str, montar_html,
 
 
 def info_recebida_usuario(page, log, numero_chamado: str,
-                          modo_teste: bool = False) -> tuple[bool, dict]:
+                          modo_teste: bool = False, nome: str = "") -> tuple[bool, dict]:
     """Retoma o chamado pausado com 'Aguardando Info do Usuário *'. Sem texto
-    do técnico: o script é fixo, só entra o nome lido do chamado."""
+    do técnico: o script é fixo, só entra um nome.
+
+    `nome`: quem passou a informação, quando NÃO é o usuário afetado (~5% dos
+    casos, usuário em 08/10 — ex.: "colocando o nome de Clara Navarro").
+    Vazio = o usuário afetado lido do chamado, como sempre foi."""
     def montar(info):
-        if not info["usuario"]:
+        quem = (nome or "").strip() or info["usuario"]
+        if not quem:
             log("Nao consegui ler o Usuario afetado do chamado — o script "
                 "precisa do nome. Nada foi gravado.", "error")
             return None
-        return montar_texto_usuario(info["usuario"])
+        return montar_texto_usuario(quem)
     return _executar_acao(page, log, numero_chamado, ROTULO_USUARIO, montar, modo_teste)
 
 

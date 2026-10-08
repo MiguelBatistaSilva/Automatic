@@ -74,8 +74,14 @@ Brasil, curto e direto.
 Regras:
 - Para fazer qualquer coisa no Assyst, use uma ferramenta. Nunca diga que fez \
 algo sem ter chamado a ferramenta.
-- Não invente dados (números de chamado, tombos, textos, nomes de base). Se \
-faltar algo obrigatório, pergunte ao técnico.
+- Não invente dados (números de chamado, tombos, textos, nomes de base) — \
+nem como EXEMPLO numa pergunta: cite só o que o técnico disse ou o que veio \
+das ferramentas. Se faltar algo obrigatório, pergunte ao técnico.
+- Se uma parte do pedido NÃO puder ser atendida (a ferramenta não aceita \
+aquele dado), diga qual parte, claramente. Nunca monte o plano como se \
+tivesse atendido tudo.
+- Notas "[Já consultado: ...]" na conversa são resultados de consultas \
+anteriores (ex.: qual é o chamado de alguém): use-os, não consulte de novo.
 - TEXTO QUE VAI PARA O CHAMADO (procedimentos do Resolver e do Aguardando \
 Usuário, texto de Informação/Fornecedor, descrição do Desmembramento, motivo \
 do Programar): use SÓ o que o técnico disse, apenas no formato pedido. Se ele \
@@ -146,6 +152,10 @@ class Resposta:
     # Para o registro dos pedidos (services/agente/registro.py): domínios,
     # rede de segurança, idas/tokens/tempo e cada ferramenta chamada.
     metricas: dict = dataclasses.field(default_factory=dict)
+    # Resultados de consultas que valem para o RESTO da conversa (08/10): o
+    # state os põe no histórico. Sem isso a IA buscava o mesmo chamado no
+    # Assyst a cada mensagem (6 vezes numa conversa; ~8 s e um login cada).
+    lembrar: list[str] = dataclasses.field(default_factory=list)
 
 
 def _alvo(args: dict) -> str:
@@ -231,6 +241,7 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
     acoes: list[Acao] = []
     achados: list[str] = []   # resultados do verificar_sla (vão na frase final)
     atividade: list[str] = []
+    lembrar: list[str] = []
     consultas = 0
     faltou = False
     terminou = False          # o modelo marcou ultima_acao=true
@@ -238,7 +249,7 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
     def resposta(texto: str, com_acoes: bool = True) -> Resposta:
         a = acoes if com_acoes else []
         return Resposta(texto=texto, acoes=a, atividade=atividade,
-                        resumo=_resumo(consultas, a),
+                        resumo=_resumo(consultas, a), lembrar=lembrar,
                         metricas={**met, "ms": int((time.monotonic() - inicio) * 1000)})
 
     try:
@@ -306,6 +317,11 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
                             saida = f"Erro ao consultar o Assyst: {e}"
                         consultas += 1
                         atividade.append(f"{feito} — {_curto(saida)}")
+                        # De quem é o chamado não muda na conversa; o SLA
+                        # muda — esse continua sendo consultado na hora.
+                        if nome == "buscar_chamado_por_usuario":
+                            lembrar.append(f"chamado de '{args.get('nome', '')}': "
+                                           f"{_curto(saida, 300)}")
                 else:
                     r = f.preparar(args)
                     if isinstance(r, str):
