@@ -256,6 +256,26 @@ def _cartao(m, indice) -> rx.Component:
 _LARGURA = "860px"  # era 760px; caixa "um pouco mais comprida" (02/10)
 
 
+def _arquivos(m) -> rx.Component:
+    """Botões dos arquivos gerados no passo (ex.: o termo em PDF/ODT, 10/10)."""
+    return rx.hstack(
+        rx.foreach(
+            m.arquivos,
+            lambda a: rx.button(
+                rx.cond(a.pasta, rx.icon("folder-open", size=14),
+                        rx.cond(a.icone == "file-text", rx.icon("file-text", size=14),
+                                rx.icon("file-pen-line", size=14))),
+                a.rotulo,
+                variant=rx.cond(a.pasta, "ghost", "soft"),
+                color_scheme="gray", size="2", radius="full", cursor="pointer",
+                on_click=AssistenteState.abrir_arquivo(a.caminho, a.pasta),
+            ),
+        ),
+        spacing="2",
+        wrap="wrap",
+    )
+
+
 def _mensagem(m, indice) -> rx.Component:
     return rx.cond(
         m.papel == "user",
@@ -285,6 +305,7 @@ def _mensagem(m, indice) -> rx.Component:
                     width="100%",
                 ),
             ),
+            rx.cond(m.arquivos.length() > 0, _arquivos(m)),
             rx.cond(m.titulo != "", _cartao(m, indice)),
             spacing="2",
             align_items="stretch",

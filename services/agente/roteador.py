@@ -37,6 +37,10 @@ DOMINIOS: dict[str, re.Pattern] = {
         r"(configur|cri[ae]|adicion|mont|cadastr|coloc)\w*\b.{0,40}\bfilas?\b"
         r"|\bfilas?\b.{0,60}\b(configurad|criad|adicionad|cadastrad)"
         r"|\bfilas?\b.{0,40}\bno (meu )?(assyst|menu)\b|perfil de coluna"),
+    # Termo de Responsabilidade de Instalação e Termo de Tarefa de Demanda (10/10).
+    "termos": re.compile(
+        r"\btermos?\b|\bbackup\b|troca de (maquina|micro|computador|equipamento|pc)"
+        r"|\bdemanda\b|\bevento\b|validador|comprovacao de prestacao"),
 }
 
 
@@ -51,4 +55,8 @@ def dominios(historico: list[dict]) -> "set[str] | None":
     texto = _normalizar(" ".join(h.get("content") or "" for h in historico
                                  if h.get("role") == "user"))
     achados = {nome for nome, padrao in DOMINIOS.items() if padrao.search(texto)}
+    # No termo, tombo/matrícula são dados da máquina e do usuário, não um
+    # pedido de requisição: só puxa requisição se a palavra aparecer (10/10).
+    if "termos" in achados and not re.search(r"requisic", texto):
+        achados.discard("requisicao")
     return achados or None

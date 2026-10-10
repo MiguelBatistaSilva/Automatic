@@ -54,6 +54,28 @@ class OpcaoModelo:
 
 
 @dataclasses.dataclass
+class Arquivo:
+    """Botão de um arquivo gerado no computador do técnico (ex.: o termo)."""
+    rotulo: str
+    caminho: str
+    icone: str = "file-text"
+    pasta: bool = False        # True = abre o Explorer com o arquivo marcado
+
+
+def _botoes_arquivos(caminhos: list[str]) -> list[Arquivo]:
+    import os
+    saida = []
+    for c in caminhos:
+        ext = os.path.splitext(c)[1].lower()
+        saida.append(Arquivo("Abrir PDF" if ext == ".pdf" else
+                             "Abrir no Writer" if ext == ".odt" else "Abrir arquivo",
+                             c, "file-text" if ext == ".pdf" else "file-pen-line"))
+    if caminhos:
+        saida.append(Arquivo("Mostrar na pasta", caminhos[0], "folder-open", pasta=True))
+    return saida
+
+
+@dataclasses.dataclass
 class Passo:
     titulo: str
     corpo: str = ""            # as linhas do passo num markdown só
@@ -68,6 +90,8 @@ class Mensagem:
     # Cartão do plano (vazio = mensagem comum)
     titulo: str = ""
     passos: list[Passo] = dataclasses.field(default_factory=list)
+    # Arquivos gerados pelo passo (botões abaixo do texto do resultado).
+    arquivos: list[Arquivo] = dataclasses.field(default_factory=list)
     multi: bool = False        # plano com mais de um passo (mostra cada título)
     aviso: str = ""
     botoes: list[Botao] = dataclasses.field(default_factory=list)
@@ -192,6 +216,26 @@ class AssistenteState(rx.State):
         self._historico = []
         self._planos = {}
         self._registros = {}
+
+    @rx.event
+    def abrir_arquivo(self, caminho: str, pasta: bool):
+        """Abre um arquivo gerado (o app roda no computador do técnico). Só
+        dentro da pasta dos termos: o caminho vem do navegador."""
+        import os
+        import subprocess
+        from pathlib import Path
+        from services.termos import PASTA
+        try:
+            alvo = Path(caminho).resolve()
+            alvo.relative_to(PASTA.resolve())
+        except (OSError, ValueError):
+            return rx.toast.error("Arquivo fora da pasta dos termos.")
+        if not alvo.exists():
+            return rx.toast.warning("O arquivo não existe mais.")
+        if pasta:
+            subprocess.Popen(["explorer", f"/select,{alvo}"])
+        else:
+            os.startfile(alvo)
 
     # ------------------------------------------------------------------ chat
     @rx.event(background=True)
@@ -335,16 +379,20 @@ class AssistenteState(rx.State):
             # trava do state enquanto o evento estiver parado no yield).
             yield rx.toast.warning("Já tem uma execução em andamento.")
             return
+        # Plano só com passos locais (ex.: gerar o termo): sem login nem
+        # navegador — a Sessao só abre o Chrome se um passo pedir a página.
+        no_assyst = any(getattr(a, "assyst", True) for a in acoes)
+        inicio = "Abrindo o navegador..." if no_assyst else "Gerando..."
         async with self:
             self.rodando = True
-            self.status_vivo = "Abrindo o navegador..."
-            self.logs_vivos = ["Abrindo o navegador..."]
+            self.status_vivo = inicio
+            self.logs_vivos = [inicio]
             self._marcar(indice, estado="rodando")
             from services import credenciais
             matricula, senha = credenciais.carregar()
         yield
 
-        if not matricula or not senha:
+        if no_assyst and (not matricula or not senha):
             async with self:
                 self._encerrar(indice, acoes, [], "Credenciais não cadastradas "
                                "(Opções → Credenciais).")
@@ -392,7 +440,8 @@ class AssistenteState(rx.State):
                         texto += ("\n\n*Últimas linhas do log:*\n"
                                   + "\n".join(f"- `{l}`" for l in self.logs_vivos))
                     self.mensagens = self.mensagens + [
-                        Mensagem(papel="assistant", texto=texto, erro=not r.ok)]
+                        Mensagem(papel="assistant", texto=texto, erro=not r.ok,
+                                 arquivos=_botoes_arquivos(r.arquivos))]
                 else:  # fim
                     self._encerrar(indice, acoes, resultados)
             yield

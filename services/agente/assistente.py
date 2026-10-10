@@ -52,6 +52,13 @@ def _frase_final(achados: list[str], acoes: list[Acao]) -> str:
     return " ".join(partes + [frase_do_plano(acoes)]).strip()
 
 
+def _ultima(args: dict) -> bool:
+    """O modelo marcou o último passo? Aceita o nome torto: o Gemini mandou
+    `ultima_action` em vez de `ultima_acao` (10/10) e o plano custava uma
+    ida a mais à IA."""
+    return any(k.startswith("ultima_") and v is True for k, v in args.items())
+
+
 def _preparada(pedido: str, acoes: list[Acao]) -> str:
     """Resposta da ferramenta quando a ação entra no plano. Repete o PEDIDO e
     o plano até aqui: sem isso o modelo às vezes anunciava duas ações e só
@@ -324,6 +331,21 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
                                            f"{_curto(saida, 300)}")
                 else:
                     r = f.preparar(args)
+                    if f.antes is not None and not isinstance(r, str) and matricula and senha:
+                        # Leitura pelo CÓDIGO (ex.: usuário afetado do termo) —
+                        # só com o pedido completo, para não abrir o Assyst a
+                        # cada pergunta. O que ela lê não vai para a IA nem
+                        # para o registro (só para o cartão).
+                        vivo = "Lendo o chamado no Assyst..."
+                        if sessao is None:
+                            vivo = "Entrando no Assyst e lendo o chamado..."
+                            sessao = Sessao(matricula, senha, lambda m, t="info": None)
+                        avisar(vivo)
+                        try:
+                            r = f.preparar(f.antes(args, sessao))
+                            atividade.append("Leu o usuário afetado do chamado no Assyst")
+                        except Exception as e:
+                            atividade.append(f"Não conseguiu ler o chamado — {_curto(str(e), 120)}")
                     if isinstance(r, str):
                         saida, faltou = r, True  # falta algo: o modelo pergunta
                         atividade.append(f"Faltou informação para {f.nome.replace('_', ' ')}"
@@ -338,7 +360,7 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
                         avisar(f"Montando o passo: {r.titulo}...")
                         atividade.append(f"Preparou o passo: {r.titulo}")
                         saida = _preparada(pedido, acoes)
-                        if args.get("ultima_acao") is True:
+                        if _ultima(args):
                             terminou = True
                 met["chamadas"].append({"ferramenta": nome, "args": args,
                                         "saida": _curto(saida, 200)})

@@ -22,6 +22,7 @@ gravar só com confirmação).
 """
 
 import dataclasses
+import datetime
 import difflib
 import re
 import unicodedata
@@ -47,6 +48,9 @@ class Acao:
     # Texto do botão "Copiar lista" do cartão. Na Requisição é o lote EXATO:
     # colado de volta no chat, vira o mesmo lote (ver requisicoes_coladas).
     copiar: str = ""
+    # False = roda só no computador do técnico (ex.: gerar o termo): sem
+    # login nem navegador, se o plano inteiro for assim (10/10).
+    assyst: bool = True
 
 
 @dataclasses.dataclass
@@ -67,8 +71,14 @@ class Ferramenta:
     investiga: Callable[[dict, "Sessao"], str] | None = None
     # DOMÍNIO (07/10): só vai para a IA quando o pedido é desse domínio (ver
     # services/agente/roteador.py). Mesmo nome da subpasta em conhecimento/.
-    # "geral" = vai sempre.
-    dominio: str = "geral"
+    # "geral" = vai sempre. Tupla = vale em mais de um (ex.: achar o chamado
+    # pelo nome serve a chamados E a termos).
+    dominio: "str | tuple[str, ...]" = "geral"
+    # LEITURA PELO CÓDIGO antes do `preparar` (10/10): busca no Assyst o que
+    # o cartão precisa e a IA não deve ver (ex.: matrícula do usuário
+    # afetado, LGPD) — sem ida a mais à IA. Recebe os args e a Sessao e
+    # devolve os args completados; quem chama trata falha como "não leu".
+    antes: Callable[[dict, "Sessao"], dict] | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -920,6 +930,276 @@ def _exec_resolver(a, s: Sessao) -> Resultado:
 
 
 # --------------------------------------------------------------------------- #
+# Termo de Responsabilidade de Instalação (troca de máquina) — 10/10
+# --------------------------------------------------------------------------- #
+#
+# Roda no computador do técnico (services/termos): não mexe no Assyst. O que
+# vem do chamado (nome, matrícula e unidade do usuário afetado) é lido pelo
+# CÓDIGO em `_antes_termo` e vai direto para o cartão — a IA não vê a
+# matrícula. O que o técnico não souber sai em branco no documento.
+
+_CAMPOS_EQUIP = ("marca_modelo", "tombo", "serie", "hostname")
+# Repetido em "saiu" e "entrou" (sem $ref: o Gemini não aceita).
+_EQUIP_ESQUEMA = {"type": "object", "properties": {k: {"type": "string"} for k in _CAMPOS_EQUIP}}
+
+
+def _equip(v) -> dict:
+    v = v if isinstance(v, dict) else {}
+    return {k: str(v.get(k) or "").strip() for k in _CAMPOS_EQUIP}
+
+
+def _antes_termo(args: dict, s: Sessao) -> dict:
+    """Lê nome, matrícula e unidade do usuário afetado do chamado. O que o
+    técnico disse na conversa vale mais que o lido."""
+    from services.browser_pw import _setor_pw
+
+    page = _abrir_chamado(args, s)
+    if page is None:
+        return args
+    matricula, nome = _afetado(page)
+    return _completar(args, {"matricula": matricula, "nome": nome,
+                             "unidade": _setor_pw(page)})
+
+
+def _abrir_chamado(args: dict, s: Sessao):
+    """A página do chamado de `args['chamado']` aberta, ou None."""
+    from services.browser_pw import _navegar_para_chamado_pw
+    numero = str(args.get("chamado") or "").strip().upper()
+    if not numero:
+        return None
+    page = s.pagina()
+    return page if _navegar_para_chamado_pw(page, numero, s.log) else None
+
+
+def _afetado(page) -> tuple[str, str]:
+    """(matrícula, NOME) do usuário afetado — o campo traz `matricula(NOME)`
+    (ver assyst_common._so_o_nome)."""
+    from services.assyst_common import _so_o_nome
+    campo = page.locator("input[name='affectedUser.text']:visible")
+    bruto = campo.first.input_value().strip() if campo.count() else ""
+    if "(" not in bruto:
+        return "", ""
+    return bruto[:bruto.find("(")].strip(), _so_o_nome(bruto)
+
+
+def _completar(args: dict, lido: dict) -> dict:
+    """O lido do chamado preenche só o que o técnico NÃO disse na conversa."""
+    return {**args, **{k: v for k, v in lido.items()
+                       if v and not str(args.get(k) or "").strip()},
+            "_lido_do_chamado": True}
+
+
+def _prep_termo(args: dict) -> "Acao | str":
+    if not isinstance(args.get("backup"), bool):
+        return "Falta saber se foi COM ou SEM backup. Pergunte."
+    trocas = [{"saiu": _equip(m.get("saiu")), "entrou": _equip(m.get("entrou"))}
+              for m in (args.get("maquinas") or []) if isinstance(m, dict)]
+    trocas = [t for t in trocas if any(t["saiu"].values()) or any(t["entrou"].values())]
+    if not trocas:
+        return ("Faltam as máquinas trocadas. Pergunte, de uma vez, para cada troca: "
+                "a que saiu e a que entrou (marca/modelo, tombo, nº de série, hostname). "
+                "O que o técnico não souber fica em branco.")
+    a = {
+        "chamado": str(args.get("chamado") or "").strip().upper(),
+        "backup": args["backup"],
+        "maquinas": trocas,
+        **{k: str(args.get(k) or "").strip() for k in ("nome", "matricula", "unidade",
+                                                        "observacoes")},
+        "onedrive": args.get("onedrive") if isinstance(args.get("onedrive"), bool) else None,
+    }
+
+    def ou_branco(v: str) -> str:
+        return v or "*(em branco)*"
+
+    def maquina(e: dict) -> str:
+        partes = [f"{rotulo} {e[k]}" for k, rotulo in
+                  (("tombo", "tombo"), ("serie", "série"), ("hostname", "hostname")) if e[k]]
+        nome = e["marca_modelo"] or "?"
+        return f"{nome} ({', '.join(partes)})" if partes else nome
+
+    linhas = [
+        f"**Chamado:** {ou_branco(a['chamado'])} · **Data:** "
+        f"{datetime.date.today():%d/%m/%Y}",
+        f"**Tipo:** {'Com' if a['backup'] else 'Sem'} backup e restore",
+        f"**Usuário:** {ou_branco(a['nome'])} · **Matrícula:** {ou_branco(a['matricula'])}",
+        f"**Unidade:** {ou_branco(a['unidade'])}",
+    ]
+    if a["backup"]:
+        linhas.append("**Backup pelo OneDrive oferecido?** " + (
+            "não marcado" if a["onedrive"] is None else ("Sim" if a["onedrive"] else "Não")))
+    for n, t in enumerate(trocas, 1):
+        rotulo = f"Máquina {n}" if len(trocas) > 1 else "Máquina"
+        linhas.append(f"**{rotulo}:** {maquina(t['saiu'])} → {maquina(t['entrou'])}")
+    if a["observacoes"]:
+        linhas.append(f"**Observações:** {a['observacoes']}")
+    aviso = ""
+    if a["chamado"] and not args.get("_lido_do_chamado"):
+        aviso = "Não consegui ler o usuário afetado do chamado: confira nome, matrícula e unidade."
+    return Acao(ferramenta="gerar_termo", args=a,
+                titulo="Termo de Responsabilidade de Instalação", linhas=linhas,
+                escreve=True,
+                # "Simular" gera o termo igual (é local): o botão só existe
+                # para não sumir de um plano junto com passos do Assyst.
+                pode_simular=True, assyst=False, aviso=aviso)
+
+
+def _termo_de(a: dict):
+    from services import termos
+    return termos.Termo(
+        backup=a["backup"], unidade=a["unidade"], chamado=a["chamado"],
+        data=datetime.date.today(),
+        trocas=[termos.Troca(termos.Equipamento(**t["saiu"]),
+                             termos.Equipamento(**t["entrou"])) for t in a["maquinas"]],
+        recebedor=termos.Pessoa(a["nome"], a["matricula"]),
+        onedrive=a["onedrive"], observacoes=a["observacoes"])
+
+
+def _exec_termo(a: dict, s: Sessao) -> Resultado:
+    from services import termos
+    s.log("Gerando o termo...", "status")
+    try:
+        odt, pdf, erro_pdf = termos.gerar(_termo_de(a))
+    except Exception as e:
+        return Resultado(f"❌ Não consegui gerar o termo: {e}", ok=False)
+    ref = f" do {a['chamado']}" if a["chamado"] else ""
+    if pdf is None:
+        return Resultado(f"⚠️ **Termo{ref} gerado só em ODT** — o PDF falhou ({erro_pdf}).",
+                         arquivos=[str(odt)])
+    return Resultado(f"✅ **Termo{ref} gerado.**", arquivos=[str(pdf), str(odt)])
+
+
+# --------------------------------------------------------------------------- #
+# Termo de Tarefa de Demanda (eventos) — 10/10
+# --------------------------------------------------------------------------- #
+#
+# Quase tudo vem do chamado, lido pelo CÓDIGO (`_antes_demanda`): solicitante,
+# Início/Fim agendado, nome do técnico e a DESCRIÇÃO — de onde saem o local e
+# a descrição do evento (services/termos/demanda.py). A descrição NUNCA vai
+# para a IA: no fim dela vem colado CPF, telefone e nascimento do solicitante.
+# Do técnico: validador, horário real do evento e OBS.
+
+def _hora(v) -> str:
+    """'10h' / '10:00' / '9h30' / '9' -> 'hh:mm'; o resto passa como veio."""
+    t = str(v or "").strip()
+    m = re.fullmatch(r"(\d{1,2})\s*(?:[:h]\s*(\d{2})?)?\s*(?:h|hs|horas)?", t, re.I)
+    if not m or int(m[1]) > 23:
+        return t
+    return f"{int(m[1]):02d}:{m[2] or '00'}"
+
+
+def _antes_demanda(args: dict, s: Sessao) -> dict:
+    from services.termos.demanda import extrair_descricao, extrair_local, nome_proprio
+
+    page = _abrir_chamado(args, s)
+    if page is None:
+        return args
+
+    def valor(seletor: str) -> str:
+        campo = page.locator(f"{seletor}:visible")
+        return campo.first.input_value().strip() if campo.count() else ""
+
+    try:
+        texto = page.frame_locator("iframe[title*='formattedRemarks']:visible") \
+            .first.locator("body").inner_text(timeout=5000)
+    except Exception:
+        texto = ""
+    try:
+        tecnico = page.locator("#userDropDownButton_label").first.inner_text(timeout=2000).strip()
+    except Exception:
+        tecnico = ""
+    _, nome = _afetado(page)
+    return _completar(args, {
+        "solicitante": nome_proprio(nome),
+        "data": valor("#txt_scheduledStartDateDate"),
+        "inicio_previsto": valor("#txt_scheduledStartDateTime"),
+        "fim_previsto": valor("#txt_scheduledEndDateTime"),
+        "local": extrair_local(texto),
+        "descricao": extrair_descricao(texto),
+        "tecnico_nome": tecnico,
+        "tecnico_matricula": s.matricula,
+    })
+
+
+_CAMPOS_DEMANDA = ("chamado", "solicitante", "data", "inicio_previsto", "fim_previsto",
+                   "local", "descricao", "validador_nome", "validador_matricula",
+                   "inicio", "fim", "obs", "tecnico_nome", "tecnico_matricula")
+
+
+def _prep_demanda(args: dict) -> "Acao | str":
+    a = {k: str(args.get(k) or "").strip() for k in _CAMPOS_DEMANDA}
+    a["chamado"] = a["chamado"].upper()
+    if not a["chamado"]:
+        return "Falta o número do chamado do evento (os dados do evento vêm dele)."
+    if not a["validador_nome"] and args.get("validador_a_mao") is not True:
+        # Sem isto o modelo gerava direto, com o validador em branco (teste
+        # de 10/10): só o técnico sabe quem validou — tem que perguntar.
+        faltam = ["quem foi o VALIDADOR (nome e matrícula)"]
+        if not (a["inicio"] or a["fim"]):
+            faltam.append("o horário em que ele COMEÇOU e TERMINOU de fato")
+        if not a["obs"]:
+            faltam.append("a OBS (o que ele fez no evento)")
+        return ("Antes de gerar, pergunte ao técnico numa mensagem só: "
+                + "; ".join(faltam) + ". Se ele disser que o validador vai ser "
+                "preenchido à mão, chame de novo com validador_a_mao=true.")
+    for k in ("inicio_previsto", "fim_previsto", "inicio", "fim"):
+        a[k] = _hora(a[k])
+
+    def ou_branco(v: str, motivo: str = "") -> str:
+        return v or f"*(em branco{' — ' + motivo if motivo else ''})*"
+
+    previsto = f"{a['inicio_previsto'] or '?'} às {a['fim_previsto'] or '?'}"
+    execucao = (f"{a['inicio'] or a['inicio_previsto'] or '?'} às "
+                f"{a['fim'] or a['fim_previsto'] or '?'}")
+    if not (a["inicio"] or a["fim"]):
+        execucao += " *(o agendado — o técnico não informou)*"
+    tecnico = a["tecnico_nome"] + (f" — mat. {a['tecnico_matricula']}"
+                                   if a["tecnico_matricula"] else "")
+    linhas = [
+        f"**Chamado:** {a['chamado']} · **Data do serviço:** {ou_branco(a['data'])}",
+        f"**Solicitante/Requisitante:** {ou_branco(a['solicitante'])}",
+        f"**Local:** {ou_branco(a['local'], 'não achei na descrição')}",
+        f"**Horário previsto:** {previsto}",
+        f"**Descrição do evento:** {ou_branco(a['descricao'], 'não achei na descrição')}",
+        f"**Validador:** {ou_branco(a['validador_nome'])} · "
+        f"**Matrícula:** {ou_branco(a['validador_matricula'])}",
+        f"**Horário de execução:** {execucao}",
+        f"**Técnico:** {ou_branco(tecnico)}",
+        f"**OBS:** {ou_branco(a['obs'])}",
+    ]
+    aviso = "" if args.get("_lido_do_chamado") else (
+        "Não consegui ler o chamado no Assyst: os dados do evento vão em branco.")
+    return Acao(ferramenta="gerar_termo_demanda", args=a,
+                titulo="Termo de Tarefa de Demanda", linhas=linhas, escreve=True,
+                pode_simular=True, assyst=False, aviso=aviso)
+
+
+def _exec_demanda(a: dict, s: Sessao) -> Resultado:
+    from services import termos
+    from services.termos.demanda import TermoDemanda
+    s.log("Gerando o termo de demanda...", "status")
+    try:
+        data = datetime.datetime.strptime(a["data"], "%d/%m/%Y").date() if a["data"] else None
+    except ValueError:
+        data = None
+    t = TermoDemanda(
+        chamado=a["chamado"], solicitante=a["solicitante"], local=a["local"], data=data,
+        inicio_previsto=a["inicio_previsto"], fim_previsto=a["fim_previsto"],
+        descricao=a["descricao"],
+        validador=termos.Pessoa(a["validador_nome"], a["validador_matricula"]),
+        inicio=a["inicio"], fim=a["fim"],
+        tecnico=termos.Pessoa(a["tecnico_nome"], a["tecnico_matricula"]), obs=a["obs"])
+    try:
+        odt, pdf, erro_pdf = termos.gerar_demanda(t)
+    except Exception as e:
+        return Resultado(f"❌ Não consegui gerar o termo de demanda: {e}", ok=False)
+    if pdf is None:
+        return Resultado(f"⚠️ **Termo de demanda do {a['chamado']} gerado só em ODT** — "
+                         f"o PDF falhou ({erro_pdf}).", arquivos=[str(odt)])
+    return Resultado(f"✅ **Termo de demanda do {a['chamado']} gerado.**",
+                     arquivos=[str(pdf), str(odt)])
+
+
+# --------------------------------------------------------------------------- #
 # Investigação — leituras cujo resultado volta para a IA (2026-10-01)
 # --------------------------------------------------------------------------- #
 
@@ -1003,7 +1283,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "setor": {"type": "string"},
         }, "required": ["nome"]},
         preparar=lambda a: "", investiga=_inv_buscar_chamado,
-        dominio="chamados",
+        dominio=("chamados", "termos"),
     ),
     Ferramenta(
         "resolver_chamado",
@@ -1203,6 +1483,47 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
         preparar=_prep_sla, executar=_exec_sla,
         dominio="chamados",
     ),
+    Ferramenta(
+        "gerar_termo",
+        "TROCA DE MÁQUINA: gera o Termo de Responsabilidade de Instalação "
+        "(com/sem backup) em PDF. Não é o termo de evento (gerar_termo_demanda). "
+        "Nome, matrícula e unidade o sistema lê do chamado.",
+        {"type": "object", "properties": {
+            "chamado": {"type": "string"},
+            "backup": {"type": "boolean", "description": "true = COM backup e restore."},
+            "maquinas": {"type": "array", "items": {"type": "object", "properties": {
+                "saiu": _EQUIP_ESQUEMA,
+                "entrou": _EQUIP_ESQUEMA,
+            }}},
+            "nome": {"type": "string", "description": "Só se o técnico disser."},
+            "matricula": {"type": "string", "description": "Só se o técnico disser."},
+            "unidade": {"type": "string", "description": "Só se o técnico disser."},
+            "onedrive": {"type": "boolean", "description": "Com backup: oferecido pelo OneDrive?"},
+            "observacoes": {"type": "string"},
+        }, "required": ["backup", "maquinas"]},
+        preparar=_prep_termo, executar=_exec_termo, antes=_antes_termo,
+        dominio="termos",
+    ),
+    Ferramenta(
+        "gerar_termo_demanda",
+        "EVENTO / TAREFA DE DEMANDA: gera a comprovação de prestação de serviço "
+        "(validador assina). Solicitante, local, horário previsto e descrição do "
+        "evento o sistema lê do chamado.",
+        {"type": "object", "properties": {
+            "chamado": {"type": "string"},
+            "validador_nome": {"type": "string", "description": "Quem valida/assina no evento."},
+            "validador_matricula": {"type": "string"},
+            "inicio": {"type": "string", "description": "hh:mm em que o técnico começou de fato."},
+            "fim": {"type": "string", "description": "hh:mm em que terminou de fato."},
+            "obs": {"type": "string", "description": "O que o técnico fez, nas palavras dele."},
+            "local": {"type": "string", "description": "Só se o técnico corrigir."},
+            "descricao": {"type": "string", "description": "Só se o técnico corrigir."},
+            "validador_a_mao": {"type": "boolean", "description":
+                                "true só se o técnico disser que o validador fica em branco."},
+        }, "required": ["chamado"]},
+        preparar=_prep_demanda, executar=_exec_demanda, antes=_antes_demanda,
+        dominio="termos",
+    ),
 ]}
 
 
@@ -1249,8 +1570,12 @@ def esquemas(dominios: "set[str] | None" = None) -> list[dict]:
             "description": f.descricao() if callable(f.descricao) else f.descricao,
             "parameters": _aceita_null(_com_ultima_acao(f, f.parametros))}}
         for f in FERRAMENTAS.values()
-        if dominios is None or f.dominio == "geral" or f.dominio in dominios
+        if dominios is None or f.dominio == "geral" or _dominios_de(f) & dominios
     ]
+
+
+def _dominios_de(f: Ferramenta) -> set[str]:
+    return {f.dominio} if isinstance(f.dominio, str) else set(f.dominio)
 
 
 def frase_do_plano(acoes: list[Acao]) -> str:
@@ -1289,6 +1614,11 @@ def frase_do_plano(acoes: list[Acao]) -> str:
         elif f == "criar_requisicoes":
             n = len([l for l in a.args.get("texto", "").splitlines() if l.strip()])
             partes.append(f"abrir {n} requisição(ões)")
+        elif f == "gerar_termo_demanda":
+            partes.append(f"gerar o termo de demanda do {a.args['chamado']}")
+        elif f == "gerar_termo":
+            ref = f" do {a.args['chamado']}" if a.args.get("chamado") else ""
+            partes.append(f"gerar o termo de responsabilidade{ref}")
         else:
             partes.append(a.titulo.lower())
     if not partes:

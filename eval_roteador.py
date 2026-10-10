@@ -28,7 +28,7 @@ from services.agente.roteador import dominios
 
 NAO_FILAS = "nao_filas"
 
-C, R, F = "chamados", "requisicao", "filas"
+C, R, F, T = "chamados", "requisicao", "filas", "termos"
 
 # (conversa, esperado). Conversa = texto (um pedido) ou lista de mensagens
 # alternando técnico/assistente, começando pelo técnico.
@@ -71,6 +71,25 @@ CASOS = [
     ("abre requisição pros tombos 265287 e 333284, matrícula 5244", {R}),
     ("cria uma requisição de serviço para a matrícula 905245 no edifício FCB", {R}),
     ("preciso de requisições pro patrimônio FCBVCUSTO265287", {R}),
+    # --- termos (gerar_termo, 10/10) ---
+    ("Preciso de um termo de não backup para o chamado do Gabriel Dantas que "
+     "está na minha fila", {C, T}),
+    ("faz o termo de responsabilidade do R2451960", {T}),
+    ("gera um termo com backup pra troca de máquina da Carla", {T}),
+    ("troca de micro no R2451960, sem backup", {T}),
+    (["termo sem backup do R2451960", "Quais máquinas foram trocadas?",
+      "saiu Positivo C4400 tombo 263016, entrou Lenovo M75q série PE0FF1XR"], {T}),
+    # pedido real de 10/10: "tombo" puxava requisição à toa
+    ("Gere um termo de backup para a usuária Sara Beatriz. A máquina é Positivo "
+     "C6200 de tombo 313161 de serial 1AM07J43 para entrar a Positivo C4400 de "
+     "tombo 264467.", {T}),
+    ("faz o termo do R2451960 e abre requisição pro tombo 265287", {T, R}),
+    # termo de tarefa de demanda (eventos)
+    ("preciso do termo de tarefa de demanda do R2443838", {T}),
+    ("gera a demanda do evento do Francisco, a validadora foi a Jeane", {T}),
+    ("faz a comprovação de prestação de serviço do evento da ESMEC", {T}),
+    (["termo de demanda do R2443838", "Quem foi o validador e o horário?",
+      "Jeane, matrícula 901631, das 10h às 16h"], {T}),
     # --- mais de um domínio no mesmo pedido ---
     ("resolve o R2479463 e configura a fila 2N CATI Sistemas", {C, F}),
     ("abre requisição pro tombo 265287 e depois resolve o R2479463", {C, R}),

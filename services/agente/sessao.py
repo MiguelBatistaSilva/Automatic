@@ -26,6 +26,9 @@ class ErroSessao(Exception):
 class Resultado:
     texto: str        # markdown que aparece na conversa
     ok: bool = True   # False interrompe o plano (os passos seguintes não rodam)
+    # Arquivos gerados no computador do técnico (ex.: o termo em PDF/ODT):
+    # viram botões "Abrir" na conversa (10/10).
+    arquivos: list[str] = dataclasses.field(default_factory=list)
 
 
 class Sessao:
