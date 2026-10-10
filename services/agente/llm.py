@@ -155,11 +155,15 @@ def _msg_limite(m: Modelo, detalhe: str) -> str:
 
 
 def conversar(mensagens: list[dict], ferramentas: list[dict],
-              modelo_id: str = PADRAO) -> dict:
+              modelo_id: str = PADRAO, chave: str = "") -> dict:
     """Uma chamada ao modelo escolhido. Devolve a `message` da resposta (com
-    `content` e/ou `tool_calls`)."""
+    `content` e/ou `tool_calls`).
+
+    `chave` vazia = a do Cofre desta máquina (app). O bot do Telegram passa a
+    chave de QUEM pediu (10/10): cada técnico tem a sua, e o limite por
+    minuto do plano grátis não é dividido entre todos."""
     m = MODELOS.get(modelo_id) or MODELOS[PADRAO]
-    chave = carregar_chave(m.plataforma)
+    chave = chave or carregar_chave(m.plataforma)
     if not chave:
         raise ErroLLM(f"Não há chave do {m.rotulo} cadastrada (Opções → API Keys).")
     corpo = {

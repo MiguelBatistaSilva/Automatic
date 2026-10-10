@@ -29,12 +29,14 @@ _LOGS_VISIVEIS = 6
 # Log guardado no expansor do cartão (o resto se perde: é só para conferência).
 _LOGS_GUARDADOS = 400
 
-BOTOES = {
-    "confirmar": ("Confirmar", "blue", "solid"),
-    "retomar":   ("Retomar", "blue", "solid"),
-    "do_zero":   ("Refazer do zero", "red", "soft"),
-    "simular":   ("Simular (não salva)", "gray", "soft"),
-    "cancelar":  ("Cancelar", "gray", "soft"),
+# Aparência dos botões no app (cor, variante). Rótulos e a regra de quais
+# aparecem: services/agente/cartao.py — a mesma do bot do Telegram (10/10).
+_ESTILO = {
+    "confirmar": ("blue", "solid"),
+    "retomar":   ("blue", "solid"),
+    "do_zero":   ("red", "soft"),
+    "simular":   ("gray", "soft"),
+    "cancelar":  ("gray", "soft"),
 }
 
 
@@ -106,51 +108,10 @@ class Mensagem:
 
 
 def _botoes(acoes) -> tuple[list[Botao], str]:
-    """Botões do cartão + aviso, pelo checkpoint de cada passo (mesmas regras
-    dos diálogos da página de Desmembramento e do início da Requisição)."""
-    multi = len(acoes) > 1
-    avisos = [(f"{a.titulo}: " if multi else "") + a.aviso for a in acoes if a.aviso]
-
-    if any(a.checkpoint == "corrompido" for a in acoes):
-        return [Botao("cancelar", *BOTOES["cancelar"])], (
-            "O checkpoint de um passo existe mas está ilegível. Não vou rodar: "
-            "poderia recriar chamados que já existem.")
-
-    def e_req(a):
-        return a.ferramenta == "criar_requisicoes"
-
-    pendente = [a for a in acoes if a.checkpoint == "pendente"]
-    concluido_desm = [a for a in acoes if a.checkpoint == "concluido" and not e_req(a)]
-    concluido_req = [a for a in acoes if a.checkpoint == "concluido" and e_req(a)]
-
-    cods: list[str] = []
-    if not multi and concluido_req:
-        cods = []  # lote já criado: só dá para fechar o cartão
-    elif pendente:
-        cods = ["retomar"]
-        if any(not e_req(a) for a in pendente) or concluido_desm:
-            cods.append("do_zero")
-    elif concluido_desm:
-        # Sozinho, "Confirmar" não faria nada (já concluído); num plano, roda
-        # os outros passos e esse só relata.
-        cods = (["confirmar"] if multi else []) + ["do_zero"]
-    else:
-        cods = ["confirmar"]
-
-    escreve = any(a.escreve for a in acoes)
-    if escreve and cods and all(a.pode_simular or not a.escreve for a in acoes):
-        cods.append("simular")
-    cods.append("cancelar")
-    if pendente and any(not e_req(a) for a in pendente):
-        avisos.insert(0, "Existe uma execução pela metade.")
-    if concluido_desm:
-        avisos.insert(0, "Já foi concluído antes.")
-    return [Botao(c, *BOTOES[c]) for c in cods], " ".join(avisos)
-
-
-# Botão do cartão -> desfecho no registro dos pedidos.
-_DESFECHO = {"confirmar": "confirmou", "simular": "simulou",
-             "retomar": "retomou", "do_zero": "refez"}
+    """Botões do cartão + aviso (regra em services/agente/cartao.py)."""
+    from services.agente import cartao
+    cods, aviso = cartao.botoes(acoes)
+    return [Botao(c, cartao.ROTULOS[c], *_ESTILO[c]) for c in cods], aviso
 
 
 class AssistenteState(rx.State):
@@ -310,7 +271,8 @@ class AssistenteState(rx.State):
             desfecho="resposta" if not r.acoes else ("pendente" if escreve else "executou"))
         # O que foi consultado no Assyst e vale para o resto da conversa (de
         # quem é o chamado): vai no histórico, para a IA não buscar de novo.
-        ja = "".join(f"\n[Já consultado: {l}]" for l in r.lembrar)
+        from services.agente import cartao
+        ja = cartao.nota_lembrar(r.lembrar)
         rodar_ja = None
         async with self:
             self.pensando = False
@@ -338,9 +300,7 @@ class AssistenteState(rx.State):
             self._planos = {**self._planos, indice: list(r.acoes)}
             if id_reg:
                 self._registros = {**self._registros, indice: id_reg}
-            nomes = ", ".join(a.titulo for a in r.acoes)
-            nota = (f"[Mostrei o plano ({nomes}) para o técnico confirmar.]"
-                    if escreve else f"[Executando: {nomes}.]")
+            nota = cartao.nota_plano(r.acoes, escreve)
             self._historico = self._historico + [{"role": "assistant", "content": nota + ja}]
             if not escreve:
                 rodar_ja = indice
@@ -372,8 +332,9 @@ class AssistenteState(rx.State):
                 self._planos = {k: v for k, v in self._planos.items() if k != indice}
                 return
             ocupado = self.rodando
-        if not ocupado and botao in _DESFECHO:
-            registro.marcar_desfecho(id_reg, _DESFECHO[botao])
+        from services.agente import cartao
+        if not ocupado and botao in cartao.DESFECHO:
+            registro.marcar_desfecho(id_reg, cartao.DESFECHO[botao])
         if ocupado:
             # yield FORA do `async with self` (dentro dele o Reflex segura a
             # trava do state enquanto o evento estiver parado no yield).
@@ -381,7 +342,7 @@ class AssistenteState(rx.State):
             return
         # Plano só com passos locais (ex.: gerar o termo): sem login nem
         # navegador — a Sessao só abre o Chrome se um passo pedir a página.
-        no_assyst = any(getattr(a, "assyst", True) for a in acoes)
+        no_assyst = cartao.usa_assyst(acoes)
         inicio = "Abrindo o navegador..." if no_assyst else "Gerando..."
         async with self:
             self.rodando = True
@@ -467,15 +428,8 @@ class AssistenteState(rx.State):
         if erro_geral:
             self.mensagens = self.mensagens + [
                 Mensagem(papel="assistant", texto=erro_geral, erro=True)]
-        # Nota curta para a IA — sem nada lido do Assyst (LGPD).
-        if erro_geral:
-            nota = f"[O plano não rodou: {erro_geral}]"
-        else:
-            feitos = ", ".join(f"{t} ({'ok' if ok else 'falhou'})" for t, ok, _ in resultados)
-            pulados = len(acoes) - len(resultados)
-            nota = (f"[Plano executado: {feitos}"
-                    + (f"; {pulados} passo(s) não rodaram por causa da falha" if pulados else "")
-                    + ". O resultado foi mostrado ao técnico.]")
+        from services.agente import cartao
+        nota = cartao.nota_fim(acoes, resultados, erro_geral)
         self._historico = self._historico + [{"role": "assistant", "content": nota}]
         self._planos = {k: v for k, v in self._planos.items() if k != indice}
         self.rodando = False

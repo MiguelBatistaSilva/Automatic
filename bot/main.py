@@ -16,6 +16,7 @@ Cada fluxo mora no seu proprio modulo:
     bot/commands/cmd_fornecedor.py      /fornecedor
     bot/commands/cmd_usuario.py         /infousuario
     bot/commands/cmd_desmembramento.py  /base
+    bot/commands/cmd_assistente.py      texto solto (Assistente/IA), /chave, /modelo, /nova
 
 Desde 2026-08-26 a credencial do Assyst NAO e mais unica: cada chat_id loga
 com a PROPRIA matricula/senha (ver bot/services/credencial_servico.py). O /credencial
@@ -46,6 +47,7 @@ if "--teste" in sys.argv:
     os.environ["BOT_INFORMACAO_TESTE"] = "1"
     os.environ["BOT_FORNECEDOR_TESTE"] = "1"
     os.environ["BOT_USUARIO_TESTE"] = "1"
+    os.environ["BOT_ASSISTENTE_TESTE"] = "1"
 if "--simulado" in sys.argv:
     os.environ["BOT_SIMULADO"] = "1"
 
@@ -60,6 +62,7 @@ from telegram.ext import (  # noqa: E402
 )
 
 from bot.commands import (  # noqa: E402
+    cmd_assistente,
     cmd_atendimento,
     cmd_credencial,
     cmd_desmembramento,
@@ -113,7 +116,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/requisicao — abre uma requisição do zero, passo a passo\n"
         "\n"
         "/agenda — o que está agendado\n"
-        "/cancelar — aborta a pergunta atual"
+        "/cancelar — aborta a pergunta atual\n"
+        "\n"
+        "ASSISTENTE (IA)\n"
+        "Escreva o pedido normalmente, sem comando — ex.: \"resolve o chamado "
+        "da Carla, troquei o teclado\".\n"
+        "/chave — cadastra sua chave de IA (uma vez só)\n"
+        "/modelo — escolhe o modelo de IA\n"
+        "/nova — começa uma conversa nova"
     )
 
 
@@ -136,6 +146,7 @@ async def cmd_cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 _WIZARDS = {
     "atendimento": cmd_atendimento.responder,
     "base": cmd_desmembramento.responder,
+    "chave": cmd_assistente.responder_chave,
     "credencial": cmd_credencial.responder,
     "desmembrar": cmd_desmembramento.responder_desmembrar,
     "fornecedor": cmd_fornecedor.responder,
@@ -166,11 +177,9 @@ async def texto_solto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await tratar(update, context)
             return
 
-    await update.message.reply_text(
-        "Não entendi. Use /credencial, /sla, /minhafila, /atendimento, "
-        "/informacao, /fornecedor, /infousuario, /base, /desmembrar, "
-        "/requisicao ou /agenda."
-    )
+    # Sem pergunta de comando em andamento: o texto é um pedido ao Assistente
+    # (10/10). Antes respondia "Não entendi".
+    await cmd_assistente.conversar(update, context)
 
 
 async def documento_solto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -231,6 +240,9 @@ def main() -> None:
     app.add_handler(CommandHandler("base", cmd_desmembramento.cmd_base))
     app.add_handler(CommandHandler("desmembrar", cmd_desmembramento.cmd_desmembrar))
     app.add_handler(CommandHandler("requisicao", cmd_requisicao.cmd_requisicao))
+    app.add_handler(CommandHandler("chave", cmd_assistente.cmd_chave))
+    app.add_handler(CommandHandler("modelo", cmd_assistente.cmd_modelo))
+    app.add_handler(CommandHandler("nova", cmd_assistente.cmd_nova))
 
     # Os padroes nao podem se sobrepor: o primeiro que casar e o que roda.
     app.add_handler(CallbackQueryHandler(cmd_sla.escolher_fila, pattern=r"^fila:\d+$"))
@@ -250,6 +262,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(cmd_informacao.confirmar, pattern=r"^in:(ok|nao)$"))
     app.add_handler(CallbackQueryHandler(cmd_fornecedor.confirmar, pattern=r"^fn:(ok|nao)$"))
     app.add_handler(CallbackQueryHandler(cmd_usuario.confirmar, pattern=r"^us:(ok|nao)$"))
+    app.add_handler(CallbackQueryHandler(cmd_assistente.acionar, pattern=r"^ag:\d+:\w+$"))
+    app.add_handler(CallbackQueryHandler(cmd_assistente.escolher_plataforma, pattern=r"^agk:\w+$"))
+    app.add_handler(CallbackQueryHandler(cmd_assistente.escolher_modelo, pattern=r"^agm:\w+$"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, texto_solto))
     app.add_handler(MessageHandler(filters.Document.ALL, documento_solto))
@@ -265,6 +280,8 @@ def main() -> None:
         modos.append("FORNECEDOR TESTE")
     if USUARIO_TESTE:
         modos.append("USUARIO TESTE")
+    if cmd_assistente.TESTE:
+        modos.append("ASSISTENTE TESTE")
     log_bot.info("Bot no ar%s.", f" ({', '.join(modos)})" if modos else "")
     app.run_polling()
 

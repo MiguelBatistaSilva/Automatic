@@ -210,7 +210,7 @@ def _resumo(consultas: int, acoes: list[Acao]) -> str:
 
 
 def responder(historico: list[dict], matricula: str = "", senha: str = "",
-              avisar=None, modelo_id: str = "") -> Resposta:
+              avisar=None, modelo_id: str = "", chave: str = "") -> Resposta:
     """Um pedido pode virar VÁRIAS ações (2026-10-01) — viram um plano só,
     confirmado de uma vez e executado em fila na mesma sessão.
 
@@ -262,7 +262,7 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
     try:
         for volta in range(_MAX_VOLTAS):
             avisar("Pensando..." if volta == 0 else "Decidindo o próximo passo...")
-            m = llm.conversar(msgs, ferramentas, modelo_id or llm.PADRAO)
+            m = llm.conversar(msgs, ferramentas, modelo_id or llm.PADRAO, chave)
             uso = m.get("_uso") or {}
             met["idas"] += 1
             met["tokens_entrada"] += uso.get("prompt_tokens") or 0

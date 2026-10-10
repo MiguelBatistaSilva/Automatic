@@ -38,5 +38,7 @@ Gabriel"), use buscar_chamado_por_usuario.
   o agendado do chamado.
 - `local` e `descricao` só se o técnico corrigir o que veio do chamado.
 
-Os dois são gerados no computador do técnico, não mexem no Assyst. Anexar
-o termo ao chamado ainda não é possível.
+Os dois são gerados no computador do técnico, não mexem no Assyst. O PDF
+gerado ainda precisa ser ASSINADO DIGITALMENTE (técnico e validador) antes
+de valer: o técnico assina e anexa ao chamado por conta própria — o
+Assistente não anexa termo.
