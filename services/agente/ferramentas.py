@@ -480,6 +480,8 @@ def _exec_requisicoes(a: dict, s: Sessao) -> Resultado:
                 resultado.append(f"- ✅ {i + 1}. preenchida (simulação, não salva)")
                 continue
             cp.marcar_concluido_linha(chave, i, numero=criada.numero, usuario=criada.usuario)
+            if a.get("supervisor_novo"):  # plantões: confirmada e criada -> lembra
+                _salvar_supervisor(a.pop("supervisor_novo"))
             resultado.append(f"- ✅ {i + 1}. **{criada.numero}** — {criada.usuario}")
 
     ok = sum(1 for l in resultado if l.startswith("- ✅"))
@@ -626,6 +628,135 @@ def _prep_por_tombo(args: dict) -> "Acao | str":
         _bloco_lista(base.copiar),
     ]
     base.aviso = " ".join(avisos + ([base.aviso] if base.aviso else []))
+    return base
+
+
+# --------------------------------------------------------------------------- #
+# Plantões do fim de semana (13/10)
+# --------------------------------------------------------------------------- #
+# A lista que o líder sempre usa: por dia, 3 Requisições (Sede, Fórum,
+# Custódia). Só mudam o dia e os técnicos — um por local (a Sede também tem
+# técnico desde 13/10; a lista original a mandava sem). O código monta as linhas (a IA só passa datas e
+# nomes) e cai na Requisição comum: mesmo cartão, checkpoint e Copiar lista.
+# Ordem das linhas = a da lista dele: todos os dias da Sede, depois Fórum,
+# depois Custódia.
+
+# (edifício, onde na descrição, horário, fila, chave do técnico em `dias`)
+_PLANTOES = (
+    ("Sede Judiciária", "no TJCE", "08:00 as 18:00", "2N CATI TJ", "sede"),
+    ("Fórum Clóvis Beviláqua", "no Fórum", "08:00 as 18:00", "2N CATI FCB", "forum"),
+    ("Externo", "na Custódia", "08:00 as 14:00", "2N CATI FCB", "custodia"),
+)
+# Matrícula do usuário afetado: a do SUPERVISOR. Muda quando muda a gestão,
+# por isso fica no banco (app_config), e não no código.
+_CHAVE_SUPERVISOR = "plantao_supervisor"
+
+
+def _supervisor() -> str:
+    from services import db
+    r = db.consultar("SELECT valor FROM app_config WHERE chave = ?", (_CHAVE_SUPERVISOR,))
+    return r[0]["valor"] if r else ""
+
+
+def _salvar_supervisor(matricula: str) -> None:
+    from services import db
+    with db.transacao() as con:
+        con.execute("INSERT OR REPLACE INTO app_config VALUES (?, ?)",
+                    (_CHAVE_SUPERVISOR, matricula))
+
+
+def _proximo_fim_de_semana(hoje: datetime.date) -> list[datetime.date]:
+    """Sábado e domingo que vêm (sábado hoje = este)."""
+    sabado = hoje + datetime.timedelta(days=(5 - hoje.weekday()) % 7)
+    return [sabado, sabado + datetime.timedelta(days=1)]
+
+
+def _data_plantao(v: str, hoje: datetime.date) -> datetime.date:
+    """'04/10' ou '04/10/2026'. Sem ano: o deste ano, ou do próximo se já passou."""
+    m = re.fullmatch(r"\s*(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\s*", str(v))
+    if not m:
+        raise ValueError(f"Data '{v}' inválida: use dd/mm.")
+    d, mes, ano = int(m[1]), int(m[2]), m[3]
+    try:
+        if ano:
+            return datetime.date(int(ano) + (2000 if len(ano) == 2 else 0), mes, d)
+        data = datetime.date(hoje.year, mes, d)
+        return data if data >= hoje else datetime.date(hoje.year + 1, mes, d)
+    except ValueError:
+        raise ValueError(f"Data '{v}' não existe.") from None
+
+
+def _prep_plantoes(args: dict) -> "Acao | str":
+    hoje = datetime.date.today()
+    # Matrícula dita agora só é GRAVADA ao criar de verdade (_exec_requisicoes):
+    # se a IA entender errado e o líder cancelar, a salva continua valendo.
+    nova = re.sub(r"\D", "", str(args.get("matricula_supervisor") or ""))
+    matricula = nova or _supervisor()
+    if not matricula:
+        return ("Falta a matrícula do supervisor (usuário afetado dos plantões). "
+                "Pergunte ao técnico; depois de informada uma vez, fica salva.")
+
+    dias = [d for d in (args.get("dias") or []) if isinstance(d, dict)]
+    padrao = _proximo_fim_de_semana(hoje)
+    if not dias:
+        return ("Pergunte quem fica na Sede, no Fórum e na Custódia em cada dia: "
+                + " e ".join(f"{d:%d/%m} ({'sábado' if d.weekday() == 5 else 'domingo'})"
+                             for d in padrao) + ".")
+    sem_data = [d for d in dias if not str(d.get("data") or "").strip()]
+    if sem_data and (len(sem_data) != len(dias) or len(dias) != 2):
+        return "Falta a data de algum dia (dd/mm). Pergunte ao técnico."
+
+    tecnicos = _opcoes()["tecnicos"]
+    datas, nomes = [], []
+    for i, d in enumerate(dias):
+        try:
+            data = padrao[i] if sem_data else _data_plantao(d["data"], hoje)
+        except ValueError as e:
+            return str(e)
+        quem = {}
+        for chave, rotulo in (("sede", "da Sede"), ("forum", "do Fórum"),
+                              ("custodia", "da Custódia")):
+            valor = str(d.get(chave) or "").strip()
+            if not valor:
+                return f"Falta o técnico {rotulo} em {data:%d/%m}. Pergunte ao técnico."
+            # Sem técnicos nos Presets, vai o nome como foi dito.
+            if tecnicos:
+                valor, erro = _resolver_nome(valor, tecnicos, f"O técnico {rotulo}")
+                if erro:
+                    return erro
+            quem[chave] = valor
+        datas.append(data)
+        nomes.append(quem)
+    if len(set(datas)) != len(datas):
+        return "Há data repetida nos plantões. Confira com o técnico."
+
+    reqs = [
+        {"usuario_afetado": matricula, "edificio": edificio,
+         "resumo": "Requisição de Serviço",
+         "descricao": (f"Solicito acompanhamento técnico ao Plantão Judiciário que "
+                       f"ocorrerá {onde} no dia {data:%d/%m/%Y}. Horário {horario}"),
+         "item": "Apoio a Eventos e Audiências", "item_b": "IC NÃO LOCALIZADO",
+         "categoria": "Apoio Técnico em Evento ou Reunião", "grupo_atribuido": fila,
+         "usuario_atribuido": quem[chave]}
+        for edificio, onde, horario, fila, chave in _PLANTOES
+        for data, quem in zip(datas, nomes)
+    ]
+    base = _prep_requisicoes({"requisicoes": reqs})
+    if isinstance(base, str):
+        return base
+    semana = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
+    if nova and nova != _supervisor():
+        base.args["supervisor_novo"] = nova
+        base.aviso = " ".join(filter(None, [
+            "Matrícula do supervisor NOVA: fica salva ao criar.", base.aviso]))
+    base.titulo = "Plantões do fim de semana"
+    base.linhas = [
+        f"**Requisições:** {len(reqs)} (3 por dia) · **Usuário afetado:** {matricula}",
+        *(f"**{semana[d.weekday()]} {d:%d/%m}:** Sede — {q['sede']} · "
+          f"Fórum — {q['forum']} · Custódia — {q['custodia']}"
+          for d, q in zip(datas, nomes)),
+        _bloco_lista(base.copiar),
+    ]
     return base
 
 
@@ -1380,6 +1511,24 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
                           "Só se diferente da do tipo. {tombo} onde entra o tombo."},
         }, "required": ["matricula", "edificio", "fila", "tecnico"]},
         preparar=_prep_por_tombo, executar=_exec_requisicoes,
+        dominio="requisicao",
+    ),
+    Ferramenta(
+        "criar_plantoes",
+        "PLANTÃO JUDICIÁRIO: abre as Requisições dos plantões (3 por dia: Sede, "
+        "Fórum e Custódia). O sistema monta tudo; só passe dias e técnicos.",
+        {"type": "object", "properties": {
+            "dias": {"type": "array", "items": {"type": "object", "properties": {
+                "data": {"type": "string", "description":
+                         "dd/mm. Vazio = próximo sábado/domingo (só com 2 dias)."},
+                "sede": {"type": "string", "description": "Técnico da Sede."},
+                "forum": {"type": "string", "description": "Técnico do Fórum."},
+                "custodia": {"type": "string", "description": "Técnico da Custódia."},
+            }}},
+            "matricula_supervisor": {"type": "string", "description":
+                                     "Só se o técnico informar ou trocar."},
+        }},
+        preparar=_prep_plantoes, executar=_exec_requisicoes,
         dominio="requisicao",
     ),
     Ferramenta(

@@ -29,7 +29,8 @@ DOMINIOS: dict[str, re.Pattern] = {
         r"\b[rs]\d{6,}\b|chamad|resolv|desmembr|\bbases?\b|\bsla\b|atendiment"
         r"|fornecedor|aguard|retom|pausa|informac|program|procediment"
         r"|minha fila|\bfila do\b|estourad|prazo"),
-    "requisicao": re.compile(r"requisic|tombo|patrimon|matricula"),
+    # Plantão Judiciário do fim de semana (13/10): criar_plantoes.
+    "requisicao": re.compile(r"requisic|tombo|patrimon|matricula|plant(ao|oes)"),
     # Verbo antes OU depois de "fila" ("configura a fila X" / "a fila X
     # configurada"), ou a fila indo para o Assyst/menu. Frases achadas pelo
     # eval_roteador.py em 08/10.

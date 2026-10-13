@@ -71,6 +71,11 @@ CASOS = [
     ("abre requisição pros tombos 265287 e 333284, matrícula 5244", {R}),
     ("cria uma requisição de serviço para a matrícula 905245 no edifício FCB", {R}),
     ("preciso de requisições pro patrimônio FCBVCUSTO265287", {R}),
+    # plantões (criar_plantoes, 13/10) — "chmados" com erro de digitação é real
+    ("Gere os chmados dos plantões do final de semana", {R}),
+    ("abre o plantão de sábado e domingo", {R}),
+    (["gera os plantões do fim de semana", "Quem fica no Fórum e na Custódia?",
+      "Esdras e Francivaldo no sábado, João Arthur e Gabriel no domingo"], {R}),
     # --- termos (gerar_termo, 10/10) ---
     ("Preciso de um termo de não backup para o chamado do Gabriel Dantas que "
      "está na minha fila", {C, T}),
