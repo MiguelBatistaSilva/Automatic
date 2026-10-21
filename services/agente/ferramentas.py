@@ -848,6 +848,58 @@ def _exec_recebida_fornecedor(a, s):
     return _exec_lote(info_recebida_fornecedor, "Info Recebida do Fornecedor", True, True)(a, s)
 
 
+def _prep_atribuir(args: dict) -> "Acao | str":
+    """Atribuição Interna (21/10). Sem fila nem técnico = puxar para o técnico
+    logado (o fluxo lê quem é e a fila dele do pop-up)."""
+    from services import flow_atribuicao_pw as fa
+
+    chamados = _lista(args.get("chamados"))
+    if not chamados:
+        return "Falta a lista de chamados."
+    para_mim = bool(args.get("para_mim"))
+    fila = fa.nome_da_fila(args.get("fila") or "")
+    tecnico = "" if para_mim else str(args.get("tecnico") or "").strip()
+    if not para_mim and not fila:
+        return "Falta a fila para onde o chamado vai. Pergunte (ou é para o próprio técnico?)."
+    texto = (args.get("texto") or "").strip()
+    motivo = (args.get("motivo") or "").strip()
+    modo = args.get("modo") or (fa.LIVRE if texto else fa.PUXAR if para_mim else fa.ESCALONAR)
+    if modo not in fa.MODOS:
+        return f"Modo inválido: {modo}. Válidos: {', '.join(fa.MODOS)}."
+    if modo == fa.ESCALONAR and not motivo:
+        return "Falta o motivo do escalonamento (vai em 'Atividades realizadas'). Pergunte."
+    if modo == fa.LIVRE and not texto:
+        return "Falta o texto. Pergunte ao técnico."
+    destino = (f"{fila or 'a fila do técnico'} / o próprio técnico" if para_mim
+               else fila + (f" / {tecnico}" if tecnico else " (sem técnico)"))
+    previa = {fa.ESCALONAR: f"Encaminhando para análise.\nAtividades realizadas: {motivo}",
+              fa.PUXAR: "Prezado(a),\nInformo que sua solicitação encontra-se em análise. "
+                        "Em breve entraremos em contato.",
+              fa.CONTATO: "Contato com êxito, suporte realizando intervenção técnica.",
+              fa.LIVRE: texto}[modo]
+    return Acao(ferramenta="atribuir_chamado",
+                args={"chamados": chamados, "fila": fila, "tecnico": tecnico,
+                      "para_mim": para_mim, "modo": modo,
+                      "detalhe": motivo if modo == fa.ESCALONAR else texto},
+                titulo="Atribuição Interna",
+                linhas=[f"**Chamados:** {len(chamados)} ({_lista_curta(chamados)})",
+                        f"**Para:** {destino}",
+                        f"**Texto:**\n{previa}"],
+                escreve=True, pode_simular=True)
+
+
+def _exec_atribuir(a: dict, s: Sessao) -> Resultado:
+    from services import flow_atribuicao_pw as fa
+
+    conteudo = fa.montar_texto(a["modo"], a["detalhe"])
+
+    def funcao(page, log, numero, _texto, modo_teste):
+        return fa.atribuir_interna(page, log, numero, conteudo, fila=a["fila"],
+                                   tecnico=a["tecnico"], para_mim=a["para_mim"],
+                                   modo_teste=modo_teste)
+    return _exec_lote(funcao, "Atribuição Interna", True, True)({**a, "texto": ""}, s)
+
+
 def _prep_despacho(args: dict) -> "Acao | str":
     """Despacho ao Serviço de Operações (20/10): a mesma pausa do fornecedor,
     com o script montado pelo código (services/despacho_operacao.py)."""
@@ -1609,6 +1661,26 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
         dominio="chamados",
     ),
     Ferramenta(
+        "atribuir_chamado",
+        "ATRIBUIÇÃO INTERNA: passa o chamado para uma fila (com ou sem técnico) "
+        "ou o técnico puxa para si (para_mim). Não mexe no SLA.",
+        {"type": "object", "properties": {
+            "chamados": _CHAMADOS,
+            "para_mim": {"type": "boolean", "description":
+                         "true = o técnico vai resolver ele mesmo (puxar/pegar para si)."},
+            "fila": {"type": "string", "description":
+                     "Departamento de destino (ex.: FCB, TJ, Remoto, Polo Iguatu)."},
+            "tecnico": {"type": "string", "description": "Nome do técnico de destino, se dito."},
+            "modo": {"type": "string", "enum": ["escalonar", "puxar", "contato", "livre"],
+                     "description": "Texto padrão; ver chamados/atribuicao."},
+            "motivo": {"type": "string", "description":
+                       "escalonar: por que o técnico não resolveu (o que já fez)."},
+            "texto": {"type": "string", "description": "livre: o texto ditado pelo técnico."},
+        }, "required": ["chamados"]},
+        preparar=_prep_atribuir, executar=_exec_atribuir,
+        dominio="chamados",
+    ),
+    Ferramenta(
         "despachar_operacao",
         "DESPACHO ao Serviço de Operações (condenar/mandar equipamento para a "
         "Operação): pausa 'Aguardando Info do Fornecedor' com o script de "
@@ -1810,6 +1882,10 @@ def frase_do_plano(acoes: list[Acao]) -> str:
             partes.append(f"iniciar o atendimento do {ch(a)}")
         elif f == "aguardar_fornecedor":
             partes.append(f"colocar o {ch(a)} aguardando o fornecedor")
+        elif f == "atribuir_chamado":
+            partes.append(f"pegar o {ch(a)} para você" if a.args["para_mim"] else
+                          f"atribuir o {ch(a)} a {a.args['fila']}"
+                          + (f" / {a.args['tecnico']}" if a.args["tecnico"] else ""))
         elif f == "despachar_operacao":
             partes.append(f"despachar o {ch(a)} ao Serviço de Operações")
         elif f == "aguardar_usuario":

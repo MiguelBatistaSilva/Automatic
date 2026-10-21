@@ -72,6 +72,11 @@ CASOS = [
     ("Preciso mandar a máquina Positivo C6200 de tombo 332451 e serial X1 para a "
      "equipe de Serviço de Operação", {C}),
     ("despacha o monitor do R2479463 pro Serviço de Operações", {C}),
+    # atribuição interna (atribuir_chamado, 21/10)
+    ("puxa o chamado da Carla pra mim", {C}),
+    ("escalona pro Polo Iguatu, não consegui acesso remoto", {C}),
+    ("encaminha pra fila do TJ pro Gabriel", {C}),
+    ("atribui à fila Remoto", {C}),
     # --- requisição ---
     ("abre requisição pros tombos 265287 e 333284, matrícula 5244", {R}),
     ("cria uma requisição de serviço para a matrícula 905245 no edifício FCB", {R}),
