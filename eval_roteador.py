@@ -28,7 +28,7 @@ from services.agente.roteador import dominios
 
 NAO_FILAS = "nao_filas"
 
-C, R, F, T = "chamados", "requisicao", "filas", "termos"
+C, R, F, T, CV = "chamados", "requisicao", "filas", "termos", "conversa"
 
 # (conversa, esperado). Conversa = texto (um pedido) ou lista de mensagens
 # alternando técnico/assistente, começando pelo técnico.
@@ -109,8 +109,16 @@ CASOS = [
     ("resolve o R2479463 e configura a fila 2N CATI Sistemas", {C, F}),
     ("abre requisição pro tombo 265287 e depois resolve o R2479463", {C, R}),
     # --- não reconhecidos: tem que mandar tudo ---
-    ("oi, tudo bem?", None),
-    ("obrigado!", None),
+    # --- conversa solta (21/10): só personalidade, sem ferramentas ---
+    ("oi, tudo bem?", {CV}),
+    ("obrigado!", {CV}),
+    ("bom dia!", {CV}),
+    ("valeu, mah", {CV}),
+    ("me conta uma piada", {CV}),
+    ("você é humano?", {CV}),
+    ("bom dia, resolve o R2493414 com a base de rede", {C}),
+    (["preciso resolver o R2493414", "qual procedimento?", "valeu, troca de cabo"], {C}),
+    ("oi, preciso de ajuda com uma coisa no sistema", None),
     ("sim", None),
     ("o que você sabe fazer?", None),
     # --- fala de fila, mas NÃO é configurar ---

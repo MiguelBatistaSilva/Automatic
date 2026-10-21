@@ -49,6 +49,21 @@ DOMINIOS: dict[str, re.Pattern] = {
 }
 
 
+# Conversa solta (21/10): "bom dia", "valeu", "conta uma piada". Só quando
+# NADA na conversa casou com um domínio — aí vai só a personalidade, sem
+# ferramentas nem base (~5x menos tokens que mandar tudo). Se for um pedido
+# disfarçado, a IA diz "ainda não sei fazer" e a rede de segurança do
+# assistente refaz com tudo.
+CONVERSA = "conversa"
+_PAPO = re.compile(
+    r"\b(oi+|ola|opa|e ?ai|eae|fala|bom dia|boa tarde|boa noite|valeu|vlw"
+    r"|obrigad\w*|brigad\w*|tmj|tamo junto|show|top|massa|arretado|beleza|blz"
+    r"|parabens|tudo (bem|bom|certo|joia)|k{2,}|(ha){2,}|rs+)\b")
+_PAPO_SEMPRE = re.compile(
+    r"piada|quem (e|eh) voce|voce (e|eh) (humano|gente|robo|uma ia|real)"
+    r"|seu nome|como (vai|voce (esta|ta))")
+
+
 def _normalizar(texto: str) -> str:
     import unicodedata
     t = unicodedata.normalize("NFD", texto.lower())
@@ -66,4 +81,9 @@ def dominios(historico: list[dict]) -> "set[str] | None":
     despacho = re.search(r"despach|condena|\boperac", texto)
     if ("termos" in achados or despacho) and not re.search(r"requisic", texto):
         achados.discard("requisicao")
+    if not achados:
+        ultima = _normalizar(next((h.get("content") or "" for h in reversed(historico)
+                                   if h.get("role") == "user"), ""))
+        if _PAPO_SEMPRE.search(ultima) or (_PAPO.search(ultima) and len(ultima.split()) <= 6):
+            return {CONVERSA}
     return achados or None
