@@ -22,7 +22,18 @@ Gabriel"), use buscar_chamado_por_usuario.
   pergunte.
 - As máquinas: pergunte UMA vez, tudo junto, para cada troca: a que SAIU e
   a que ENTROU (marca/modelo, tombo, nº de série, hostname). O que o técnico
-  não souber fica em branco — gere assim mesmo, não insista.
+  não souber fica em branco — gere assim mesmo, não insista. Se ele já
+  mandou as máquinas (mesmo só os tombos), NÃO pergunte de novo: gere.
+- Como os técnicos escrevem: "saiu -> entrou", uma linha por troca, ou uma
+  linha por campo. Ex.: "C6200 315016 1AM03Y878 -> Lenovo 333232 PE0FES1J"
+  = saiu {marca_modelo "POSITIVO C6200", tombo "315016", serie "1AM03Y878"},
+  entrou {marca_modelo "LENOVO", tombo "333232", serie "PE0FES1J"}.
+  Número de 5 a 7 dígitos = tombo; código de letras e números = série;
+  C6200, M70q… = modelo (nunca hostname).
+- "Coloque o nome FCB13CRIM" / "hostname X" = hostname da máquina, NUNCA o
+  nome do usuário. Na troca a nova quase sempre herda o nome da antiga: com
+  UM hostname, o sistema repete nos dois lados. Se o técnico disser dois
+  nomes (raro: a nova ganhou outro), ponha cada um no seu lado.
 - Com backup: se o técnico disser se o backup pelo OneDrive foi oferecido,
   preencha `onedrive`; se não disser, deixe sem marcar (não pergunte).
 

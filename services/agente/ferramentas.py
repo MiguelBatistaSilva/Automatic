@@ -1228,12 +1228,59 @@ def _exec_resolver(a, s: Sessao) -> Resultado:
 
 _CAMPOS_EQUIP = ("marca_modelo", "tombo", "serie", "hostname")
 # Repetido em "saiu" e "entrou" (sem $ref: o Gemini não aceita).
-_EQUIP_ESQUEMA = {"type": "object", "properties": {k: {"type": "string"} for k in _CAMPOS_EQUIP}}
+_EQUIP_ESQUEMA = {"type": "object", "properties": {
+    "marca_modelo": {"type": "string", "description": "Ex.: POSITIVO C6200. Sem o tombo."},
+    "tombo": {"type": "string", "description": "Patrimônio: só números, em geral 6 dígitos."},
+    "serie": {"type": "string", "description": "Nº de série: letras e números (ex.: 1AM03Y878)."},
+    "hostname": {"type": "string", "description":
+                 "Nome da máquina na rede (ex.: FCB13CRIM). 'Coloque o nome X' = hostname."},
+}}
+
+# Marcas na grafia do patrimônio; erro de digitação ("Lennovo") cai na mais
+# parecida.
+_MARCAS = ("POSITIVO", "LENOVO", "DELL", "HP", "DATEN", "ITAUTEC", "ACER", "SAMSUNG", "LG")
+_RE_TOMBO = re.compile(r"\b\d{5,7}\b")
+# Modelo solto (C6200, M70Q) que a IA pôs no hostname. Hostname do TJ é maior
+# (FCB13CRIM), então não casa.
+_RE_MODELO = re.compile(r"^[A-Za-z]{1,2}\d{3,4}[A-Za-z]?$")
+_RE_HOSTNAME = re.compile(r"^(?=.*\d)[A-Za-z0-9-]{6,}$")
 
 
 def _equip(v) -> dict:
     v = v if isinstance(v, dict) else {}
-    return {k: str(v.get(k) or "").strip() for k in _CAMPOS_EQUIP}
+    e = {k: re.sub(r"\s+", " ", str(v.get(k) or "")).strip() for k in _CAMPOS_EQUIP}
+    if not e["marca_modelo"] and _RE_MODELO.match(e["hostname"]):
+        e["marca_modelo"], e["hostname"] = e["hostname"], ""
+    # Tombo grudado no modelo ("Lenovo 333232"): separa.
+    numeros = _RE_TOMBO.findall(e["marca_modelo"])
+    if numeros and (not e["tombo"] or e["tombo"] in numeros):
+        e["tombo"] = e["tombo"] or numeros[0]
+        e["marca_modelo"] = " ".join(_RE_TOMBO.sub(" ", e["marca_modelo"]).split())
+    palavras = e["marca_modelo"].split(" ", 1)
+    marca = difflib.get_close_matches(palavras[0].upper(), _MARCAS, n=1, cutoff=0.75)
+    if marca:
+        e["marca_modelo"] = " ".join([marca[0], *palavras[1:]])
+    e["hostname"] = e["hostname"].upper()
+    return e
+
+
+def _arrumar_trocas(trocas: list[dict], hostname: str) -> None:
+    """Na troca a máquina nova herda o nome da antiga: hostname dito só de um
+    lado (ou solto no pedido) vale para os dois."""
+    solto = hostname if len(trocas) == 1 else ""
+    for t in trocas:
+        um = t["saiu"]["hostname"] or t["entrou"]["hostname"] or solto
+        t["saiu"]["hostname"] = t["saiu"]["hostname"] or um
+        t["entrou"]["hostname"] = t["entrou"]["hostname"] or um
+
+
+def _hostname_fora_do_nome(args: dict) -> dict:
+    """"Coloque o nome FCB13CRIM" virava o NOME DO USUÁRIO no termo (21/10):
+    `nome` com cara de hostname sai do nome e vai para `_hostname`."""
+    nome = str(args.get("nome") or "").strip()
+    if " " in nome or not _RE_HOSTNAME.match(nome):
+        return args
+    return {**args, "nome": "", "_hostname": nome.upper()}
 
 
 def _antes_termo(args: dict, s: Sessao) -> dict:
@@ -1241,6 +1288,7 @@ def _antes_termo(args: dict, s: Sessao) -> dict:
     técnico disse na conversa vale mais que o lido."""
     from services.browser_pw import _setor_pw
 
+    args = _hostname_fora_do_nome(args)
     page = _abrir_chamado(args, s)
     if page is None:
         return args
@@ -1287,6 +1335,8 @@ def _prep_termo(args: dict) -> "Acao | str":
         return ("Faltam as máquinas trocadas. Pergunte, de uma vez, para cada troca: "
                 "a que saiu e a que entrou (marca/modelo, tombo, nº de série, hostname). "
                 "O que o técnico não souber fica em branco.")
+    args = _hostname_fora_do_nome(args)
+    _arrumar_trocas(trocas, args.get("_hostname", ""))
     a = {
         "chamado": str(args.get("chamado") or "").strip().upper(),
         "backup": args["backup"],
@@ -1847,7 +1897,9 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
                 "saiu": _EQUIP_ESQUEMA,
                 "entrou": _EQUIP_ESQUEMA,
             }}},
-            "nome": {"type": "string", "description": "Só se o técnico disser."},
+            "nome": {"type": "string", "description":
+                     "Nome do USUÁRIO (pessoa), só se o técnico disser. "
+                     "Nome da máquina vai em maquinas[].hostname."},
             "matricula": {"type": "string", "description": "Só se o técnico disser."},
             "unidade": {"type": "string", "description": "Só se o técnico disser."},
             "onedrive": {"type": "boolean", "description": "Com backup: oferecido pelo OneDrive?"},
