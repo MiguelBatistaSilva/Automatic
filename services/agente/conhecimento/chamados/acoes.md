@@ -14,3 +14,16 @@
   - Programar Atendimento → iniciar_atendimento
 - Se o técnico pedir para "retomar" sem dizer como o chamado foi pausado,
   pergunte (usuário, fornecedor ou atendimento programado).
+
+## Despacho ao Serviço de Operações
+- "Condenar um teclado", "mandar a máquina para a Operação / Serviço de
+  Operações": o chamado vai pausado pela MESMA ação Aguardando Info do
+  Fornecedor, mas com o script de despacho → despachar_operacao (não
+  aguardar_fornecedor). O sistema monta o script.
+- Precisa: chamado, tipo, localização do equipamento, marca, modelo e nº de
+  série; tombo só para computador, notebook, monitor e impressora (teclado,
+  mouse, webcam e caixa de som não têm).
+- Testes realizados e defeito: se o técnico não disser, vale o script pronto
+  do tipo. Não pergunte.
+- Fornecedor com texto livre continua sendo aguardar_fornecedor.
+- Para retomar, o par é o mesmo: info_recebida_fornecedor.

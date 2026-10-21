@@ -848,6 +848,44 @@ def _exec_recebida_fornecedor(a, s):
     return _exec_lote(info_recebida_fornecedor, "Info Recebida do Fornecedor", True, True)(a, s)
 
 
+def _prep_despacho(args: dict) -> "Acao | str":
+    """Despacho ao Serviço de Operações (20/10): a mesma pausa do fornecedor,
+    com o script montado pelo código (services/despacho_operacao.py)."""
+    from services import despacho_operacao as dop
+
+    chamados = _lista(args.get("chamado"))
+    if len(chamados) != 1:
+        return "Falta o chamado (um só: o script é de um equipamento)."
+    tipo = dop.tipo_de(args.get("tipo") or "")
+    if not tipo:
+        return f"Tipo de equipamento inválido. Válidos: {', '.join(dop.TIPOS)}."
+    v = {k: str(args.get(k) or "").strip()
+         for k in ("localizacao", "marca", "modelo", "serie", "tombo", "obs")}
+    faltam = [rot for k, rot in (("localizacao", "localização do equipamento"),
+                                 ("marca", "marca"), ("modelo", "modelo"),
+                                 ("serie", "nº de série")) if not v[k]]
+    if dop.tem_tombo(tipo) and not v["tombo"]:
+        faltam.append("tombo")
+    if faltam:
+        return f"Falta(m): {', '.join(faltam)}. Pergunte ao técnico, de uma vez."
+    padrao_testes, padrao_defeitos = dop.SCRIPTS[tipo]
+    testes = dop.itens(args.get("testes") or "")
+    defeitos = dop.itens(args.get("defeito") or "")
+    pronto = [nome for nome, dito in (("testes", testes), ("defeito", defeitos)) if not dito]
+    texto = dop.montar_texto(tipo, v["localizacao"], v["marca"], v["modelo"], v["serie"],
+                             testes or padrao_testes, defeitos or padrao_defeitos,
+                             tombo=v["tombo"], obs=v["obs"])
+    aviso = (f"{' e '.join(pronto).capitalize()} "
+             f"{'vieram' if len(pronto) > 1 or pronto == ['testes'] else 'veio'} "
+             f"do script pronto de {tipo}: confira." if pronto else "")
+    return Acao(ferramenta="despachar_operacao",
+                args={"chamados": chamados, "texto": texto},
+                titulo="Despacho ao Serviço de Operações",
+                linhas=[f"**Chamado:** {chamados[0]} · Aguardando Info do Fornecedor",
+                        f"**Texto:**\n{texto}"],
+                escreve=True, pode_simular=True, aviso=aviso)
+
+
 # --------------------------------------------------------------------------- #
 # Configurar filas (06/10) — consulta salva do monitor; não mexe em chamado
 # --------------------------------------------------------------------------- #
@@ -1571,6 +1609,31 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
         dominio="chamados",
     ),
     Ferramenta(
+        "despachar_operacao",
+        "DESPACHO ao Serviço de Operações (condenar/mandar equipamento para a "
+        "Operação): pausa 'Aguardando Info do Fornecedor' com o script de "
+        "despacho, que o SISTEMA monta. Testes/defeito não ditos: o sistema "
+        "usa o script pronto do tipo — não pergunte.",
+        {"type": "object", "properties": {
+            "chamado": {"type": "string"},
+            "tipo": {"type": "string", "description":
+                     "Computador, Notebook, Monitor, Impressora, Teclado, Mouse, "
+                     "Webcam ou Caixa de som."},
+            "localizacao": {"type": "string", "description": "Dita pelo técnico."},
+            "marca": {"type": "string"},
+            "modelo": {"type": "string"},
+            "serie": {"type": "string"},
+            "tombo": {"type": "string", "description":
+                      "Computador/Notebook/Monitor/Impressora. Teclado, mouse, "
+                      "webcam e caixa de som não têm."},
+            "obs": {"type": "string"},
+            "testes": {"type": "string", "description": "Um por linha. Só se o técnico disser."},
+            "defeito": {"type": "string", "description": "Um por linha. Só se o técnico disser."},
+        }, "required": ["chamado", "tipo"]},
+        preparar=_prep_despacho, executar=_exec_fornecedor,
+        dominio="chamados",
+    ),
+    Ferramenta(
         "aguardar_usuario",
         "PAUSA: 'Aguardando Info do Usuário' (feito, falta o usuário testar); "
         "o sistema monta o texto da auditoria.",
@@ -1747,6 +1810,8 @@ def frase_do_plano(acoes: list[Acao]) -> str:
             partes.append(f"iniciar o atendimento do {ch(a)}")
         elif f == "aguardar_fornecedor":
             partes.append(f"colocar o {ch(a)} aguardando o fornecedor")
+        elif f == "despachar_operacao":
+            partes.append(f"despachar o {ch(a)} ao Serviço de Operações")
         elif f == "aguardar_usuario":
             partes.append(f"colocar o {ch(a)} aguardando o usuário")
         elif f == "info_recebida_usuario":

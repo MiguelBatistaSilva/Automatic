@@ -28,7 +28,9 @@ DOMINIOS: dict[str, re.Pattern] = {
     "chamados": re.compile(
         r"\b[rs]\d{6,}\b|chamad|resolv|desmembr|\bbases?\b|\bsla\b|atendiment"
         r"|fornecedor|aguard|retom|pausa|informac|program|procediment"
-        r"|minha fila|\bfila do\b|estourad|prazo"),
+        r"|minha fila|\bfila do\b|estourad|prazo"
+        # Despacho ao Serviço de Operações (20/10): despachar_operacao.
+        r"|despach|condena|\boperac"),
     # Plantão Judiciário do fim de semana (13/10): criar_plantoes.
     "requisicao": re.compile(r"requisic|tombo|patrimon|matricula|plant(ao|oes)"),
     # Verbo antes OU depois de "fila" ("configura a fila X" / "a fila X
@@ -58,6 +60,8 @@ def dominios(historico: list[dict]) -> "set[str] | None":
     achados = {nome for nome, padrao in DOMINIOS.items() if padrao.search(texto)}
     # No termo, tombo/matrícula são dados da máquina e do usuário, não um
     # pedido de requisição: só puxa requisição se a palavra aparecer (10/10).
-    if "termos" in achados and not re.search(r"requisic", texto):
+    # Idem no despacho à Operação: o tombo é do equipamento (20/10).
+    despacho = re.search(r"despach|condena|\boperac", texto)
+    if ("termos" in achados or despacho) and not re.search(r"requisic", texto):
         achados.discard("requisicao")
     return achados or None

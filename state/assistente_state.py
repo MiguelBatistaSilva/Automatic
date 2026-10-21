@@ -285,7 +285,7 @@ class AssistenteState(rx.State):
                 return
             botoes, aviso = _botoes(r.acoes)
             multi = len(r.acoes) > 1
-            cartao = Mensagem(
+            msg = Mensagem(
                 papel="assistant", texto=r.texto,
                 titulo=f"Plano — {len(r.acoes)} passos" if multi else r.acoes[0].titulo,
                 passos=[Passo(titulo=a.titulo, corpo="  \n".join(a.linhas),
@@ -296,7 +296,7 @@ class AssistenteState(rx.State):
                 estado="pendente" if escreve else "rodando",
             )
             indice = len(self.mensagens)
-            self.mensagens = self.mensagens + [cartao]
+            self.mensagens = self.mensagens + [msg]
             self._planos = {**self._planos, indice: list(r.acoes)}
             if id_reg:
                 self._registros = {**self._registros, indice: id_reg}

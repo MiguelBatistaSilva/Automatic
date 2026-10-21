@@ -67,6 +67,11 @@ CASOS = [
     ("pausa o R2479463 esperando peça da Positivo", {C}),
     ("R2479463: impressora instalada", {C}),
     ("qual o prazo da Maria?", {C}),
+    # despacho ao Serviço de Operações (despachar_operacao, 20/10)
+    ("Preciso condenar um teclado Positivo SK-6620 de serial 123 para a Operação", {C}),
+    ("Preciso mandar a máquina Positivo C6200 de tombo 332451 e serial X1 para a "
+     "equipe de Serviço de Operação", {C}),
+    ("despacha o monitor do R2479463 pro Serviço de Operações", {C}),
     # --- requisição ---
     ("abre requisição pros tombos 265287 e 333284, matrícula 5244", {R}),
     ("cria uma requisição de serviço para a matrícula 905245 no edifício FCB", {R}),

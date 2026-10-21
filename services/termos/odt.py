@@ -206,14 +206,16 @@ def _bloco_complemento(t: Termo, tab: _Tabelas) -> str:
     return tab.tabela([3.6, 5.9, 2.0, 5.5], linhas)
 
 
-def _bloco_assinatura(p: Pessoa, tab: _Tabelas) -> str:
-    """Nome / matrícula / assinatura de quem acompanhou — UMA vez por termo,
-    no fim, valendo para todas as máquinas."""
+def _bloco_assinatura(p: Pessoa, tab: _Tabelas, *, com_nome: bool) -> str:
+    """Assinatura de quem acompanhou — UMA vez por termo, no fim, valendo para
+    todas as máquinas. Sem `com_nome` (1 troca) a seção fica só com a linha de
+    assinatura: nome e matrícula já estão em "Usuário recebedor do serviço"."""
+    linhas = [("LinhaAssinatura", [_rot("Assinatura e carimbo (caso possua)"), _val("", 3)])]
+    if com_nome:
+        linhas.insert(0, ("Linha", [_rot("Nome"), _val(p.nome),
+                                    _rot("Matrícula"), _val(p.matricula)]))
     return _secao("Magistrado(a) ou servidor(a) que acompanhou o serviço") + tab.tabela(
-        [3.6, 5.9, 2.0, 5.5], [
-            ("Linha", [_rot("Nome"), _val(p.nome), _rot("Matrícula"), _val(p.matricula)]),
-            ("LinhaAssinatura", [_rot("Assinatura e carimbo (caso possua)"), _val("", 3)]),
-        ], inteira=True)
+        [3.6, 5.9, 2.0, 5.5], linhas, inteira=True)
 
 
 def _corpo(t: Termo, tab: _Tabelas) -> str:
@@ -235,7 +237,7 @@ def _corpo(t: Termo, tab: _Tabelas) -> str:
         partes.append(_bloco_declaracoes(t))
         if t.backup or t.observacoes:
             partes.append(_bloco_complemento(t, tab))
-    partes.append(_bloco_assinatura(t.recebedor, tab))
+    partes.append(_bloco_assinatura(t.recebedor, tab, com_nome=t.varias))
     return "".join(partes)
 
 
