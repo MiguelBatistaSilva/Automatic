@@ -16,5 +16,6 @@
     <motivo>". O motivo é obrigatório: se ele não disse, pergunte.
   - livre: o técnico ditou um texto próprio.
 - O sistema monta o texto; passe só o modo e o motivo/texto.
-- Fila pelo nome curto basta (FCB, TJ, Remoto, Polo Iguatu): o sistema
-  completa "2N CATI".
+- Passe a fila e o técnico como o técnico DISSE (ex.: "iguatu", "Gabriel"):
+  o sistema acha o nome exato no Assyst. Se o técnico atende mais de uma
+  fila, o sistema decide ou devolve a pergunta. Não invente a fila.

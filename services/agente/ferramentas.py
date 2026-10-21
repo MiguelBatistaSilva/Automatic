@@ -79,6 +79,10 @@ class Ferramenta:
     # afetado, LGPD) — sem ida a mais à IA. Recebe os args e a Sessao e
     # devolve os args completados; quem chama trata falha como "não leu".
     antes: Callable[[dict, "Sessao"], dict] | None = None
+    # QUANDO rodar o `antes` (21/10). Sem isto: só com o pedido completo. Com
+    # isto: quando ela disser — a leitura pode ser justamente o que responde
+    # a pergunta (ex.: em que fila o chamado está, na Atribuição Interna).
+    precisa_ler: Callable[[dict], bool] | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -857,8 +861,9 @@ def _prep_atribuir(args: dict) -> "Acao | str":
     if not chamados:
         return "Falta a lista de chamados."
     para_mim = bool(args.get("para_mim"))
-    fila = fa.nome_da_fila(args.get("fila") or "")
-    tecnico = "" if para_mim else str(args.get("tecnico") or "").strip()
+    fila, tecnico, aviso = _destino_atribuicao(args, para_mim)
+    if fila is None:
+        return tecnico  # a pergunta para o técnico
     if not para_mim and not fila:
         return "Falta a fila para onde o chamado vai. Pergunte (ou é para o próprio técnico?)."
     texto = (args.get("texto") or "").strip()
@@ -885,7 +890,69 @@ def _prep_atribuir(args: dict) -> "Acao | str":
                 linhas=[f"**Chamados:** {len(chamados)} ({_lista_curta(chamados)})",
                         f"**Para:** {destino}",
                         f"**Texto:**\n{previa}"],
-                escreve=True, pode_simular=True)
+                escreve=True, pode_simular=True, aviso=aviso)
+
+
+def _destino_atribuicao(args: dict, para_mim: bool) -> tuple:
+    """(fila, técnico, aviso) com os nomes EXATOS do Assyst, pela referência
+    (services/referencia.py). Se precisar perguntar: (None, pergunta, "")."""
+    from services import referencia
+
+    dita = str(args.get("fila") or "").strip()
+    fila = ""
+    if dita:
+        achou = referencia.resolver_fila(dita)
+        if achou.opcoes:
+            return None, f"Fila '{dita}' ambígua: {', '.join(achou.opcoes)}. Pergunte qual.", ""
+        if not achou.ok:
+            return None, f"Não existe fila '{dita}' no Assyst. Pergunte o nome certo.", ""
+        fila = achou.valor
+    dito = "" if para_mim else str(args.get("tecnico") or "").strip()
+    if not dito:
+        return fila, "", ""
+    achou = referencia.resolver_tecnico(dito)
+    if achou.opcoes:
+        return None, (f"Há mais de um técnico '{dito}': {', '.join(achou.opcoes)}. "
+                      "Pergunte qual."), ""
+    if not achou.ok:
+        # A lista ainda não tem todas as filas: não bloqueia, o Assyst confere.
+        aviso = f"'{dito}' não está na lista de técnicos: o Assyst confere o nome na hora."
+        return fila, dito, aviso
+    tecnico = achou.valor
+    if fila:
+        return fila, tecnico, ""
+    dele = referencia.filas_do_tecnico(tecnico)
+    if len(dele) == 1:
+        return dele[0], tecnico, ""
+    atual = args.get("_fila_atual") or ""
+    if atual in dele:
+        return atual, tecnico, ""
+    if dele:
+        return None, f"{tecnico} atende {' e '.join(dele)}. Pergunte em qual fila.", ""
+    return None, f"Em que fila fica {tecnico}? Pergunte.", ""
+
+
+def _precisa_ler_atribuir(args: dict) -> bool:
+    """Técnico de várias filas e nenhuma fila dita: só aí vale ler o chamado."""
+    from services import referencia
+
+    if args.get("fila") or args.get("para_mim") or not args.get("tecnico") \
+            or not _lista(args.get("chamados")):
+        return False
+    achou = referencia.resolver_tecnico(str(args["tecnico"]))
+    return achou.ok and len(referencia.filas_do_tecnico(achou.valor)) > 1
+
+
+def _antes_atribuir(args: dict, s: Sessao) -> dict:
+    """Lê a fila ATUAL do chamado: se o técnico estiver nela, o chamado fica
+    onde está (ver _destino_atribuicao)."""
+    chamados = _lista(args.get("chamados"))
+    page = _abrir_chamado({"chamado": chamados[0]}, s)
+    if page is None:
+        return args
+    campo = page.locator("input[name='assignedServDept.text']:visible")
+    atual = campo.first.input_value().strip() if campo.count() else ""
+    return {**args, "_fila_atual": atual} if atual else args
 
 
 def _exec_atribuir(a: dict, s: Sessao) -> Resultado:
@@ -1677,7 +1744,8 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
                        "escalonar: por que o técnico não resolveu (o que já fez)."},
             "texto": {"type": "string", "description": "livre: o texto ditado pelo técnico."},
         }, "required": ["chamados"]},
-        preparar=_prep_atribuir, executar=_exec_atribuir,
+        preparar=_prep_atribuir, executar=_exec_atribuir, antes=_antes_atribuir,
+        precisa_ler=_precisa_ler_atribuir,
         dominio="chamados",
     ),
     Ferramenta(

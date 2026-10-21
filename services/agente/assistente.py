@@ -331,7 +331,9 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
                                            f"{_curto(saida, 300)}")
                 else:
                     r = f.preparar(args)
-                    if f.antes is not None and not isinstance(r, str) and matricula and senha:
+                    ler = f.antes is not None and (f.precisa_ler(args) if f.precisa_ler
+                                                   else not isinstance(r, str))
+                    if ler and matricula and senha:
                         # Leitura pelo CÓDIGO (ex.: usuário afetado do termo) —
                         # só com o pedido completo, para não abrir o Assyst a
                         # cada pergunta. O que ela lê não vai para a IA nem
@@ -343,7 +345,7 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
                         avisar(vivo)
                         try:
                             r = f.preparar(f.antes(args, sessao))
-                            atividade.append("Leu o usuário afetado do chamado no Assyst")
+                            atividade.append("Leu o chamado no Assyst")
                         except Exception as e:
                             atividade.append(f"Não conseguiu ler o chamado — {_curto(str(e), 120)}")
                     if isinstance(r, str):
