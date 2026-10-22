@@ -171,6 +171,10 @@ def atribuir_interna(page, log, numero_chamado: str, conteudo_html: str,
     except Exception as e:
         log(f"O pop-up da ação não abriu: {e}", "error")
         return False, info
+    # O campo aparece antes de o type-ahead estar pronto: digitar na hora se
+    # perdia e a lista de sugestões nunca abria (22/10, 2125861 com a fila
+    # vazia; simulado: sem pausa falha, com 2 s preenche tudo).
+    page.wait_for_timeout(2000)
 
     # 4. Quem e para onde
     if para_mim:
