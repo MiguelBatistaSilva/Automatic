@@ -7,6 +7,10 @@ motivo que tirou os tipos de solicitação do SQLite em 01/10):
   - filas.csv    (nome,codigo,ans): os 205 Departamentos de Serviço do Assyst,
                  extraídos da busca '*' da Atribuição Interna
                  (teste_extrair_filas.py). Para atualizar: rodar de novo.
+  - edificios.csv (secao,grupo,edificio,qtd): em que edifício os chamados de
+                 cada Seção foram atendidos (teste_extrair_edificios.py e
+                 teste_ampliar_edificios.py). Usado na triagem
+                 (services/triagem.py).
   - tecnicos.csv (nome,fila): UMA LINHA POR PAR — o mesmo técnico pode estar
                  em várias filas (ex.: FCB e Remoto, conforme o local). Nome
                  exatamente como no Assyst. Editável à mão.
@@ -27,8 +31,9 @@ PASTA = Path(DATA_DIR) / "referencia"
 _cache: dict[str, tuple[float, list[dict]]] = {}
 
 
-def _ler(nome: str) -> list[dict]:
-    """Linhas do CSV, relidas só quando o arquivo muda (a atualização troca)."""
+def _ler(nome: str, chave: str = "nome") -> list[dict]:
+    """Linhas do CSV, relidas só quando o arquivo muda (a atualização troca).
+    Linha sem a coluna `chave` preenchida é descartada."""
     arq = PASTA / nome
     try:
         mtime = arq.stat().st_mtime
@@ -37,7 +42,7 @@ def _ler(nome: str) -> list[dict]:
     if nome not in _cache or _cache[nome][0] != mtime:
         with open(arq, encoding="utf-8", newline="") as f:
             linhas = [{k: (v or "").strip() for k, v in l.items()} for l in csv.DictReader(f)]
-        _cache[nome] = (mtime, [l for l in linhas if l.get("nome")])
+        _cache[nome] = (mtime, [l for l in linhas if l.get(chave)])
     return _cache[nome][1]
 
 
@@ -101,3 +106,8 @@ def resolver_tecnico(texto: str) -> Achado:
     if len(batem) == 1:
         return Achado(batem[0])
     return Achado(opcoes=batem[:10])
+
+
+def edificios() -> list[dict]:
+    """Linhas do edificios.csv: secao, grupo, edificio, qtd (texto)."""
+    return _ler("edificios.csv", chave="secao")

@@ -74,6 +74,10 @@ CASOS = [
     ("despacha o monitor do R2479463 pro Serviço de Operações", {C}),
     # atribuição interna (atribuir_chamado, 21/10)
     ("puxa o chamado da Carla pra mim", {C}),
+    # triagem (analisar_chamado, 22/10)
+    ("analisa o chamado da Carla", {C}),
+    ("faz a triagem dos chamados novos", {C}),
+    ("confere o item b e o edifício do R2493651", {C}),
     ("escalona pro Polo Iguatu, não consegui acesso remoto", {C}),
     ("encaminha pra fila do TJ pro Gabriel", {C}),
     ("atribui à fila Remoto", {C}),

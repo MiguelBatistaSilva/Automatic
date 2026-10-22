@@ -1592,6 +1592,44 @@ def _inv_verificar_sla(args: dict, s: Sessao) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# Triagem do chamado (22/10) — o Assistente olhando como técnico
+# --------------------------------------------------------------------------- #
+#
+# Regras em services/triagem.py. A DESCRIÇÃO é lida pelo código; a IA recebe
+# seção, edifício, Item B, os tombos e o PEDIDO sem o bloco de dados pessoais
+# (triagem.pedido_seguro) — para propor o desmembramento sem perguntar.
+
+_CAMPOS_TRIAGEM = (("secao", "section.text"), ("grupo", "department.text"),
+                   ("edificio", "building.text"), ("item_b", "itemB.text"),
+                   ("fila", "assignedServDept.text"))
+
+
+def _inv_analisar_chamado(args: dict, s: Sessao) -> str:
+    from services.browser_pw import _navegar_para_chamado_pw
+    from services.triagem import triar
+
+    chamados = _lista(args.get("chamados"))
+    if not chamados:
+        return "Falta o número do chamado."
+    page, saida = s.pagina(), []
+    for numero in (c.strip().upper() for c in chamados):
+        if not _navegar_para_chamado_pw(page, numero, s.log):
+            saida.append(f"{numero}: não consegui abrir o chamado")
+            continue
+        campos = {}
+        for chave, nome in _CAMPOS_TRIAGEM:
+            campo = page.locator(f"input[name='{nome}']:visible")
+            campos[chave] = campo.first.input_value().strip() if campo.count() else ""
+        try:
+            descricao = page.frame_locator("iframe[title*='formattedRemarks']:visible") \
+                .first.locator("body").inner_text(timeout=5000)
+        except Exception:
+            descricao = ""
+        saida.append(triar(numero, campos, descricao).resumo())
+    return "\n".join(saida)
+
+
+# --------------------------------------------------------------------------- #
 # Catálogo
 # --------------------------------------------------------------------------- #
 
@@ -1643,6 +1681,16 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "fila": _FILA,
         }, "required": ["chamados"]},
         preparar=lambda a: "", investiga=_inv_verificar_sla,
+        dominio="chamados",
+    ),
+    Ferramenta(
+        "analisar_chamado",
+        "INVESTIGAÇÃO (triagem): confere Edifício e Item B do chamado e diz o "
+        "que corrigir (só leitura).",
+        {"type": "object", "properties": {
+            "chamados": _CHAMADOS,
+        }, "required": ["chamados"]},
+        preparar=lambda a: "", investiga=_inv_analisar_chamado,
         dominio="chamados",
     ),
     Ferramenta(

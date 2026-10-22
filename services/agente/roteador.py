@@ -32,7 +32,9 @@ DOMINIOS: dict[str, re.Pattern] = {
         # Despacho ao Serviço de Operações (20/10): despachar_operacao.
         r"|despach|condena|\boperac"
         # Atribuição Interna (21/10): atribuir_chamado.
-        r"|atribu|encaminh|escalon|\bpux|\bpega"),
+        r"|atribu|encaminh|escalon|\bpux|\bpega"
+        # Triagem (22/10): analisar_chamado.
+        r"|analis|triag|item b\b"),
     # Plantão Judiciário do fim de semana (13/10): criar_plantoes.
     "requisicao": re.compile(r"requisic|tombo|patrimon|matricula|plant(ao|oes)"),
     # Verbo antes OU depois de "fila" ("configura a fila X" / "a fila X
