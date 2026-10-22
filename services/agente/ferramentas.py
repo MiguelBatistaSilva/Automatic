@@ -1564,6 +1564,14 @@ def _inv_buscar_chamado(args: dict, s: Sessao) -> str:
     linhas = [f"{c['referencia']} — {c.get('afetado', '')} ({c.get('secao', '')})" for c in batem]
     if len(batem) == 1:
         return "Encontrado 1 chamado: " + linhas[0]
+    # "Todos os chamados do Fulano" (22/10): lote, sem perguntar — o cartão
+    # mostra a lista para o técnico confirmar.
+    if args.get("todos"):
+        nomes = {_sem_acento(c.get("afetado", "")) for c in batem}
+        aviso = ("" if len(nomes) == 1 else
+                 " ATENÇÃO: são pessoas diferentes com esse nome; pergunte se são todas.")
+        return (f"{len(batem)} chamados de '{args.get('nome')}' (use TODOS no próximo "
+                f"passo): " + "; ".join(linhas) + "." + aviso)
     return (f"{len(batem)} chamados batem com '{args.get('nome')}': " + "; ".join(linhas)
             + ". Pergunte ao técnico qual (mostre nome e setor).")
 
@@ -1657,6 +1665,8 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
         {"type": "object", "properties": {
             "nome": {"type": "string"},
             "setor": {"type": "string"},
+            "todos": {"type": "boolean", "description":
+                      "true se o técnico disse TODOS os chamados dessa pessoa."},
         }, "required": ["nome"]},
         preparar=lambda a: "", investiga=_inv_buscar_chamado,
         dominio=("chamados", "termos"),
