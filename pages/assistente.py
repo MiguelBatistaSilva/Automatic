@@ -58,17 +58,6 @@ def _icone_passo(estado) -> rx.Component:
     )
 
 
-def _logs_vivos() -> rx.Component:
-    return rx.vstack(
-        rx.foreach(
-            AssistenteState.logs_vivos,
-            lambda l: rx.text(l, size="1", color=rx.color("gray", 9),
-                              font_family="monospace", white_space="pre-wrap"),
-        ),
-        spacing="0",
-    )
-
-
 def _passo(m, p) -> rx.Component:
     """Um passo do plano. Num plano de um passo só, o título já é o do
     cartão — aqui aparece só o resumo (e os logs enquanto roda)."""
@@ -104,10 +93,6 @@ def _passo(m, p) -> rx.Component:
                 padding_left=rx.cond(m.multi, "21px", "0"),
             ),
         ),
-        rx.cond(
-            p.estado == "rodando",
-            rx.box(_logs_vivos(), padding_left=rx.cond(m.multi, "21px", "0")),
-        ),
         spacing="1",
         align_items="stretch",
         width="100%",
@@ -137,13 +122,19 @@ def _atividade(m) -> rx.Component:
 
 
 def _logs_guardados(m) -> rx.Component:
-    """Log completo da execução, para conferir depois (rola por dentro)."""
+    """Log completo da execução, para conferir depois (rola por dentro). Único
+    lugar do log com o cartão aberto (22/10). column-reverse: a rolagem fica
+    presa no FIM, então a linha nova aparece sozinha enquanto roda."""
     return rx.box(
-        rx.foreach(
-            m.logs,
-            lambda l: rx.text(l, size="1", color=rx.color("gray", 9),
-                              font_family="monospace", white_space="pre-wrap"),
+        rx.box(
+            rx.foreach(
+                m.logs,
+                lambda l: rx.text(l, size="1", color=rx.color("gray", 9),
+                                  font_family="monospace", white_space="pre-wrap"),
+            ),
         ),
+        display="flex",
+        flex_direction="column-reverse",
         max_height="260px",
         overflow_y="auto",
         width="100%",
@@ -208,7 +199,8 @@ def _cartao(m, indice) -> rx.Component:
             _hover={"opacity": "0.75"},
         ),
         rx.cond(
-            (m.estado == "rodando") & (AssistenteState.status_vivo != ""),
+            # Aberto, o log completo já mostra a mesma linha (22/10: logs em dobro).
+            (m.estado == "rodando") & (AssistenteState.status_vivo != "") & ~m.aberto,
             rx.text(AssistenteState.status_vivo, size="1", color=rx.color("gray", 9),
                     padding_left="22px", white_space="nowrap", overflow="hidden",
                     text_overflow="ellipsis", width="100%"),
