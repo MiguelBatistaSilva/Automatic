@@ -47,7 +47,10 @@ Gabriel"), use buscar_chamado_por_usuario.
   horário em que ele COMEÇOU e TERMINOU de fato, e a OBS (o que ele fez).
 - O que o técnico não souber fica em branco; sem horário de execução, vale
   o agendado do chamado.
-- `local` e `descricao` só se o técnico corrigir o que veio do chamado.
+- `descricao` só se o técnico corrigir o que veio do chamado.
+- `local`: o que o técnico disse; senão, o que o Pedido do chamado diz (o
+  sistema manda o Pedido quando a descrição não tem "Local:"). Não pergunte
+  o local ao técnico: sem nada, o sistema usa o Edifício/Sala do chamado.
 
 Os dois são gerados no computador do técnico, não mexem no Assyst. O PDF
 gerado ainda precisa ser ASSINADO DIGITALMENTE (técnico e validador) antes

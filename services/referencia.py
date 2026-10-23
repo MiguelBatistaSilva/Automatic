@@ -87,6 +87,10 @@ def resolver_fila(texto: str) -> Achado:
     return Achado(opcoes=(cati or contem)[:10])
 
 
+def tecnicos() -> list[str]:
+    return sorted({l["nome"] for l in _ler("tecnicos.csv")})
+
+
 def filas_do_tecnico(nome: str) -> list[str]:
     return [l["fila"] for l in _ler("tecnicos.csv") if l["nome"] == nome and l.get("fila")]
 

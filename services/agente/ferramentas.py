@@ -218,9 +218,20 @@ def _prep_desmembrar(args: dict) -> "Acao | str":
     descricao = (args.get("descricao") or "").strip()
     if not pai:
         return "Falta o número do chamado pai. Pergunte ao técnico."
+    pedido = str(args.get("_pedido") or "")
     if not tombos:
+        if args.get("_lido_do_chamado"):
+            return ("A descrição do chamado não traz tombos. Pergunte ao técnico os "
+                    "tombos (um filho por tombo).")
         return "Falta a lista de tombos (um filho por tombo). Pergunte ao técnico."
     if not descricao:
+        if pedido:
+            # Ficha (23/10): a IA monta a descrição dos filhos do Pedido, sem
+            # perguntar — o técnico confere no cartão.
+            return ("Chame de novo com `descricao` dos filhos montada a partir do "
+                    "Pedido do chamado: curta, formal, sem local nem nomes (ex.: "
+                    "'Instalação de monitor.'). Não pergunte ao técnico. Tombos: "
+                    f'{", ".join(tombos)}. Pedido: "{pedido}"')
         return ("Falta a descrição dos chamados filhos. Pergunte ao técnico "
                 "qual texto usar.")
     if MARCADOR_TOMBO not in descricao:
@@ -250,6 +261,24 @@ def _prep_desmembrar(args: dict) -> "Acao | str":
         checkpoint=sit["estado"],
         aviso=sit.get("resumo", ""),
     )
+
+
+def _precisa_ler_desmembrar(args: dict) -> bool:
+    """Sem tombos ou sem descrição: a ficha do pai tem os dois (23/10)."""
+    return bool(str(args.get("chamado_pai") or "").strip()) and not (
+        _lista(args.get("tombos")) and str(args.get("descricao") or "").strip())
+
+
+def _antes_desmembrar(args: dict, s: Sessao) -> dict:
+    from services.ficha import ler_ficha
+
+    f = ler_ficha(s.pagina, str(args.get("chamado_pai") or ""), s.log)
+    if f is None:
+        return args
+    out = {**args, "_lido_do_chamado": True, "_pedido": f.pedido}
+    if not _lista(args.get("tombos")) and f.tombos:
+        out["tombos"] = f.tombos
+    return out
 
 
 def _kb_config(nome_base: str) -> dict:
@@ -535,17 +564,69 @@ def _resolver_nome(valor: str, opcoes: list[str], rotulo: str) -> tuple[str, str
     if len(batem) > 1:
         return "", (f"{rotulo} '{valor}' é ambíguo: {', '.join(batem)}. "
                     "Pergunte qual.")
-    return "", (f"{rotulo} '{valor}' não está cadastrado. Cadastrados: "
-                f"{', '.join(opcoes)}. Pergunte ao técnico qual é (ou peça para "
+    lista = f"Cadastrados: {', '.join(opcoes)}. " if len(opcoes) <= 15 else ""
+    return "", (f"{rotulo} '{valor}' não está cadastrado. {lista}"
+                f"Pergunte ao técnico qual é (ou peça para "
                 "cadastrar em Configurações -> Presets).")
 
 
 def _opcoes() -> dict[str, list[str]]:
-    from services import requisicao_presets
+    from services import referencia, requisicao_presets
     p = requisicao_presets.carregar()
     filas = list(dict.fromkeys(p["grupo_atribuido"] + list(FILAS)))
-    return {"tecnicos": p["usuario_atribuido"], "filas": filas,
+    # Técnicos: o banco de técnicos (nome exato do Assyst) + os dos Presets,
+    # senão quem não está nos Presets "não está cadastrado" (23/10). Mesmo nome
+    # com/sem acento fica o do banco.
+    tecnicos = {}
+    for n in referencia.tecnicos() + p["usuario_atribuido"]:
+        tecnicos.setdefault(_sem_acento(n), n)
+    return {"tecnicos": sorted(tecnicos.values()), "filas": filas,
             "edificios": p["edificio"], "itens": p["item"]}
+
+
+def _tecnico_da_req(dito: str, opcoes: list[str], rotulo: str = "O técnico") -> tuple[str, str]:
+    """(nome, erro) do técnico da Requisição: primeiro pelo banco de técnicos
+    (mesma regra da atribuição: cada palavra é começo de palavra do nome),
+    depois pelos Presets."""
+    from services import referencia
+
+    achou = referencia.resolver_tecnico(dito or "")
+    if achou.ok:
+        return achou.valor, ""
+    if achou.opcoes:
+        return "", f"{rotulo} '{dito}' é ambíguo: {', '.join(achou.opcoes)}. Pergunte qual."
+    return _resolver_nome(dito, opcoes, rotulo)
+
+
+def _fila_da_req(dita: str, tecnico: str, opcoes: list[str]) -> tuple[str, str]:
+    """(fila, erro). Sem fila dita: a do técnico, se ele tiver UMA só."""
+    from services import referencia
+
+    dita = (dita or "").strip()
+    if not dita:
+        dele = referencia.filas_do_tecnico(tecnico)
+        if len(dele) == 1:
+            return dele[0], ""
+        if dele:
+            return "", f"{tecnico} atende {' e '.join(dele)}. Pergunte em qual fila."
+        return "", "Falta a fila. Pergunte ao técnico."
+    achou = referencia.resolver_fila(dita)
+    if achou.ok:
+        return achou.valor, ""
+    if achou.opcoes:
+        return "", f"Fila '{dita}' ambígua: {', '.join(achou.opcoes)}. Pergunte qual."
+    return _resolver_nome(dita, opcoes, "A fila")
+
+
+def _aviso_fila(tecnico: str, fila: str) -> str:
+    """Técnico fora da fila: o Assyst pode não achá-lo no type-ahead. Só
+    avisa — o banco de técnicos ainda não tem todos os pares."""
+    from services import referencia
+
+    dele = referencia.filas_do_tecnico(tecnico)
+    if dele and fila not in dele:
+        return f"{tecnico} não consta na fila {fila} (atende {', '.join(dele)})."
+    return ""
 
 
 def _desc_por_tombo() -> str:
@@ -567,17 +648,17 @@ def _prep_por_tombo(args: dict) -> "Acao | str":
     if not matricula:
         return "Falta a matrícula do usuário afetado. Pergunte ao técnico."
     o = _opcoes()
-    tecnico, erro = _resolver_nome(args.get("tecnico", ""), o["tecnicos"], "O técnico")
+    tecnico, erro = _tecnico_da_req(args.get("tecnico", ""), o["tecnicos"])
     if erro:
         return erro
-    fila, erro = _resolver_nome(args.get("fila", ""), o["filas"], "A fila")
+    fila, erro = _fila_da_req(args.get("fila", ""), tecnico, o["filas"])
     if erro:
         return erro
     if not str(args.get("edificio") or "").strip():
         return "Falta o edifício. Pergunte ao técnico."
     # Edifício e Item não travam se não estiverem nos Presets (a lista ainda é
     # curta): usa o cadastrado quando bate e, senão, segue com aviso no cartão.
-    avisos = []
+    avisos = [a for a in (_aviso_fila(tecnico, fila),) if a]
     edificio, erro = _resolver_nome(args["edificio"], o["edificios"], "O edifício")
     if erro:
         edificio = args["edificio"].strip()
@@ -723,11 +804,9 @@ def _prep_plantoes(args: dict) -> "Acao | str":
             valor = str(d.get(chave) or "").strip()
             if not valor:
                 return f"Falta o técnico {rotulo} em {data:%d/%m}. Pergunte ao técnico."
-            # Sem técnicos nos Presets, vai o nome como foi dito.
-            if tecnicos:
-                valor, erro = _resolver_nome(valor, tecnicos, f"O técnico {rotulo}")
-                if erro:
-                    return erro
+            valor, erro = _tecnico_da_req(valor, tecnicos, f"O técnico {rotulo}")
+            if erro:
+                return erro
             quem[chave] = valor
         datas.append(data)
         nomes.append(quem)
@@ -748,6 +827,9 @@ def _prep_plantoes(args: dict) -> "Acao | str":
     base = _prep_requisicoes({"requisicoes": reqs})
     if isinstance(base, str):
         return base
+    fora = list(dict.fromkeys(filter(None, (_aviso_fila(r["usuario_atribuido"], r["grupo_atribuido"])
+                                            for r in reqs))))
+    base.aviso = " ".join(fora + ([base.aviso] if base.aviso else []))
     semana = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
     if nova and nova != _supervisor():
         base.args["supervisor_novo"] = nova
@@ -946,13 +1028,11 @@ def _precisa_ler_atribuir(args: dict) -> bool:
 def _antes_atribuir(args: dict, s: Sessao) -> dict:
     """Lê a fila ATUAL do chamado: se o técnico estiver nela, o chamado fica
     onde está (ver _destino_atribuicao)."""
+    from services.ficha import ler_ficha
+
     chamados = _lista(args.get("chamados"))
-    page = _abrir_chamado({"chamado": chamados[0]}, s)
-    if page is None:
-        return args
-    campo = page.locator("input[name='assignedServDept.text']:visible")
-    atual = campo.first.input_value().strip() if campo.count() else ""
-    return {**args, "_fila_atual": atual} if atual else args
+    f = ler_ficha(s.pagina, chamados[0], s.log)
+    return {**args, "_fila_atual": f.fila} if f and f.fila else args
 
 
 def _exec_atribuir(a: dict, s: Sessao) -> Resultado:
@@ -1286,36 +1366,15 @@ def _hostname_fora_do_nome(args: dict) -> dict:
 def _antes_termo(args: dict, s: Sessao) -> dict:
     """Lê nome, matrícula e unidade do usuário afetado do chamado. O que o
     técnico disse na conversa vale mais que o lido."""
-    from services.browser_pw import _setor_pw
+    from services.assyst_common import _so_o_nome
+    from services.ficha import ler_ficha
 
     args = _hostname_fora_do_nome(args)
-    page = _abrir_chamado(args, s)
-    if page is None:
+    f = ler_ficha(s.pagina, str(args.get("chamado") or ""), s.log)
+    if f is None:
         return args
-    matricula, nome = _afetado(page)
-    return _completar(args, {"matricula": matricula, "nome": nome,
-                             "unidade": _setor_pw(page)})
-
-
-def _abrir_chamado(args: dict, s: Sessao):
-    """A página do chamado de `args['chamado']` aberta, ou None."""
-    from services.browser_pw import _navegar_para_chamado_pw
-    numero = str(args.get("chamado") or "").strip().upper()
-    if not numero:
-        return None
-    page = s.pagina()
-    return page if _navegar_para_chamado_pw(page, numero, s.log) else None
-
-
-def _afetado(page) -> tuple[str, str]:
-    """(matrícula, NOME) do usuário afetado — o campo traz `matricula(NOME)`
-    (ver assyst_common._so_o_nome)."""
-    from services.assyst_common import _so_o_nome
-    campo = page.locator("input[name='affectedUser.text']:visible")
-    bruto = campo.first.input_value().strip() if campo.count() else ""
-    if "(" not in bruto:
-        return "", ""
-    return bruto[:bruto.find("(")].strip(), _so_o_nome(bruto)
+    return _completar(args, {"matricula": f.afetado_matricula, "nome": f.afetado_nome,
+                             "unidade": _so_o_nome(f.secao) if f.secao else ""})
 
 
 def _completar(args: dict, lido: dict) -> dict:
@@ -1426,36 +1485,30 @@ def _hora(v) -> str:
 
 
 def _antes_demanda(args: dict, s: Sessao) -> dict:
-    from services.termos.demanda import extrair_descricao, extrair_local, nome_proprio
+    """Tudo pela FICHA do chamado (services/ficha.py, 23/10). O local segue a
+    regra única: técnico/IA > 'Local:' na descrição > (a IA lê do Pedido) >
+    Edifício + Sala do chamado — os dois últimos resolvidos no _prep_demanda."""
+    from services.ficha import ler_ficha
+    from services.termos.demanda import nome_proprio
 
-    page = _abrir_chamado(args, s)
-    if page is None:
+    f = ler_ficha(s.pagina, str(args.get("chamado") or ""), s.log)
+    if f is None:
         return args
-
-    def valor(seletor: str) -> str:
-        campo = page.locator(f"{seletor}:visible")
-        return campo.first.input_value().strip() if campo.count() else ""
-
-    try:
-        texto = page.frame_locator("iframe[title*='formattedRemarks']:visible") \
-            .first.locator("body").inner_text(timeout=5000)
-    except Exception:
-        texto = ""
-    try:
-        tecnico = page.locator("#userDropDownButton_label").first.inner_text(timeout=2000).strip()
-    except Exception:
-        tecnico = ""
-    _, nome = _afetado(page)
-    return _completar(args, {
-        "solicitante": nome_proprio(nome),
-        "data": valor("#txt_scheduledStartDateDate"),
-        "inicio_previsto": valor("#txt_scheduledStartDateTime"),
-        "fim_previsto": valor("#txt_scheduledEndDateTime"),
-        "local": extrair_local(texto),
-        "descricao": extrair_descricao(texto),
-        "tecnico_nome": tecnico,
+    dito = str(args.get("local") or "").strip()
+    out = _completar(args, {
+        "solicitante": nome_proprio(f.afetado_nome),
+        "data": f.inicio_data,
+        "inicio_previsto": f.inicio_hora,
+        "fim_previsto": f.fim_hora,
+        "local": f.local_descrito,
+        "descricao": f.evento,
+        "tecnico_nome": f.tecnico_logado,
         "tecnico_matricula": s.matricula,
     })
+    out["_origem_local"] = "" if dito else ("descrição" if f.local_descrito else "")
+    out["_local_chamado"] = f.local_do_chamado
+    out["_pedido"] = f.pedido
+    return out
 
 
 _CAMPOS_DEMANDA = ("chamado", "solicitante", "data", "inicio_previsto", "fim_previsto",
@@ -1476,11 +1529,19 @@ def _prep_demanda(args: dict) -> "Acao | str":
             faltam.append("o horário em que ele COMEÇOU e TERMINOU de fato")
         if not a["obs"]:
             faltam.append("a OBS (o que ele fez no evento)")
+        pedido = str(args.get("_pedido") or "")
+        local = ("" if a["local"] or not pedido else
+                 " Na próxima chamada, passe também `local` = onde é o evento, se o "
+                 f'Pedido do chamado disser (não pergunte isso ao técnico): "{pedido}"')
         return ("Antes de gerar, pergunte ao técnico numa mensagem só: "
                 + "; ".join(faltam) + ". Se ele disser que o validador vai ser "
-                "preenchido à mão, chame de novo com validador_a_mao=true.")
+                "preenchido à mão, chame de novo com validador_a_mao=true." + local)
     for k in ("inicio_previsto", "fim_previsto", "inicio", "fim"):
         a[k] = _hora(a[k])
+    # Regra única do local (23/10): técnico/IA > descrição > Edifício + Sala.
+    nota_local = "da descrição" if args.get("_origem_local") == "descrição" else ""
+    if not a["local"] and args.get("_local_chamado"):
+        a["local"], nota_local = args["_local_chamado"], "do Edifício/Sala do chamado"
 
     def ou_branco(v: str, motivo: str = "") -> str:
         return v or f"*(em branco{' — ' + motivo if motivo else ''})*"
@@ -1495,7 +1556,8 @@ def _prep_demanda(args: dict) -> "Acao | str":
     linhas = [
         f"**Chamado:** {a['chamado']} · **Data do serviço:** {ou_branco(a['data'])}",
         f"**Solicitante/Requisitante:** {ou_branco(a['solicitante'])}",
-        f"**Local:** {ou_branco(a['local'], 'não achei na descrição')}",
+        f"**Local:** {ou_branco(a['local'], 'não achei no chamado')}"
+        + (f" *({nota_local})*" if a["local"] and nota_local else ""),
         f"**Horário previsto:** {previsto}",
         f"**Descrição do evento:** {ou_branco(a['descricao'], 'não achei na descrição')}",
         f"**Validador:** {ou_branco(a['validador_nome'])} · "
@@ -1607,33 +1669,38 @@ def _inv_verificar_sla(args: dict, s: Sessao) -> str:
 # seção, edifício, Item B, os tombos e o PEDIDO sem o bloco de dados pessoais
 # (triagem.pedido_seguro) — para propor o desmembramento sem perguntar.
 
-_CAMPOS_TRIAGEM = (("secao", "section.text"), ("grupo", "department.text"),
-                   ("edificio", "building.text"), ("item_b", "itemB.text"),
-                   ("fila", "assignedServDept.text"))
+_MAX_TRIAGEM = 15   # ~5 s por chamado: a conversa não pode ficar presa
 
 
 def _inv_analisar_chamado(args: dict, s: Sessao) -> str:
-    from services.browser_pw import _navegar_para_chamado_pw
-    from services.triagem import triar
+    from services.ficha import ler_ficha
+    from services.triagem import triar_ficha
 
     chamados = _lista(args.get("chamados"))
-    if not chamados:
-        return "Falta o número do chamado."
     page, saida = s.pagina(), []
+    if args.get("minha_fila"):
+        # "Analisa minha fila" (22/10): lê a fila AQUI — para a IA vão só os
+        # números (os nomes dos usuários ficam no código).
+        from services.flow_minhafila_pw import ler_fila
+        fila = ler_fila(page, s.log)
+        if fila is None:
+            return "Não consegui ler a fila do técnico (a tela não carregou)."
+        if not fila:
+            return "A fila do técnico está VAZIA: não há chamado para analisar."
+        chamados = [c["referencia"] for c in fila if c.get("referencia")]
+        saida.append(f"Fila do técnico: {len(chamados)} chamado(s)"
+                     + (f"; analisados os {_MAX_TRIAGEM} primeiros" if len(chamados) > _MAX_TRIAGEM else "")
+                     + ".")
+        chamados = chamados[:_MAX_TRIAGEM]
+    if not chamados:
+        return "Falta o número do chamado (ou minha_fila=true)."
     for numero in (c.strip().upper() for c in chamados):
-        if not _navegar_para_chamado_pw(page, numero, s.log):
+        # Relê (recente=False): o técnico pode ter acabado de corrigir algo.
+        f = ler_ficha(lambda: page, numero, s.log, recente=False)
+        if f is None:
             saida.append(f"{numero}: não consegui abrir o chamado")
             continue
-        campos = {}
-        for chave, nome in _CAMPOS_TRIAGEM:
-            campo = page.locator(f"input[name='{nome}']:visible")
-            campos[chave] = campo.first.input_value().strip() if campo.count() else ""
-        try:
-            descricao = page.frame_locator("iframe[title*='formattedRemarks']:visible") \
-                .first.locator("body").inner_text(timeout=5000)
-        except Exception:
-            descricao = ""
-        saida.append(triar(numero, campos, descricao).resumo())
+        saida.append(triar_ficha(f).resumo())
     return "\n".join(saida)
 
 
@@ -1699,7 +1766,9 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
         "que corrigir (só leitura).",
         {"type": "object", "properties": {
             "chamados": _CHAMADOS,
-        }, "required": ["chamados"]},
+            "minha_fila": {"type": "boolean", "description":
+                           "true = analisar os chamados da fila do técnico."},
+        }},
         preparar=lambda a: "", investiga=_inv_analisar_chamado,
         dominio="chamados",
     ),
@@ -1716,12 +1785,15 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
         "base em cada filho.",
         {"type": "object", "properties": {
             "chamado_pai": {"type": "string"},
-            "tombos": {"type": "array", "items": {"type": "string"}},
+            "tombos": {"type": "array", "items": {"type": "string"}, "description":
+                       "Os que o técnico disse; sem eles, o sistema lê do chamado."},
             "descricao": {"type": "string", "description":
                           "Dos filhos. {{tombo}} onde entra o tombo (sem ele, vai no fim)."},
             "base": {"type": "string", "description": "Nome ou palavras da base."},
-        }, "required": ["chamado_pai", "tombos", "descricao"]},
+        }, "required": ["chamado_pai"]},
         preparar=_prep_desmembrar, executar=_exec_desmembrar,
+        # Tombos e descrição que faltarem vêm da ficha do pai (23/10).
+        antes=_antes_desmembrar, precisa_ler=_precisa_ler_desmembrar,
         dominio="chamados",
     ),
     Ferramenta(
@@ -1764,7 +1836,8 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
         {"type": "object", "properties": {
             "matricula": {"type": "string", "description": "Do usuário afetado."},
             "edificio": {"type": "string"},
-            "fila": {"type": "string", "description": "Grupo atribuído."},
+            "fila": {"type": "string", "description":
+                     "Grupo atribuído. Omita se o técnico não disse: o sistema usa a do técnico."},
             "tecnico": {"type": "string", "description": "Técnico atribuído (nome ou parte)."},
             "tombos": {"type": "array", "items": {"type": "string"},
                        "description": "Como o técnico escreveu."},
@@ -1774,7 +1847,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "resumo": {"type": "string"},
             "descricao": {"type": "string", "description":
                           "Só se diferente da do tipo. {tombo} onde entra o tombo."},
-        }, "required": ["matricula", "edificio", "fila", "tecnico"]},
+        }, "required": ["matricula", "edificio", "tecnico"]},
         preparar=_prep_por_tombo, executar=_exec_requisicoes,
         dominio="requisicao",
     ),
@@ -1978,12 +2051,16 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "inicio": {"type": "string", "description": "hh:mm em que o técnico começou de fato."},
             "fim": {"type": "string", "description": "hh:mm em que terminou de fato."},
             "obs": {"type": "string", "description": "O que o técnico fez, nas palavras dele."},
-            "local": {"type": "string", "description": "Só se o técnico corrigir."},
+            "local": {"type": "string", "description":
+                      "Onde é o evento: o que o técnico disse ou o que o Pedido do chamado diz."},
             "descricao": {"type": "string", "description": "Só se o técnico corrigir."},
             "validador_a_mao": {"type": "boolean", "description":
                                 "true só se o técnico disser que o validador fica em branco."},
         }, "required": ["chamado"]},
         preparar=_prep_demanda, executar=_exec_demanda, antes=_antes_demanda,
+        # Lê já na 1ª chamada (23/10): a pergunta do validador leva o Pedido,
+        # para a IA tirar dele o local. A ficha fica guardada para a 2ª.
+        precisa_ler=lambda a: bool(str(a.get("chamado") or "").strip()),
         dominio="termos",
     ),
 ]}

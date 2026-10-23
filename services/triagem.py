@@ -116,7 +116,8 @@ def _foruns(cidade: str) -> list[str]:
 # "pat. 332244", "*332244". Só números PERTO da palavra: número solto pode ser
 # telefone, matrícula ou CPF.
 _RE_GATILHO = re.compile(r"tomb\w*|patrim\w*|\bpat\b\.?|\*(?=\d)", re.I)
-_RE_NUMERO = re.compile(r"(?<![\d.\-/])\d{5,7}(?![\d.\-/])")
+# Ponto final logo depois ("Tombo 123456.") vale; ponto entre dígitos não (CPF, data).
+_RE_NUMERO = re.compile(r"(?<![\d\-/])(?<!\d\.)\d{5,7}(?![\d\-/])(?!\.\d)")
 _RE_CORTE = re.compile(r"[.;:]\s+[A-Za-zÀ-ú]|\n\s*\n")
 
 
@@ -197,6 +198,64 @@ def pedido_seguro(texto: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# O que é o pedido (tipo, equipamentos) e o que falta — 23/10
+# --------------------------------------------------------------------------- #
+#
+# Palpites por palavra-chave no PEDIDO (sem o bloco de dados pessoais). A IA
+# também lê o pedido: aqui é só a pista estruturada, não a palavra final.
+
+_TIPOS = (  # a ordem decide: o 1º que casar
+    ("evento", r"\bevento|capacita|treinament|palestra|semin[aá]rio|solenidade|j[uú]ri"
+               r"|videoconfer|transmiss[aã]o|apoio t[eé]cnico (para|n[ao]s?) "),
+    ("acesso/sistema", r"\bsenha|\bacesso|\blogin|permiss|\bpje\b|\bsaj\b|e-?mail\b|cadastr"
+                       r"|certificado digital|\btoken\b"),
+    ("manutenção", r"n[aã]o (liga|funciona|imprime|conecta|abre|inicia)|parou|defeito|quebr|lent[ao]"
+                   r"|travand|\berro\b|sem (rede|internet|sinal|imagem|som)|queimou|barulho"),
+    ("instalação", r"instala|\bligar\b|conectar|montar|configurar|remanej|mudan[cç]a de (sala|local)"
+                   r"|troca de (m[aá]quina|computador|equipamento)|\bnov[oa]s? (m[aá]quina|computador|monitor)"),
+)
+_EQUIPAMENTOS = (  # nome no singular, plural, padrão
+    ("computador", "computadores", r"computador(es)?|m[aá]quinas?|\bcpus?\b|desktops?|\bpcs?\b"),
+    ("notebook", "notebooks", r"notebooks?|laptops?"),
+    ("monitor", "monitores", r"monitor(es)?"),
+    ("impressora", "impressoras", r"impressoras?|multifuncion\w*"),
+    ("scanner", "scanners", r"scanners?|digitalizador\w*"),
+    ("projetor", "projetores", r"projetor(es)?|data ?shows?"),
+    ("nobreak", "nobreaks", r"no-?breaks?|estabilizador\w*"),
+    ("webcam", "webcams", r"webcams?|c[aâ]meras?"),
+    ("telefone", "telefones", r"telefones?|aparelhos? telef\w*"),
+    ("TV", "TVs", r"\btvs?\b|televis\w*"),
+)
+_NUMEROS = {"um": 1, "uma": 1, "dois": 2, "duas": 2, "tres": 3, "três": 3, "quatro": 4,
+            "cinco": 5, "seis": 6, "sete": 7, "oito": 8, "nove": 9, "dez": 10}
+
+
+def tipo_do_pedido(pedido: str) -> str:
+    t = (pedido or "").lower()
+    for nome, padrao in _TIPOS:
+        if re.search(padrao, t):
+            return nome
+    return ""
+
+
+def equipamentos(pedido: str) -> dict[str, int]:
+    """{'monitor': 2} de "ligar dois monitores". Sem número antes = 1."""
+    t = (pedido or "").lower()
+    saida: dict[str, int] = {}
+    for nome, _, padrao in _EQUIPAMENTOS:
+        for m in re.finditer(rf"(?:\b(\d{{1,2}}|{'|'.join(_NUMEROS)})\s+)?(?:\w+\s+)?({padrao})", t):
+            n = m[1]
+            qtd = int(n) if n and n.isdigit() else _NUMEROS.get(n or "", 1)
+            saida[nome] = max(saida.get(nome, 0), qtd)
+    return saida
+
+
+def _texto_equip(eq: dict[str, int]) -> str:
+    nomes = {n: (sg, pl) for n, (sg, pl, _) in ((e[0], e) for e in _EQUIPAMENTOS)}
+    return ", ".join(f"{q} {nomes[n][1] if q > 1 else nomes[n][0]}" for n, q in eq.items())
+
+
+# --------------------------------------------------------------------------- #
 # Chamado inteiro
 # --------------------------------------------------------------------------- #
 
@@ -207,6 +266,10 @@ class Triagem:
     edificio: Edificio
     item_b: ItemB
     pedido: str = ""            # pedido_seguro(descrição)
+    extras: str = ""            # sala, categoria, agendado (da ficha)
+    tipo: str = ""              # evento, manutenção, instalação, acesso/sistema
+    equipamentos: dict = dataclasses.field(default_factory=dict)
+    faltas: list = dataclasses.field(default_factory=list)   # o que falta para atender
 
     def correcoes(self) -> dict[str, str]:
         """Campo -> valor novo, só o que tem sugestão CERTA."""
@@ -238,8 +301,15 @@ class Triagem:
             ib += f" ({b.motivo})"
         if b.tombos:
             ib += f". Tombos: {', '.join(b.tombos)}"
+        extras = f" {self.extras}." if self.extras else ""
+        if self.tipo:
+            extras += f" Tipo: {self.tipo}."
+        if self.equipamentos:
+            extras += f" Equipamentos: {_texto_equip(self.equipamentos)}."
+        if self.faltas:
+            extras += f" FALTA: {'; '.join(self.faltas)}."
         pedido = f' Pedido: "{self.pedido}"' if self.pedido else ""
-        return f"{self.chamado} (seção {self.secao or '?'}): {ed}. {ib}.{pedido}"
+        return f"{self.chamado} (seção {self.secao or '?'}): {ed}. {ib}.{extras}{pedido}"
 
 
 def triar(chamado: str, campos: dict, descricao: str) -> Triagem:
@@ -251,4 +321,42 @@ def triar(chamado: str, campos: dict, descricao: str) -> Triagem:
                                   campos.get("edificio", ""), campos.get("fila", "")),
         item_b=sugerir_item_b(campos.get("item_b", ""), descricao),
         pedido=pedido_seguro(descricao),
+        tipo=tipo_do_pedido(pedido_seguro(descricao)),
+        equipamentos=equipamentos(pedido_seguro(descricao)),
     )
+
+
+def triar_ficha(f) -> Triagem:
+    """A triagem de uma services.ficha.Ficha (23/10: todas as ferramentas
+    leem o chamado pela ficha)."""
+    t = triar(f.numero, {"secao": f.secao, "grupo": f.grupo, "edificio": f.edificio,
+                         "item_b": f.item_b, "fila": f.fila}, f.descricao)
+    extras = []
+    if f.sala:
+        extras.append(f"Sala {f.sala}")
+    if f.categoria:
+        extras.append(f"Categoria {f.categoria}")
+    if f.inicio_data:
+        extras.append(f"Agendado {f.inicio_data} {f.inicio_hora}"
+                      + (f" às {f.fim_hora}" if f.fim_hora else ""))
+    t.extras = " · ".join(extras)
+    t.faltas = _faltas(t, f)
+    return t
+
+
+def _faltas(t: Triagem, f) -> list[str]:
+    """O que falta para atender — o técnico resolve antes de sair."""
+    faltas = []
+    if t.edificio.por_definir and not t.edificio.sugerido:
+        faltas.append("Edifício (seção sem histórico ou ambígua)")
+    qtd = sum(t.equipamentos.values())
+    if t.tipo in ("manutenção", "instalação") and qtd:
+        if not t.item_b.tombos:
+            faltas.append("tombos (coletar no atendimento)")
+        elif len(t.item_b.tombos) < qtd:
+            faltas.append(f"tombos: {qtd} equipamento(s) e só {len(t.item_b.tombos)} tombo(s)")
+    if t.tipo == "evento" and not f.inicio_data:
+        faltas.append("Início agendado do evento")
+    if t.tipo == "evento" and not (f.sala and "definir" not in f.sala.lower()):
+        faltas.append("Sala do evento")
+    return faltas

@@ -75,6 +75,11 @@ def executar_plano(acoes, sessao: Sessao, executar, emitir) -> None:
                 r = executar(acao, sessao)
             except Exception as e:
                 r = Resultado(f"Erro inesperado em '{acao.titulo}': {e}", ok=False)
+            if getattr(acao, "escreve", False):
+                # A ação mudou (ou pode ter mudado) o chamado: a ficha
+                # guardada ficou velha (services/ficha.py, 23/10).
+                from services import ficha
+                ficha.esquecer(*ficha.numeros_da_acao(acao.args))
             emitir("resultado", (i, r))
             if not r.ok:
                 for j in range(i + 1, len(acoes)):

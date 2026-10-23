@@ -202,6 +202,8 @@ def _status(nome: str, args: dict) -> tuple[str, str]:
         return f"Procurando o chamado{alvo} na sua fila...", f"Procurou o chamado{alvo} na fila"
     if nome == "verificar_sla":
         return f"Verificando o SLA{alvo}...", f"Verificou o SLA{alvo}"
+    if nome == "analisar_chamado" and args.get("minha_fila") and not args.get("chamados"):
+        return "Analisando os chamados da sua fila...", "Analisou os chamados da fila"
     if nome == "analisar_chamado":
         return f"Analisando o chamado{alvo}...", f"Analisou o chamado{alvo}"
     if nome == "listar_bases_conhecimento":
