@@ -6,10 +6,10 @@ Os pedidos ficam no banco DESTA máquina (services/agente/registro.py), por
 arquivo (os pedidos citam nomes e chamados — tratar como dado interno).
 
 Uso:
-    python relatorio_agente.py                 resumo dos últimos 30 dias
-    python relatorio_agente.py --dias 7        só a última semana
-    python relatorio_agente.py --ultimos 30    lista os 30 pedidos mais recentes
-    python relatorio_agente.py --csv pedidos.csv   exporta tudo para planilha
+    python scripts/relatorio_agente.py                 resumo dos últimos 30 dias
+    python scripts/relatorio_agente.py --dias 7        só a última semana
+    python scripts/relatorio_agente.py --ultimos 30    lista os 30 pedidos mais recentes
+    python scripts/relatorio_agente.py --csv pedidos.csv   exporta tudo para planilha
 
 O que olhar primeiro: a seção "PARA INVESTIGAR" (a IA deu erro, a execução
 falhou, ou o roteador não achou a ferramenta e precisou mandar todas). Frase
@@ -25,7 +25,7 @@ import statistics
 import sys
 from collections import Counter
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services import db
 

@@ -8,7 +8,7 @@ resultado de cada passo.
 
 Para quê (conversa de 07-08/10): diagnosticar quando o Assistente erra,
 estudar como os técnicos pedem (frase real que errou vira caso do
-eval_roteador.py) e medir. Leitura: `python relatorio_agente.py`.
+eval_roteador.py) e medir. Leitura: `python scripts/relatorio_agente.py`.
 
 Regras:
   - NUNCA derruba o Assistente: toda função engole o próprio erro (registro

@@ -7,7 +7,7 @@ tokens. Rodar a cada mudança no roteador, em domínio novo (ex.: documentos)
 ou quando um pedido real cair no domínio errado — esse pedido vira um caso.
 
 Uso:
-    python eval_roteador.py          (sai com código 1 se algum caso falhar)
+    python scripts/eval_roteador.py          (sai com código 1 se algum caso falhar)
 
 Critério de cada caso:
   - esperado = conjunto de domínios: TODOS precisam ter sido escolhidos.
@@ -22,7 +22,7 @@ Critério de cada caso:
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.agente.roteador import dominios
 
