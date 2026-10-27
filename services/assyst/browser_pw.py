@@ -8,7 +8,7 @@ checagem de sessao, preenchimento de descricao e captura do numero do filho.
 IMPORTANTE: a API sync do Playwright exige que o objeto nasca e seja usado na
 MESMA thread. Por isso NAO existe singleton global aqui: o `NavegadorPW` e criado
 dentro da thread do worker, via `with`. Os helpers SEM navegador (URLs,
-normalizacao de id, montagem de descricao) vivem em `services/assyst_common.py`.
+normalizacao de id, montagem de descricao) vivem em `services/assyst/assyst_common.py`.
 """
 
 import os
@@ -20,7 +20,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 # Reaproveita as constantes/regras ja validadas no fluxo Selenium, para as duas
 # implementacoes nao divergirem com o tempo.
-from services.assyst_common import (
+from services.assyst.assyst_common import (
     _URL_HOME, _URL_CHAMADO, _normalizar_id_assyst, _so_o_nome,
 )
 from services.paths import PERFIL_NAVEGADOR_DIR

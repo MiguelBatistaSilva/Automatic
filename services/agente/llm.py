@@ -121,7 +121,7 @@ def disponiveis() -> list[str]:
 def modelo_escolhido() -> str:
     """O modelo do seletor: o último escolhido, se ainda tiver chave; senão o
     primeiro disponível; senão o padrão."""
-    from services import db
+    from services.dados import db
     r = db.consultar("SELECT valor FROM app_config WHERE chave = 'modelo_ia'")
     escolhido = r[0]["valor"] if r else PADRAO
     ok = disponiveis()
@@ -133,7 +133,7 @@ def modelo_escolhido() -> str:
 def escolher_modelo(modelo_id: str) -> None:
     if modelo_id not in MODELOS:
         raise ValueError(f"Modelo desconhecido: {modelo_id}")
-    from services import db
+    from services.dados import db
     with db.transacao() as con:
         con.execute("INSERT OR REPLACE INTO app_config VALUES ('modelo_ia', ?)",
                     (modelo_id,))

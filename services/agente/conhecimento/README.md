@@ -25,4 +25,4 @@ A atualização do app leva para todos os técnicos.
 
 Não escreva aqui:
 - Senhas, chaves, matrículas ou dados de usuários.
-- O passo a passo de clique dos fluxos (isso é código, em services/flow_*).
+- O passo a passo de clique dos fluxos (isso é código, em services/fluxos/flow_*).

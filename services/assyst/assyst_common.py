@@ -1,5 +1,5 @@
 """
-services/assyst_common.py — Helpers do Assyst que NAO dependem de navegador.
+services/assyst/assyst_common.py — Helpers do Assyst que NAO dependem de navegador.
 
 Sao Python/pandas/arquivo puro: URLs, normalizacao de id, montagem da descricao
 a partir da linha do CSV e o registro/abertura do TXT de chamados filhos. Antes

@@ -1,5 +1,5 @@
 """
-services/flow_informacao_pw.py — Fluxo "Adicionar Informação" em Playwright.
+services/fluxos/flow_informacao_pw.py — Fluxo "Adicionar Informação" em Playwright.
 
 Só existe no bot (Telegram) — não tem tela no app desktop. Mesma família do
 `flow_atendimento_pw.py`: mesmo menu, mesmo tipo de pop-up de ação, só muda o
@@ -17,8 +17,8 @@ até alguém recapturar o id certo.
 Ver memoria: project_flow_atendimento, project_ckeditor_fix.
 """
 
-from services.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
-from services.ckeditor_pw import preencher_formatado_popup, texto_livre
+from services.assyst.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
+from services.assyst.ckeditor_pw import preencher_formatado_popup, texto_livre
 
 # Excepts largos DE PROPOSITO, mesmo motivo do flow_atendimento_pw: o
 # Playwright levanta `playwright.sync_api.Error` (não só PWTimeout) em
@@ -129,7 +129,7 @@ def adicionar_informacao(page, log, numero_chamado: str, informacao: str,
 
     # 6. Preencher o texto no pop-up (mira o editor do pop-up), em AZUL
     # MARINHO — padrao de texto da auditoria (2026-09-30), via API do CKEditor
-    # (services/ckeditor_pw.py, a mesma do Atendimento Programado). O
+    # (services/assyst/ckeditor_pw.py, a mesma do Atendimento Programado). O
     # _preencher_texto_dialog (digitacao, sem cor) continua acima, sem uso.
     if not preencher_formatado_popup(page, log, texto_livre(informacao)):
         log("Nao foi possivel preencher o texto da informacao.", "error")

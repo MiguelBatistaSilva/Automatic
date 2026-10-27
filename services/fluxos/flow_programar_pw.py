@@ -1,5 +1,5 @@
 """
-services/flow_programar_pw.py — Fluxo "Atendimento Programado" em Playwright.
+services/fluxos/flow_programar_pw.py — Fluxo "Atendimento Programado" em Playwright.
 
     Ações -> Ações de relógio -> Atendimento Programado
     -> pop-up "ATEN PROG ação no evento ..." -> Descrição -> Salvar ação
@@ -11,7 +11,7 @@ Só a DESCRIÇÃO é preenchida. Os campos Data/hora do pop-up (HOJE/AGORA) fica
 como estão: o dia e a hora combinados vão só no TEXTO (decisão do usuário).
 
 Texto no padrão da auditoria — azul marinho, com nome/dia/hora/motivo em
-vermelho (ver services/ckeditor_pw.py):
+vermelho (ver services/assyst/ckeditor_pw.py):
     Conforme solicitado pelo(a) Sr.(a) NOME_AFETADO, o atendimento está sendo
     programado para o dia dd/mm às hh:mm.
     Motivo(s): Breve descrição.
@@ -22,10 +22,10 @@ um erro num chamado não pode derrubar o lote.
 
 import re
 
-from services.browser_pw import (
+from services.assyst.browser_pw import (
     _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw,
 )
-from services.ckeditor_pw import (
+from services.assyst.ckeditor_pw import (
     AZUL_MARINHO, VERMELHO, paragrafo, preencher_formatado_popup, trecho,
 )
 

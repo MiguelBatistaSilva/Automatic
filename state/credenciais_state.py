@@ -1,7 +1,7 @@
 """
 state/credenciais_state.py — Back-end do diálogo de Credenciais.
 
-Reusa `services/credenciais.py`: a matrícula fica num JSON e a SENHA vai para o
+Reusa `services/dados/credenciais.py`: a matrícula fica num JSON e a SENHA vai para o
 Cofre de Credenciais do Windows (keyring) — nunca em disco em texto plano. É daqui
 que as páginas de automação passam a obter as credenciais (`credenciais.carregar()`).
 
@@ -28,7 +28,7 @@ class CredenciaisState(rx.State):
     @rx.event
     def abrir(self):
         """Carrega o que está salvo e abre o pop-up."""
-        from services import credenciais
+        from services.dados import credenciais
         mat, senha = credenciais.carregar()
         self.matricula = mat
         self.senha = senha
@@ -57,7 +57,7 @@ class CredenciaisState(rx.State):
 
     @rx.event
     def salvar(self):
-        from services import credenciais
+        from services.dados import credenciais
         try:
             credenciais.salvar(self.matricula, self.senha)
         except ValueError as e:
@@ -74,7 +74,7 @@ class CredenciaisState(rx.State):
 
     @rx.event
     def apagar(self):
-        from services import credenciais
+        from services.dados import credenciais
         credenciais.apagar()
         self.matricula = ""
         self.senha = ""

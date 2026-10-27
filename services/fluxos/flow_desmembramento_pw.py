@@ -1,12 +1,12 @@
 """
-services/flow_desmembramento_pw.py — Os tres modos do Desmembramento em Playwright.
+services/fluxos/flow_desmembramento_pw.py — Os tres modos do Desmembramento em Playwright.
 
 Substitui os antigos flow_base / flow_3n / flow_bc (Selenium), que duplicavam
 entre si o bloco de criacao do chamado e a fase de Base de Conhecimento. Aqui a
 duplicacao some: a classe base `FluxoDesmembramentoPW` concentra as acoes de
 navegador, e cada modo e uma subclasse com seu proprio `executar()`.
 
-Papel que era do DriverManager agora e do `NavegadorPW` (services/browser_pw.py):
+Papel que era do DriverManager agora e do `NavegadorPW` (services/assyst/browser_pw.py):
 a page ja chega pronta; o login e feito uma unica vez no inicio de cada execucao.
 
 Medidas de seguranca preservadas do Selenium: checkpoint por chamado (3 estados),
@@ -18,16 +18,16 @@ import hashlib
 
 from playwright.sync_api import TimeoutError as PWTimeout
 
-from services.browser_pw import (
+from services.assyst.browser_pw import (
     _fazer_login_pw, _navegar_para_chamado_pw, _sessao_expirada_pw,
     _relogin_pw, _preencher_descricao_pw, _capturar_numero_filho_pw,
     _numero_do_titulo,
 )
-from services.assyst_common import (
+from services.assyst.assyst_common import (
     _montar_descricao, _registrar_filho, _abrir_txt_filhos,
 )
-from services.kb_manager_pw import BaseAplicadaSemRetorno
-from services.checkpoint import (
+from services.fluxos.kb_manager_pw import BaseAplicadaSemRetorno
+from services.dados.checkpoint import (
     inicializar, marcar_salvo, marcar_concluido_linha,
     existe_pendente, foi_concluido, status_linha, numero_filho,
     esta_corrompido,

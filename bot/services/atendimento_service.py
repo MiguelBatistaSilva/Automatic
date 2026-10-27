@@ -10,8 +10,8 @@ o `iniciar_atendimento` vai ate preencher a descricao e PARA antes de clicar em
 "Salvar acao": da para exercitar o caminho inteiro, com chamado real, sem
 alterar nada. Use isso para testar.
 """
-from services.browser_pw import NavegadorPW, _fazer_login_pw
-from services.flow_atendimento_pw import DESCRICAO_PADRAO, iniciar_atendimento
+from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw
+from services.fluxos.flow_atendimento_pw import DESCRICAO_PADRAO, iniciar_atendimento
 
 
 def _silencioso(msg, tipo="info"):

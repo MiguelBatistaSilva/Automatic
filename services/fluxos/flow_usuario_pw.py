@@ -1,27 +1,29 @@
 """
-services/flow_fornecedor_pw.py — Fluxo "Aguardando Info do Fornecedor" em Playwright.
+services/fluxos/flow_usuario_pw.py — Fluxo "Aguardando Info do Usuário *" em Playwright.
 
 Só existe no bot (Telegram) — não tem tela no app desktop. Mesma família do
-`flow_informacao_pw.py` (e do `flow_atendimento_pw.py`): mesmo menu, mesmo
-tipo de pop-up de ação, só muda o item clicado.
+`flow_fornecedor_pw.py`/`flow_informacao_pw.py` (e do `flow_atendimento_pw.py`):
+mesmo menu, mesmo tipo de pop-up de ação, só muda o item clicado.
 
 Caminho no Assyst:
-    Ações -> Ações de relógio -> Aguardando Info do Fornecedor -> texto -> Salvar ação.
+    Ações -> Ações de relógio -> Aguardando Info do Usuário * -> texto -> Salvar ação.
 
-SELETOR SÓ POR TEXTO, DE PROPÓSITO: assim como 'Adicionar Informação', este
-item não teve o id numérico capturado no registry Dojo (só 'Atendimento
-Iniciado' tem, id 227). Se o texto do botão mudar no Assyst, este seletor
-quebra silenciosamente até alguém recapturar o id certo.
+SELETOR SÓ POR TEXTO, DE PROPÓSITO: mesmo caso de 'Adicionar Informação' e
+'Aguardando Info do Fornecedor' — sem id numérico capturado no registry
+Dojo (só 'Atendimento Iniciado' tem, id 227). O `*` no final É PARTE DO
+RÓTULO no Assyst — confirmado com o Miguel, não é ênfase.
 
-Ver memoria: project_flow_informacao_bot, project_flow_atendimento.
+Ver memoria: project_flow_fornecedor_bot, project_flow_informacao_bot.
 """
 
-from services.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
-from services.ckeditor_pw import preencher_formatado_popup, texto_livre
+from services.assyst.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
+from services.assyst.ckeditor_pw import (
+    AZUL_MARINHO, VERMELHO, paragrafo, preencher_formatado_popup, texto_livre, trecho,
+)
 
 _SEL_MENU_ACOES = "#menuActions"
 _SEL_ACOES_RELOGIO = "td.dijitMenuItemLabel:text-is('Ações de relógio')"
-_SEL_FORNECEDOR_TXT = "td.dijitMenuItemLabel:text-is('Aguardando Info do Fornecedor')"
+_SEL_AGUARDANDO_USUARIO_TXT = "td.dijitMenuItemLabel:text-is('Aguardando Info do Usuário *')"
 _SEL_DIALOGO = "#ManageActionForm_actionDialog"
 _SEL_SALVAR = "[id='ManageActionForm.btSave']"
 _SEL_IFRAME_EDITOR = "iframe[title*='formattedRemarks']"
@@ -32,9 +34,9 @@ def _preencher_texto_dialog(page, log, texto: str) -> bool:
     Preenche o texto no editor do POP-UP da ação.
 
     Mesma logica e mesmo motivo de `_preencher_texto_dialog` em
-    flow_informacao_pw.py (mira o ULTIMO editor 'formattedRemarks' da tela —
-    o do pop-up, não o do evento — e digita em vez de innerHTML para
-    atualizar o modelo interno do CKEditor).
+    flow_fornecedor_pw.py/flow_informacao_pw.py (mira o ULTIMO editor
+    'formattedRemarks' da tela — o do pop-up, não o do evento — e digita em
+    vez de innerHTML para atualizar o modelo interno do CKEditor).
     """
     try:
         editor = page.frame_locator(_SEL_IFRAME_EDITOR).last
@@ -59,11 +61,47 @@ def _preencher_texto_dialog(page, log, texto: str) -> bool:
         return False
 
 
-def aguardar_info_fornecedor(page, log, numero_chamado: str, informacao: str,
-                             modo_teste: bool = False) -> tuple[bool, dict]:
+def montar_texto(nome: str, descricao: str, testado: bool = False) -> str:
+    """Modelo da auditoria para 'Aguardando Info do Usuário *' (2026-09-30).
+
+    Azul marinho; em VERMELHO só o nome do usuário e a descrição (o que o
+    técnico escreveu — cada linha vira um parágrafo). O fecho "Testado pelo
+    usuário? (X) Não" é o motivo de aguardar o usuário.
+
+    `testado=True` marca "(X) Sim": é o mesmo modelo usado no RESOLVIDO
+    (services/fluxos/flow_resolver_pw.py — "o script de resolução é o mesmo",
+    usuário, 01/10). O padrão False mantém o Aguardando Usuário como era.
+    """
+    a, v = AZUL_MARINHO, VERMELHO
+    vazio = "<p>&nbsp;</p>"
+    # Um procedimento só fica NA MESMA LINHA de "Descrever ação tomada:";
+    # vários viram lista embaixo (pedido do usuário, 02/10 — antes era sempre
+    # lista, até para uma frase).
+    linhas = [l.strip() for l in descricao.strip().split("\n") if l.strip()]
+    if len(linhas) == 1:
+        acao = [paragrafo(trecho("Descrever ação tomada: ", a),
+                          trecho(linhas[0].lstrip("-").strip(), v))]
+    else:
+        acao = [paragrafo(trecho("Descrever ação tomada: ", a)),
+                texto_livre(descricao.strip(), v)]
+    return "".join([
+        paragrafo(trecho("Acompanhado do(a) usuário(a) ", a), trecho(nome, v),
+                  trecho(", foi realizado o procedimento abaixo:", a)),
+        vazio,
+        *acao,
+        vazio,
+        paragrafo(trecho("Testado pelo usuário?", a)),
+        paragrafo(trecho("(X) Sim" if testado else "( ) Sim", a)),
+        paragrafo(trecho(("( )" if testado else "(X)")
+                         + " Não. Conclusão da solicitação pendente de testes do usuário.", a)),
+    ])
+
+
+def aguardar_info_usuario(page, log, numero_chamado: str, informacao: str,
+                          modo_teste: bool = False) -> tuple[bool, dict]:
     """
     Adiciona uma informação (texto livre) a um chamado, via 'Ações de
-    relógio -> Aguardando Info do Fornecedor'.
+    relógio -> Aguardando Info do Usuário *'.
 
     modo_teste=True  -> vai ate preencher o texto e PARA (nao clica em
                         'Salvar ação', nao altera o chamado).
@@ -100,15 +138,15 @@ def aguardar_info_fornecedor(page, log, numero_chamado: str, informacao: str,
         log(f"Erro ao revelar 'Ações de relógio': {e}", "error")
         return False, info
 
-    # 4. Clicar em 'Aguardando Info do Fornecedor'
+    # 4. Clicar em 'Aguardando Info do Usuário *'
     try:
-        page.click(_SEL_FORNECEDOR_TXT, timeout=10000)
-        log("Clicado em 'Aguardando Info do Fornecedor'.", "success")
+        page.click(_SEL_AGUARDANDO_USUARIO_TXT, timeout=10000)
+        log("Clicado em 'Aguardando Info do Usuário *'.", "success")
     except Exception as e:
-        log(f"Erro ao clicar em 'Aguardando Info do Fornecedor': {e}", "error")
+        log(f"Erro ao clicar em 'Aguardando Info do Usuário *': {e}", "error")
         log("Confirme que essa acao esta disponivel no chamado e que o "
             "texto do botao no Assyst e exatamente "
-            "'Aguardando Info do Fornecedor'.", "info")
+            "'Aguardando Info do Usuário *' (com o asterisco).", "info")
         return False, info
 
     # 5. Esperar o pop-up da acao
@@ -119,11 +157,15 @@ def aguardar_info_fornecedor(page, log, numero_chamado: str, informacao: str,
         log(f"O pop-up da ação não abriu: {e}", "error")
         return False, info
 
-    # 6. Preencher o texto no pop-up (mira o editor do pop-up), em AZUL
-    # MARINHO — padrao de texto da auditoria (2026-09-30), via API do CKEditor
-    # (services/ckeditor_pw.py, a mesma do Atendimento Programado). O
-    # _preencher_texto_dialog (digitacao, sem cor) continua acima, sem uso.
-    if not preencher_formatado_popup(page, log, texto_livre(informacao)):
+    # 6. Preencher o texto no pop-up (mira o editor do pop-up) no MODELO da
+    # auditoria (2026-09-30): azul marinho, com o nome e a descricao em
+    # vermelho — ver `montar_texto`. Entra pela API do CKEditor
+    # (services/assyst/ckeditor_pw.py); o _preencher_texto_dialog (digitacao, sem
+    # cor) continua acima, sem uso. O nome e obrigatorio no modelo.
+    if not info["usuario"]:
+        log("Nao consegui ler o Usuario afetado do chamado.", "error")
+        return False, info
+    if not preencher_formatado_popup(page, log, montar_texto(info["usuario"], informacao)):
         log("Nao foi possivel preencher o texto da informacao.", "error")
         return False, info
 
@@ -149,6 +191,6 @@ def aguardar_info_fornecedor(page, log, numero_chamado: str, informacao: str,
             "registrada. Confira o chamado manualmente.", "error")
         return False, info
 
-    log(f"Aguardando Info do Fornecedor registrado com sucesso no chamado "
+    log(f"Aguardando Info do Usuário registrado com sucesso no chamado "
         f"{numero_chamado}.", "success")
     return True, info

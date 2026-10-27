@@ -1,5 +1,5 @@
 """
-services/flow_info_recebida_pw.py — As ações de RETOMADA do relógio (2026-10-06).
+services/fluxos/flow_info_recebida_pw.py — As ações de RETOMADA do relógio (2026-10-06).
 
 As ações de relógio do Assyst vêm em PARES (regra do usuário): o chamado
 pausado com uma ação tem que ser retomado com o par DELA.
@@ -26,8 +26,8 @@ Texto (padrão da auditoria):
   - Fornecedor: texto livre do técnico, em azul marinho.
 """
 
-from services.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
-from services.ckeditor_pw import (
+from services.assyst.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
+from services.assyst.ckeditor_pw import (
     AZUL_MARINHO, VERMELHO, paragrafo, preencher_formatado_popup, texto_livre, trecho,
 )
 

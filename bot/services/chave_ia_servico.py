@@ -13,7 +13,7 @@ segredo) fica no banco, em app_config ('bot_modelo_ia:<chat_id>').
 """
 import keyring
 
-from services import db
+from services.dados import db
 from services.agente import llm
 
 SERVICO = "Automatic-Bot-IA"

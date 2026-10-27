@@ -1,5 +1,5 @@
 """
-services/requisicao_presets.py — valores pré-cadastrados para os campos do
+services/dados/requisicao_presets.py — valores pré-cadastrados para os campos do
 /requisicao no bot (Telegram).
 
 Motivo de existir: no celular, digitar cada campo da Requisição toda vez é
@@ -9,11 +9,11 @@ Requisição" no app) passa a escolher por BOTÃO no bot, em vez de digitar.
 Campo SEM preset cadastrado cai para digitado — não trava o fluxo. Ver
 `bot/commands/cmd_requisicao.py` para como isso decide o passo a passo.
 
-Mora no banco (services/db.py, tabela requisicao_presets) desde 2026-09-28;
+Mora no banco (services/dados/db.py, tabela requisicao_presets) desde 2026-09-28;
 antes era data/requisicao_presets.json. A interface continua um dict
 {campo: [valores]} porque cada CAMPO tem sua própria lista de valores.
 """
-from services import db
+from services.dados import db
 
 # Campos que aceitam preset no bot — bate com requisicao_campos.ORDEM_COLUNAS
 # menos usuario_afetado e descricao (esses dois são sempre digitados, texto

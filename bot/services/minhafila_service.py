@@ -2,13 +2,13 @@
 bot/minhafila_service.py — Minha Fila sem interface.
 
 So existe aqui: nao ha tela no app desktop para este fluxo (ver
-services/flow_minhafila_pw.py). Mesmo papel do sla_service.py: a orquestracao
+services/fluxos/flow_minhafila_pw.py). Mesmo papel do sla_service.py: a orquestracao
 (login -> leitura da grade) roda sozinha, para o bot poder chamar.
 
 SO LEITURA: abre a fila do tecnico e le a grade. Nao altera nada.
 """
-from services.browser_pw import NavegadorPW, _fazer_login_pw
-from services.flow_minhafila_pw import ler_fila
+from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw
+from services.fluxos.flow_minhafila_pw import ler_fila
 
 
 def _silencioso(msg, tipo="info"):

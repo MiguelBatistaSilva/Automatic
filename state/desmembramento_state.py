@@ -22,8 +22,8 @@ import io
 
 import reflex as rx
 
-from services.checkpoint import existe_pendente, foi_concluido, resumo as resumo_checkpoint
-from services.flow_desmembramento_pw import _chave_checkpoint
+from services.dados.checkpoint import existe_pendente, foi_concluido, resumo as resumo_checkpoint
+from services.fluxos.flow_desmembramento_pw import _chave_checkpoint
 from state.flow_runner import FlowRunnerState
 
 DESCRICAO_PADRAO = "Solicito atualização de sistema..."
@@ -60,7 +60,7 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
 
     @rx.event
     def on_load(self):
-        from services import kb_store
+        from services.dados import kb_store
         entries = kb_store.carregar()
         self.kbs = [e["nome_artigo"] for e in entries]
 
@@ -172,7 +172,7 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
             self.logs = []
             self.rodando = True
 
-        from services import credenciais
+        from services.dados import credenciais
         matricula, senha = credenciais.carregar()
         if not matricula or not senha:
             async with self:
@@ -184,7 +184,7 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
         # Monta o kb_config a partir do nome selecionado (lê o kb_store fresco).
         kb_config = None
         if modo in ("completo", "bc"):
-            from services import kb_store
+            from services.dados import kb_store
             entry = next((e for e in kb_store.carregar() if e["nome_artigo"] == kb_nome), None)
             if not entry:
                 async with self:
@@ -201,9 +201,9 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
             df = pd.DataFrame(linhas, columns=colunas)
 
         def worker(log, emit):
-            from services.browser_pw import NavegadorPW
-            from services.kb_manager_pw import executar_kb_unica_pw
-            from services.flow_desmembramento_pw import (
+            from services.assyst.browser_pw import NavegadorPW
+            from services.fluxos.kb_manager_pw import executar_kb_unica_pw
+            from services.fluxos.flow_desmembramento_pw import (
                 FluxoCompletoPW, FluxoCriarPW, FluxoBCPW,
             )
             # Só Base navega para o próximo chamado logo depois da BC, então não

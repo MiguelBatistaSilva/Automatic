@@ -27,7 +27,7 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services import db
+from services.dados import db
 
 
 def _carregar(dias: int) -> list[dict]:

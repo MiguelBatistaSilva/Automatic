@@ -15,19 +15,19 @@ acesso desta conta do Windows lê a senha de qualquer pessoa em texto puro.
 Trocar "uma credencial exposta" por "N credenciais concentradas aqui" foi
 decisão consciente do usuário, não um cofre de verdade multi-tenant.
 
-POR QUE SEPARADO de `services/credenciais.py` (o cofre do app Reflex): mesmo
+POR QUE SEPARADO de `services/dados/credenciais.py` (o cofre do app Reflex): mesmo
 motivo de antes — aquele guarda a matrícula de quem usa o APP DESKTOP naquela
 máquina, e trocar de conta ali apaga a senha anterior do cofre. Nome de
 serviço próprio no Cofre do Windows (`SERVICO_BOT`) evita qualquer colisão.
 
-ONDE MORA: tabela `bot_credenciais` do banco (services/db.py), {chat_id:
+ONDE MORA: tabela `bot_credenciais` do banco (services/dados/db.py), {chat_id:
 matricula}, desde 2026-09-28. Antes era data/credencial_bot.json — a
 importação desse arquivo (inclusive do formato antigo de credencial única,
 de antes de 2026-08-26) é feita uma vez só pelo próprio db.py.
 """
 import keyring
 
-from services import db
+from services.dados import db
 
 SERVICO_BOT = "Automatic-Bot"
 

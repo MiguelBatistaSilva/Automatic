@@ -1,5 +1,5 @@
 """
-services/kb_manager_pw.py — Adicao de Base de Conhecimento em Playwright.
+services/fluxos/kb_manager_pw.py — Adicao de Base de Conhecimento em Playwright.
 
 Portado do antigo `services/kb_manager.py` (Selenium, ja removido). Mesma sequencia
 e mesmos seletores; so muda a API (page em vez de driver). E a parte mais

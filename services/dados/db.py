@@ -1,5 +1,5 @@
 """
-services/db.py — O banco SQLite do Automatic (um arquivo so, por maquina).
+services/dados/db.py — O banco SQLite do Automatic (um arquivo so, por maquina).
 
 POR QUE SQLITE (2026-09-28): os dados viviam em JSONs gravados com `open("w")`
 direto — que ZERA o arquivo antes de escrever (morrer nesse instante corrompe) —
@@ -95,7 +95,7 @@ _ESQUEMA: list[str] = [
     );
     CREATE INDEX tarefas_status ON tarefas (status, executar_em);
     """,
-    # v4 — 2026-09-28: checkpoints (services/checkpoint.py) e config do app.
+    # v4 — 2026-09-28: checkpoints (services/dados/checkpoint.py) e config do app.
     # `extra` (JSON) guarda os campos livres de cada linha (salvo_em,
     # concluido_em, numero=/usuario= da Requisicao...). `numero_filho` e coluna
     # propria para poder consultar "quais filhos esse pai gerou" e vice-versa.

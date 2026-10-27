@@ -1,5 +1,5 @@
 """
-services/flow_atribuicao_pw.py — Fluxo "Atribuição Interna" em Playwright (21/10).
+services/fluxos/flow_atribuicao_pw.py — Fluxo "Atribuição Interna" em Playwright (21/10).
 
 Caminho no Assyst:
     Ações -> Atribuição Interna -> Departamento de Serviço atribuído
@@ -22,12 +22,12 @@ texto do item mudar no Assyst, recapturar.
 import unicodedata
 from types import SimpleNamespace
 
-from services.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
-from services.ckeditor_pw import (AZUL_MARINHO, VERMELHO, paragrafo,
+from services.assyst.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
+from services.assyst.ckeditor_pw import (AZUL_MARINHO, VERMELHO, paragrafo,
                                   preencher_formatado_popup, texto_livre, trecho)
-from services.flow_requisicao_pw import (_JS_OPCOES, _clicar_sugestao, _escolher_opcao,
+from services.fluxos.flow_requisicao_pw import (_JS_OPCOES, _clicar_sugestao, _escolher_opcao,
                                          _escrever, _valor_gravado)
-from services.sla_engine import FILAS
+from services.regras.sla_engine import FILAS
 
 _SEL_MENU_ACOES = "#menuActions"
 _SEL_ATRIBUICAO_TXT = "td.dijitMenuItemLabel:text-is('Atribuição Interna')"

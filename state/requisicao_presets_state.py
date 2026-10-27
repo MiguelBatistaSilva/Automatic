@@ -3,7 +3,7 @@ state/requisicao_presets_state.py — Back-end da aba "Presets" da página
 Configurações (pages/configuracoes.py; antes "Presets da Requisição",
 renomeada em 2026-09-09).
 
-CRUD dos valores pré-cadastrados por campo (`services/requisicao_presets`),
+CRUD dos valores pré-cadastrados por campo (`services/dados/requisicao_presets`),
 usados pelo /requisicao do bot pra virar botão em vez de texto livre. Sem
 fluxo/navegador — é só edição de dados, igual ao KBState.
 
@@ -16,8 +16,8 @@ padrão, já que essa é a primeira aba (reorganizado em 2026-09-15).
 """
 import reflex as rx
 
-from services.requisicao_campos import POR_CHAVE
-from services.requisicao_presets import CAMPOS_COM_PRESET
+from services.regras.requisicao_campos import POR_CHAVE
+from services.dados.requisicao_presets import CAMPOS_COM_PRESET
 
 
 class RequisicaoPresetsState(rx.State):
@@ -29,7 +29,7 @@ class RequisicaoPresetsState(rx.State):
 
     @rx.event
     def on_load(self):
-        from services import requisicao_presets
+        from services.dados import requisicao_presets
         self.presets = requisicao_presets.carregar()
         self.novos_valores = {c: "" for c in CAMPOS_COM_PRESET}
         self.status = ""
@@ -42,7 +42,7 @@ class RequisicaoPresetsState(rx.State):
         self.aba = v if isinstance(v, str) else (v[0] if v else "kb")
 
     def _salvar_disco(self):
-        from services import requisicao_presets
+        from services.dados import requisicao_presets
         requisicao_presets.salvar(self.presets)
 
     @rx.event

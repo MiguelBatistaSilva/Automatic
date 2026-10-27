@@ -8,8 +8,8 @@ ATENÇÃO — este fluxo ESCREVE no chamado. Com modo_teste=True ele preenche a
 descrição e PARA antes de 'Salvar ação'.
 """
 
-from services.browser_pw import NavegadorPW, _fazer_login_pw
-from services.flow_programar_pw import programar_atendimento
+from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw
+from services.fluxos.flow_programar_pw import programar_atendimento
 
 
 def _silencioso(msg, tipo="info"):

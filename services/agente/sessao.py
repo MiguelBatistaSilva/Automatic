@@ -6,7 +6,7 @@ login. Num plano de vários passos isso seria um login e uma licença por
 passo. Aqui o navegador abre na primeira vez que um passo pede a página e
 é fechado no fim do plano — todos os passos usam a mesma sessão.
 
-Os fluxos (services/flow_*_pw.py) já recebem a página pronta, então nenhum
+Os fluxos (services/fluxos/flow_*_pw.py) já recebem a página pronta, então nenhum
 arquivo de fluxo mudou para isto (2026-10-01).
 
 ATENÇÃO: o Playwright sync se prende à thread que o criou. Criar, usar e
@@ -15,7 +15,7 @@ fechar a Sessao na MESMA thread (a do executor do plano).
 
 import dataclasses
 
-from services.browser_pw import NavegadorPW, _fazer_login_pw
+from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw
 
 
 class ErroSessao(Exception):
@@ -77,8 +77,8 @@ def executar_plano(acoes, sessao: Sessao, executar, emitir) -> None:
                 r = Resultado(f"Erro inesperado em '{acao.titulo}': {e}", ok=False)
             if getattr(acao, "escreve", False):
                 # A ação mudou (ou pode ter mudado) o chamado: a ficha
-                # guardada ficou velha (services/ficha.py, 23/10).
-                from services import ficha
+                # guardada ficou velha (services/agente/ficha.py, 23/10).
+                from services.agente import ficha
                 ficha.esquecer(*ficha.numeros_da_acao(acao.args))
             emitir("resultado", (i, r))
             if not r.ok:

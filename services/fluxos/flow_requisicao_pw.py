@@ -1,5 +1,5 @@
 """
-services/flow_requisicao_pw.py — Fluxo "Requisição de Serviço" em Playwright.
+services/fluxos/flow_requisicao_pw.py — Fluxo "Requisição de Serviço" em Playwright.
 
 Abre chamados DO ZERO (o Desmembramento duplica um chamado existente; aqui nao ha
 chamado-pai). Caminho no Assyst: navegar para a tela de Requisição, preencher os
@@ -30,9 +30,9 @@ import dataclasses
 import hashlib
 import time
 
-from services.assyst_common import _URL_REQUISICAO, _so_o_nome
-from services.browser_pw import _aguardar_pagina_assentar, _preencher_descricao_pw
-from services.requisicao_campos import (
+from services.assyst.assyst_common import _URL_REQUISICAO, _so_o_nome
+from services.assyst.browser_pw import _aguardar_pagina_assentar, _preencher_descricao_pw
+from services.regras.requisicao_campos import (
     CAMPOS, CHECKBOX, CKEDITOR, DATA_HORA, LOOKUP, ORDEM_COLUNAS, POR_CHAVE,
     SEPARADOR, TEXTO,
     descobrir_prefixos, id_campo, id_campo_hora, id_dropdown,

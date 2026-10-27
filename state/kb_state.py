@@ -38,11 +38,11 @@ class KBState(rx.State):
 
     @rx.event
     def on_load(self):
-        from services import kb_store
+        from services.dados import kb_store
         self.entries = [KBEntry(e["nome_artigo"], e["keyword"]) for e in kb_store.carregar()]
 
     def _salvar_disco(self):
-        from services import kb_store
+        from services.dados import kb_store
         kb_store.salvar([{"keyword": e.keyword, "nome_artigo": e.nome_artigo} for e in self.entries])
 
     @rx.event

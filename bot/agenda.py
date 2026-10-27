@@ -10,7 +10,7 @@ NAO CONFUNDIR COM O CHECKPOINT dos outros fluxos. O checkpoint registra o que JA
 FOI FEITO, para poder retomar de onde parou. A agenda registra o que AINDA VAI
 SER FEITO. Sao direcoes opostas no tempo.
 
-ONDE MORA: tabela `tarefas` do banco (services/db.py), tipo 'atendimento',
+ONDE MORA: tabela `tarefas` do banco (services/dados/db.py), tipo 'atendimento',
 desde 2026-09-28 — antes era data/agenda_bot.json. A tabela ja tem o formato
 da futura fila de tarefas de todos os fluxos; a interface deste modulo (Item,
 adicionar, listar, separar_vencidos...) nao mudou. O RLock que existia aqui
@@ -21,7 +21,7 @@ import json
 import time
 from dataclasses import dataclass
 
-from services import db
+from services.dados import db
 
 TIPO = "atendimento"
 

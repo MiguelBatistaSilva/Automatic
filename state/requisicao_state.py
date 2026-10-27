@@ -8,7 +8,7 @@ separados por `;` e na ordem de `ORDEM_COLUNAS`. Reusa `flow_requisicao_pw` inte
 Segue o padrão "resultado por item numa tabela" da Análise de SLA: o worker emite um
 `resultado` por linha, que `_on_evento` anexa em `resultados`.
 
-**CHECKPOINT (2026-08-13), automático, sem diálogo.** Reusa `services/checkpoint.py`
+**CHECKPOINT (2026-08-13), automático, sem diálogo.** Reusa `services/dados/checkpoint.py`
 (mesmo módulo do Desmembramento), com a chave derivada do HASH do texto colado
 (`_chave_checkpoint` em `flow_requisicao_pw.py`) — não há chamado-pai pra ancorar
 aqui. Ao clicar Iniciar, o `iniciar()` decide sozinho: lote novo (`inicializar`),
@@ -33,8 +33,8 @@ import dataclasses
 
 import reflex as rx
 
-from services.flow_requisicao_pw import parse_entrada
-from services.requisicao_campos import ORDEM_COLUNAS, POR_CHAVE, SEPARADOR
+from services.fluxos.flow_requisicao_pw import parse_entrada
+from services.regras.requisicao_campos import ORDEM_COLUNAS, POR_CHAVE, SEPARADOR
 from state.flow_runner import FlowRunnerState
 
 # Relogins por execução quando a sessão do Assyst cai no meio do lote.
@@ -141,7 +141,7 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
 
         # Credenciais ANTES do checkpoint: a matricula vai gravada na rodada
         # (pagina "Meus fluxos").
-        from services import credenciais
+        from services.dados import credenciais
         matricula, senha = credenciais.carregar()
         if not matricula or not senha:
             async with self:
@@ -154,8 +154,8 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
         # -- CHECKPOINT — decide sozinho (sem dialogo): lote novo, retomar ou ja
         # concluido. A chave vem do PROPRIO TEXTO colado (nao ha chamado-pai
         # pra ancorar, diferente do Desmembramento) — ver `_chave_checkpoint`.
-        from services import checkpoint
-        from services.flow_requisicao_pw import _chave_checkpoint
+        from services.dados import checkpoint
+        from services.fluxos.flow_requisicao_pw import _chave_checkpoint
 
         total = len(requisicoes)
         chave = _chave_checkpoint(texto)
@@ -208,11 +208,11 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
                 referencias=[r.get("usuario_afetado", "") for r in requisicoes])
 
         def worker(log, emit):
-            from services.browser_pw import (
+            from services.assyst.browser_pw import (
                 NavegadorPW, _fazer_login_pw, _tela_de_login_pw,
             )
-            from services.flow_requisicao_pw import criar_requisicao
-            from services import checkpoint as cp
+            from services.fluxos.flow_requisicao_pw import criar_requisicao
+            from services.dados import checkpoint as cp
 
             # So as PENDENTES (0-based no checkpoint, 1-based aqui) — as ja
             # concluidas em rodadas anteriores nao sao retocadas.

@@ -1,14 +1,14 @@
 """
-services/credenciais.py — Armazenamento das credenciais do CATI/Assyst.
+services/dados/credenciais.py — Armazenamento das credenciais do CATI/Assyst.
 
-A matricula fica no banco (services/db.py, tabela app_config, chave
+A matricula fica no banco (services/dados/db.py, tabela app_config, chave
 'matricula') desde 2026-09-28 — antes era data/credenciais.json.
 A SENHA nunca vai para o disco: vai para o Cofre de Credenciais do Windows via
 keyring, criptografada pelo SO e amarrada a conta Windows do usuario.
 """
 import keyring
 
-from services import db
+from services.dados import db
 
 # Nome do "servico" no Cofre do Windows. Aparece assim no Gerenciador de
 # Credenciais, entao vale manter legivel.

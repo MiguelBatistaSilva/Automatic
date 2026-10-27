@@ -1,11 +1,11 @@
 """
-services/checkpoint.py — Gerencia o progresso linha a linha com 3 estados:
+services/dados/checkpoint.py — Gerencia o progresso linha a linha com 3 estados:
   pendente  → ainda nao processada
   salvo     → chamado criado mas BC ainda nao adicionada
   concluido → chamado criado + BC adicionada
 
 ONDE MORA: tabelas `checkpoints` e `checkpoint_linhas` do banco
-(services/db.py) desde 2026-09-28. Antes era um JSON por chave em
+(services/dados/db.py) desde 2026-09-28. Antes era um JSON por chave em
 data/checkpoints/<chave>/<chave>.json — importado pelo db.py na subida e
 renomeado para .json.migrado. O TXT de filhos (assyst_common) continua em
 arquivo: e o relatorio que abre no Bloco de Notas, nao a rede de seguranca.
@@ -21,7 +21,7 @@ os tres modos do Desmembramento, a Requisicao e o bot nao foram tocados.
 import json
 from datetime import datetime
 
-from services import db
+from services.dados import db
 from services.paths import CHECKPOINTS_DIR as _CHECKPOINTS_DIR
 
 STATUS_PENDENTE  = "pendente"

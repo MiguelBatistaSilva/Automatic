@@ -1,5 +1,5 @@
 """
-services/flow_resolver_pw.py — Fluxo "Resolvido" (resolver chamado) em Playwright.
+services/fluxos/flow_resolver_pw.py — Fluxo "Resolvido" (resolver chamado) em Playwright.
 
     Ações -> Resolvido -> pop-up de ação -> Descrição -> Salvar ação
 
@@ -17,9 +17,9 @@ confirmados pelo usuário em 2026-10-01. Ainda sem teste na tela: validar pelo
 modo teste (Simular) antes do primeiro uso.
 """
 
-from services.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
-from services.ckeditor_pw import preencher_formatado_popup
-from services.flow_usuario_pw import montar_texto
+from services.assyst.browser_pw import _navegar_para_chamado_pw, _setor_pw, _usuario_afetado_pw
+from services.assyst.ckeditor_pw import preencher_formatado_popup
+from services.fluxos.flow_usuario_pw import montar_texto
 
 _SEL_MENU_ACOES = "#menuActions"
 _SEL_RESOLVIDO = "td.dijitMenuItemLabel:text-is('Resolvido')"
@@ -29,8 +29,8 @@ _SEL_SALVAR = "[id='ManageActionForm.btSave']"
 
 def sla_do_chamado(page, log, numero_chamado: str, fila: str) -> dict | None:
     """O cálculo da Análise de SLA para um chamado (None se não deu para ler)."""
-    from services.flow_sla_pw import extrair_historico_chamado
-    from services.sla_engine import calcular_sla
+    from services.fluxos.flow_sla_pw import extrair_historico_chamado
+    from services.regras.sla_engine import calcular_sla
 
     historico = extrair_historico_chamado(page, numero_chamado, log)
     if historico is None:

@@ -1,5 +1,5 @@
 """
-services/flow_config_fila_pw.py — Configurar fila (consulta salva do monitor) no Assyst.
+services/fluxos/flow_config_fila_pw.py — Configurar fila (consulta salva do monitor) no Assyst.
 
 NÃO mexe em chamado: cria, para cada fila, a consulta que lista os chamados
 atribuídos àquele Departamento de Serviço e a deixa no menu (2026-10-06).
@@ -34,8 +34,8 @@ widget é o mesmo. Se falhar no primeiro Simular, é aqui que se ajusta.
 
 import time
 
-from services.browser_pw import _aguardar_pagina_assentar
-from services.flow_requisicao_pw import _JS_OPCOES, _escolher_opcao, _norm
+from services.assyst.browser_pw import _aguardar_pagina_assentar
+from services.fluxos.flow_requisicao_pw import _JS_OPCOES, _escolher_opcao, _norm
 
 _URL_MONITOR = (
     "https://cati.tjce.jus.br/assystweb/application.do#eventsearch%2F"

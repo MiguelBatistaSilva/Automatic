@@ -5,7 +5,7 @@ Portado do antigo `services/flow_sla.py` (Selenium, ja removido). A logica de
 extracao e os indices de coluna sao os mesmos; so muda a API para `page`.
 """
 
-from services.browser_pw import _fazer_login_pw, _navegar_para_chamado_pw
+from services.assyst.browser_pw import _fazer_login_pw, _navegar_para_chamado_pw
 
 # `except Exception` largo de proposito — ver a mesma nota em
 # flow_atendimento_pw.py: capturar so PWTimeout deixava erros de strict mode e

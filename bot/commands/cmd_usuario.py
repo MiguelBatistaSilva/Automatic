@@ -3,7 +3,7 @@ bot/cmd_usuario.py — /infousuario: registra 'Aguardando Info do Usuário *'
 em varios chamados.
 
 So existe no bot: nao ha tela no app desktop para isto (ver
-services/flow_usuario_pw.py). Irmao do /informacao e do /fornecedor — mesma
+services/fluxos/flow_usuario_pw.py). Irmao do /informacao e do /fornecedor — mesma
 wizard, mesma execucao imediata com o MESMO texto pra todos os chamados da
 lista; só muda o botao clicado no Assyst (Ações de relógio -> Aguardando
 Info do Usuário *).

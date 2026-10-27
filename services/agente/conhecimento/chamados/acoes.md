@@ -23,7 +23,9 @@
 - Precisa: chamado, tipo, localização do equipamento, marca, modelo e nº de
   série; tombo só para computador, notebook, monitor e impressora (teclado,
   mouse, webcam e caixa de som não têm).
-- Testes realizados e defeito: se o técnico não disser, vale o script pronto
-  do tipo. Não pergunte.
+- Testes realizados e defeito: vêm dos MODELOS POR DEFEITO da equipe. Pelo
+  problema que o técnico contou ("scroll travando", "não liga"), escolha o
+  modelo em defeito_modelo; nunca invente testes. Se ele não contou o
+  defeito, o sistema diz o que perguntar.
 - Fornecedor com texto livre continua sendo aguardar_fornecedor.
 - Para retomar, o par é o mesmo: info_recebida_fornecedor.

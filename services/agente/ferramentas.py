@@ -7,7 +7,7 @@ Cada ferramenta tem quatro partes:
      cartão (`Acao`). Devolve `str` quando falta algo: a mensagem volta ao
      modelo, que pergunta ao técnico em vez de chutar;
   3. `executar(args, sessao)` — roda de verdade, chamando os fluxos
-     (services/flow_*_pw.py) na página da `Sessao` do plano: um login e uma
+     (services/fluxos/flow_*_pw.py) na página da `Sessao` do plano: um login e uma
      licença para todos os passos (2026-10-01; antes cada ferramenta abria o
      próprio Chrome via bot/services/*). NENHUM arquivo de fluxo foi alterado;
   4. o texto do RESULTADO, montado aqui (determinístico), e não pelo modelo.
@@ -28,8 +28,8 @@ import re
 import unicodedata
 from typing import Callable
 
-from services.requisicao_campos import ORDEM_COLUNAS, POR_CHAVE, SEPARADOR
-from services.sla_engine import FILAS, FILA_PADRAO
+from services.regras.requisicao_campos import ORDEM_COLUNAS, POR_CHAVE, SEPARADOR
+from services.regras.sla_engine import FILAS, FILA_PADRAO
 from services.agente.sessao import ErroSessao, Resultado, Sessao
 
 
@@ -104,7 +104,7 @@ def _lista(v) -> list[str]:
 
 
 def _nomes_bases() -> list[str]:
-    from services import kb_store
+    from services.dados import kb_store
     return [e["nome_artigo"] for e in kb_store.carregar()]
 
 
@@ -270,7 +270,7 @@ def _precisa_ler_desmembrar(args: dict) -> bool:
 
 
 def _antes_desmembrar(args: dict, s: Sessao) -> dict:
-    from services.ficha import ler_ficha
+    from services.agente.ficha import ler_ficha
 
     f = ler_ficha(s.pagina, str(args.get("chamado_pai") or ""), s.log)
     if f is None:
@@ -282,7 +282,7 @@ def _antes_desmembrar(args: dict, s: Sessao) -> dict:
 
 
 def _kb_config(nome_base: str) -> dict:
-    from services import kb_store
+    from services.dados import kb_store
     e = next(e for e in kb_store.carregar() if e["nome_artigo"] == nome_base)
     return {"keyword": e["keyword"], "nome_artigo": e["nome_artigo"]}
 
@@ -291,9 +291,9 @@ def _exec_desmembrar(a: dict, s: Sessao) -> Resultado:
     """As mesmas classes que a página de Desmembramento usa, na página da
     sessão do plano. O login delas vê a sessão ativa e segue."""
     import pandas as pd
-    from services import checkpoint
-    from services.flow_desmembramento_pw import FluxoCompletoPW, FluxoCriarPW
-    from services.kb_manager_pw import executar_kb_unica_pw
+    from services.dados import checkpoint
+    from services.fluxos.flow_desmembramento_pw import FluxoCompletoPW, FluxoCriarPW
+    from services.fluxos.kb_manager_pw import executar_kb_unica_pw
 
     pai, tombos = a["chamado_pai"], a["tombos"]
     df = pd.DataFrame([[t] for t in tombos], columns=["tombo"])
@@ -352,9 +352,9 @@ def _prep_aplicar_base(args: dict) -> "Acao | str":
 
 
 def _exec_aplicar_base(a: dict, s: Sessao) -> Resultado:
-    from services import checkpoint
-    from services.flow_desmembramento_pw import FluxoBCPW, _chave_checkpoint
-    from services.kb_manager_pw import executar_kb_unica_pw
+    from services.dados import checkpoint
+    from services.fluxos.flow_desmembramento_pw import FluxoBCPW, _chave_checkpoint
+    from services.fluxos.kb_manager_pw import executar_kb_unica_pw
 
     kb = _kb_config(a["base"])
     FluxoBCPW(s.pagina(), s.matricula, s.senha, s.log, origem="ui").executar(
@@ -387,8 +387,8 @@ def _texto_requisicoes(reqs: list[dict]) -> str:
 
 
 def _prep_requisicoes(args: dict) -> "Acao | str":
-    from services import checkpoint
-    from services.flow_requisicao_pw import _chave_checkpoint, parse_entrada
+    from services.dados import checkpoint
+    from services.fluxos.flow_requisicao_pw import _chave_checkpoint, parse_entrada
 
     reqs = args.get("requisicoes") or []
     if not reqs:
@@ -451,7 +451,7 @@ def requisicoes_coladas(mensagem: str) -> "Acao | None":
     como o cartão gera: mensagem com outro texto junto vai para a IA, que
     pode ter instrução nova ("troque o técnico").
     """
-    from services.flow_requisicao_pw import parse_entrada
+    from services.fluxos.flow_requisicao_pw import parse_entrada
 
     # Cercas ``` coladas junto com a lista não contam como texto.
     linhas = [l for l in mensagem.splitlines() if l.strip().strip("`")]
@@ -470,8 +470,8 @@ def _exec_requisicoes(a: dict, s: Sessao) -> Resultado:
     """Mesmo laço do state/requisicao_state.py, com o mesmo checkpoint: se
     parar no meio, rodar de novo (aqui ou na página) continua de onde parou.
     No modo simulação o checkpoint não é tocado — nada foi criado."""
-    from services import checkpoint as cp
-    from services.flow_requisicao_pw import (
+    from services.dados import checkpoint as cp
+    from services.fluxos.flow_requisicao_pw import (
         _chave_checkpoint, criar_requisicao, parse_entrada,
     )
 
@@ -571,7 +571,7 @@ def _resolver_nome(valor: str, opcoes: list[str], rotulo: str) -> tuple[str, str
 
 
 def _opcoes() -> dict[str, list[str]]:
-    from services import referencia, requisicao_presets
+    from services.dados import referencia, requisicao_presets
     p = requisicao_presets.carregar()
     filas = list(dict.fromkeys(p["grupo_atribuido"] + list(FILAS)))
     # Técnicos: o banco de técnicos (nome exato do Assyst) + os dos Presets,
@@ -588,7 +588,7 @@ def _tecnico_da_req(dito: str, opcoes: list[str], rotulo: str = "O técnico") ->
     """(nome, erro) do técnico da Requisição: primeiro pelo banco de técnicos
     (mesma regra da atribuição: cada palavra é começo de palavra do nome),
     depois pelos Presets."""
-    from services import referencia
+    from services.dados import referencia
 
     achou = referencia.resolver_tecnico(dito or "")
     if achou.ok:
@@ -600,7 +600,7 @@ def _tecnico_da_req(dito: str, opcoes: list[str], rotulo: str = "O técnico") ->
 
 def _fila_da_req(dita: str, tecnico: str, opcoes: list[str]) -> tuple[str, str]:
     """(fila, erro). Sem fila dita: a do técnico, se ele tiver UMA só."""
-    from services import referencia
+    from services.dados import referencia
 
     dita = (dita or "").strip()
     if not dita:
@@ -621,7 +621,7 @@ def _fila_da_req(dita: str, tecnico: str, opcoes: list[str]) -> tuple[str, str]:
 def _aviso_fila(tecnico: str, fila: str) -> str:
     """Técnico fora da fila: o Assyst pode não achá-lo no type-ahead. Só
     avisa — o banco de técnicos ainda não tem todos os pares."""
-    from services import referencia
+    from services.dados import referencia
 
     dele = referencia.filas_do_tecnico(tecnico)
     if dele and fila not in dele:
@@ -738,13 +738,13 @@ _CHAVE_SUPERVISOR = "plantao_supervisor"
 
 
 def _supervisor() -> str:
-    from services import db
+    from services.dados import db
     r = db.consultar("SELECT valor FROM app_config WHERE chave = ?", (_CHAVE_SUPERVISOR,))
     return r[0]["valor"] if r else ""
 
 
 def _salvar_supervisor(matricula: str) -> None:
-    from services import db
+    from services.dados import db
     with db.transacao() as con:
         con.execute("INSERT OR REPLACE INTO app_config VALUES (?, ?)",
                     (_CHAVE_SUPERVISOR, matricula))
@@ -891,22 +891,33 @@ def _exec_lote(funcao: Callable, titulo: str, com_texto: bool, devolve_info: boo
 
 
 def _exec_atendimento(a, s):
-    from services.flow_atendimento_pw import iniciar_atendimento
+    from services.fluxos.flow_atendimento_pw import iniciar_atendimento
     return _exec_lote(iniciar_atendimento, "Iniciar Atendimento", False, False)(a, s)
 
 
 def _exec_informacao(a, s):
-    from services.flow_informacao_pw import adicionar_informacao
+    from services.fluxos.flow_informacao_pw import adicionar_informacao
     return _exec_lote(adicionar_informacao, "Adicionar Informação", True, True)(a, s)
 
 
 def _exec_fornecedor(a, s):
-    from services.flow_fornecedor_pw import aguardar_info_fornecedor
+    from services.fluxos.flow_fornecedor_pw import aguardar_info_fornecedor
     return _exec_lote(aguardar_info_fornecedor, "Aguardando Info do Fornecedor", True, True)(a, s)
 
 
+def _exec_despacho(a, s):
+    """Mesma pausa do fornecedor, mas com o script FORMATADO (respostas em
+    vermelho, 26/10). Cartão de antes disso (sem `campos`): texto todo azul."""
+    import functools
+    from services.agente import despacho_operacao as dop
+    from services.fluxos.flow_fornecedor_pw import aguardar_info_fornecedor
+    html = dop.montar_html(**a["campos"]) if a.get("campos") else None
+    funcao = functools.partial(aguardar_info_fornecedor, conteudo_html=html)
+    return _exec_lote(funcao, "Aguardando Info do Fornecedor", True, True)(a, s)
+
+
 def _exec_usuario(a, s):
-    from services.flow_usuario_pw import aguardar_info_usuario
+    from services.fluxos.flow_usuario_pw import aguardar_info_usuario
     return _exec_lote(aguardar_info_usuario, "Aguardando Info do Usuário", True, True)(a, s)
 
 
@@ -924,20 +935,20 @@ def _prep_recebida_usuario(args: dict) -> "Acao | str":
 
 def _exec_recebida_usuario(a, s):
     import functools
-    from services.flow_info_recebida_pw import info_recebida_usuario
+    from services.fluxos.flow_info_recebida_pw import info_recebida_usuario
     funcao = functools.partial(info_recebida_usuario, nome=a.get("nome", ""))
     return _exec_lote(funcao, "Info Recebidas do Usuário", False, True)(a, s)
 
 
 def _exec_recebida_fornecedor(a, s):
-    from services.flow_info_recebida_pw import info_recebida_fornecedor
+    from services.fluxos.flow_info_recebida_pw import info_recebida_fornecedor
     return _exec_lote(info_recebida_fornecedor, "Info Recebida do Fornecedor", True, True)(a, s)
 
 
 def _prep_atribuir(args: dict) -> "Acao | str":
     """Atribuição Interna (21/10). Sem fila nem técnico = puxar para o técnico
     logado (o fluxo lê quem é e a fila dele do pop-up)."""
-    from services import flow_atribuicao_pw as fa
+    from services.fluxos import flow_atribuicao_pw as fa
 
     chamados = _lista(args.get("chamados"))
     if not chamados:
@@ -977,8 +988,8 @@ def _prep_atribuir(args: dict) -> "Acao | str":
 
 def _destino_atribuicao(args: dict, para_mim: bool) -> tuple:
     """(fila, técnico, aviso) com os nomes EXATOS do Assyst, pela referência
-    (services/referencia.py). Se precisar perguntar: (None, pergunta, "")."""
-    from services import referencia
+    (services/dados/referencia.py). Se precisar perguntar: (None, pergunta, "")."""
+    from services.dados import referencia
 
     dita = str(args.get("fila") or "").strip()
     fila = ""
@@ -1016,7 +1027,7 @@ def _destino_atribuicao(args: dict, para_mim: bool) -> tuple:
 
 def _precisa_ler_atribuir(args: dict) -> bool:
     """Técnico de várias filas e nenhuma fila dita: só aí vale ler o chamado."""
-    from services import referencia
+    from services.dados import referencia
 
     if args.get("fila") or args.get("para_mim") or not args.get("tecnico") \
             or not _lista(args.get("chamados")):
@@ -1028,7 +1039,7 @@ def _precisa_ler_atribuir(args: dict) -> bool:
 def _antes_atribuir(args: dict, s: Sessao) -> dict:
     """Lê a fila ATUAL do chamado: se o técnico estiver nela, o chamado fica
     onde está (ver _destino_atribuicao)."""
-    from services.ficha import ler_ficha
+    from services.agente.ficha import ler_ficha
 
     chamados = _lista(args.get("chamados"))
     f = ler_ficha(s.pagina, chamados[0], s.log)
@@ -1036,7 +1047,7 @@ def _antes_atribuir(args: dict, s: Sessao) -> dict:
 
 
 def _exec_atribuir(a: dict, s: Sessao) -> Resultado:
-    from services import flow_atribuicao_pw as fa
+    from services.fluxos import flow_atribuicao_pw as fa
 
     conteudo = fa.montar_texto(a["modo"], a["detalhe"])
 
@@ -1047,10 +1058,22 @@ def _exec_atribuir(a: dict, s: Sessao) -> Resultado:
     return _exec_lote(funcao, "Atribuição Interna", True, True)({**a, "texto": ""}, s)
 
 
+def _desc_despacho() -> str:
+    """Só os NOMES dos modelos vão à IA; testes e defeito o código põe."""
+    from services.agente import despacho_operacao as dop
+
+    nomes = "; ".join(m.nome for m in dop.conhecimento.despachos()) or "(nenhum)"
+    return ("DESPACHO ao Serviço de Operações (condenar/mandar equipamento para a "
+            "Operação): pausa 'Aguardando Info do Fornecedor' com o script de "
+            "despacho, que o SISTEMA monta. Escolha em defeito_modelo o modelo que "
+            "casa com o defeito contado; não invente testes. Sem defeito dito, "
+            f"chame sem defeito_modelo: o sistema diz o que perguntar. Modelos: {nomes}.")
+
+
 def _prep_despacho(args: dict) -> "Acao | str":
     """Despacho ao Serviço de Operações (20/10): a mesma pausa do fornecedor,
-    com o script montado pelo código (services/despacho_operacao.py)."""
-    from services import despacho_operacao as dop
+    com o script montado pelo código (services/agente/despacho_operacao.py)."""
+    from services.agente import despacho_operacao as dop
 
     chamados = _lista(args.get("chamado"))
     if len(chamados) != 1:
@@ -1065,20 +1088,53 @@ def _prep_despacho(args: dict) -> "Acao | str":
                                  ("serie", "nº de série")) if not v[k]]
     if dop.tem_tombo(tipo) and not v["tombo"]:
         faltam.append("tombo")
-    if faltam:
-        return f"Falta(m): {', '.join(faltam)}. Pergunte ao técnico, de uma vez."
-    padrao_testes, padrao_defeitos = dop.SCRIPTS[tipo]
     testes = dop.itens(args.get("testes") or "")
     defeitos = dop.itens(args.get("defeito") or "")
-    pronto = [nome for nome, dito in (("testes", testes), ("defeito", defeitos)) if not dito]
-    texto = dop.montar_texto(tipo, v["localizacao"], v["marca"], v["modelo"], v["serie"],
-                             testes or padrao_testes, defeitos or padrao_defeitos,
-                             tombo=v["tombo"], obs=v["obs"])
-    aviso = (f"{' e '.join(pronto).capitalize()} "
-             f"{'vieram' if len(pronto) > 1 or pronto == ['testes'] else 'veio'} "
-             f"do script pronto de {tipo}: confira." if pronto else "")
+
+    # Testes/defeito não ditos: saem do MODELO POR DEFEITO da equipe
+    # (conhecimento/chamados/despachos.md, 26/10). A IA só escolhe o modelo;
+    # se não deu para saber qual, pergunta junto com o que mais faltar.
+    escolhido, pergunta = None, ""
+    modelos = dop.modelos_de(tipo)
+    if modelos and not (testes and defeitos):
+        pelo_modelo = str(args.get("defeito_modelo") or "").strip()
+        achados = dop.achar_modelo(tipo, pelo_modelo or " ".join(defeitos))
+        if len(achados) == 1:
+            escolhido = achados[0]
+            if not pelo_modelo:
+                # O "defeito" era só o problema contado ("botão direito"),
+                # que serviu para achar o modelo: a conclusão vem dele.
+                defeitos = []
+        else:
+            opcoes = achados or modelos
+            pergunta = (f"Qual o defeito do {tipo.lower()}? Modelos: "
+                        + "; ".join(m.nome for m in opcoes)
+                        + " (ou ele dita os testes e o defeito)")
+    if faltam or pergunta:
+        partes = ([f"Falta(m): {', '.join(faltam)}"] if faltam else []) + \
+                 ([pergunta] if pergunta else [])
+        return ". ".join(partes) + ". Pergunte ao técnico, de uma vez."
+
+    pronto = []
+    if escolhido:
+        testes = testes or escolhido.testes
+        defeitos = defeitos or [escolhido.defeito]
+        aviso = f"Testes e defeito do modelo \"{escolhido.nome}\": confira."
+    else:
+        padrao_testes, padrao_defeitos = dop.SCRIPTS[tipo]
+        pronto = [nome for nome, dito in (("testes", testes), ("defeito", defeitos)) if not dito]
+        testes, defeitos = testes or padrao_testes, defeitos or padrao_defeitos
+        aviso = (f"{' e '.join(pronto).capitalize()} "
+                 f"{'vieram' if len(pronto) > 1 or pronto == ['testes'] else 'veio'} "
+                 f"do script genérico de {tipo} (sem modelo da equipe): confira."
+                 if pronto else "")
+    campos = {"tipo": tipo, "localizacao": v["localizacao"], "marca": v["marca"],
+              "modelo": v["modelo"], "serie": v["serie"],
+              "testes": testes, "defeitos": defeitos,
+              "tombo": v["tombo"], "obs": v["obs"]}
+    texto = dop.montar_texto(**campos)
     return Acao(ferramenta="despachar_operacao",
-                args={"chamados": chamados, "texto": texto},
+                args={"chamados": chamados, "texto": texto, "campos": campos},
                 titulo="Despacho ao Serviço de Operações",
                 linhas=[f"**Chamado:** {chamados[0]} · Aguardando Info do Fornecedor",
                         f"**Texto:**\n{texto}"],
@@ -1090,7 +1146,7 @@ def _prep_despacho(args: dict) -> "Acao | str":
 # --------------------------------------------------------------------------- #
 
 def _prep_config_filas(args: dict) -> "Acao | str":
-    from services.flow_config_fila_pw import COLUNAS_PADRAO, PERFIL_PADRAO
+    from services.fluxos.flow_config_fila_pw import COLUNAS_PADRAO, PERFIL_PADRAO
     filas = [f.strip() for f in (args.get("filas") or []) if str(f).strip()]
     if not filas:
         return "Falta a lista de filas a configurar."
@@ -1108,7 +1164,7 @@ def _prep_config_filas(args: dict) -> "Acao | str":
 def _exec_config_filas(a, s: Sessao) -> Resultado:
     """Perfil primeiro (garantir_perfil: cria ou reaproveita); sem ele as
     filas não têm o que usar, então a falha dele para tudo."""
-    from services.flow_config_fila_pw import PERFIL_PADRAO, configurar_fila, garantir_perfil
+    from services.fluxos.flow_config_fila_pw import PERFIL_PADRAO, configurar_fila, garantir_perfil
     page = s.pagina()
     s.log(f"Conferindo o Perfil de coluna {PERFIL_PADRAO}...", "status")
     try:
@@ -1142,7 +1198,7 @@ def _exec_config_filas(a, s: Sessao) -> Resultado:
 # --------------------------------------------------------------------------- #
 
 def _prep_programar(args: dict) -> "Acao | str":
-    from services.flow_programar_pw import normalizar_dia, normalizar_hora
+    from services.fluxos.flow_programar_pw import normalizar_dia, normalizar_hora
 
     chamados = _lista(args.get("chamados"))
     if not chamados:
@@ -1170,7 +1226,7 @@ def _prep_programar(args: dict) -> "Acao | str":
 
 
 def _exec_programar(a, s: Sessao) -> Resultado:
-    from services.flow_programar_pw import programar_atendimento
+    from services.fluxos.flow_programar_pw import programar_atendimento
     page = s.pagina()
     feitos, linhas = 0, []
     for numero in a["chamados"]:
@@ -1200,7 +1256,7 @@ def _prep_fila(args: dict) -> "Acao | str":
 
 
 def _exec_fila(a, s: Sessao) -> Resultado:
-    from services.flow_minhafila_pw import ler_fila
+    from services.fluxos.flow_minhafila_pw import ler_fila
     fila = ler_fila(s.pagina(), s.log)
     if fila is None:
         return Resultado("❌ Não consegui ler a sua fila (a tela não carregou).", ok=False)
@@ -1225,9 +1281,9 @@ def _prep_sla(args: dict) -> "Acao | str":
 
 def _exec_sla(a, s: Sessao) -> Resultado:
     """Mesmo laço do bot/services/sla_service.py, na página da sessão."""
-    from services.browser_pw import _usuario_afetado_pw
-    from services.flow_sla_pw import extrair_historico_chamado
-    from services.sla_engine import calcular_sla
+    from services.assyst.browser_pw import _usuario_afetado_pw
+    from services.fluxos.flow_sla_pw import extrair_historico_chamado
+    from services.regras.sla_engine import calcular_sla
 
     page = s.pagina()
     linhas = [f"**SLA — fila {a['fila']}**"]
@@ -1274,7 +1330,7 @@ def _prep_resolver(args: dict) -> "Acao | str":
 
 
 def _exec_resolver(a, s: Sessao) -> Resultado:
-    from services.flow_resolver_pw import resolver_chamado
+    from services.fluxos.flow_resolver_pw import resolver_chamado
     page = s.pagina()
     feitos, linhas = 0, []
     for numero in a["chamados"]:
@@ -1366,8 +1422,8 @@ def _hostname_fora_do_nome(args: dict) -> dict:
 def _antes_termo(args: dict, s: Sessao) -> dict:
     """Lê nome, matrícula e unidade do usuário afetado do chamado. O que o
     técnico disse na conversa vale mais que o lido."""
-    from services.assyst_common import _so_o_nome
-    from services.ficha import ler_ficha
+    from services.assyst.assyst_common import _so_o_nome
+    from services.agente.ficha import ler_ficha
 
     args = _hostname_fora_do_nome(args)
     f = ler_ficha(s.pagina, str(args.get("chamado") or ""), s.log)
@@ -1485,10 +1541,10 @@ def _hora(v) -> str:
 
 
 def _antes_demanda(args: dict, s: Sessao) -> dict:
-    """Tudo pela FICHA do chamado (services/ficha.py, 23/10). O local segue a
+    """Tudo pela FICHA do chamado (services/agente/ficha.py, 23/10). O local segue a
     regra única: técnico/IA > 'Local:' na descrição > (a IA lê do Pedido) >
     Edifício + Sala do chamado — os dois últimos resolvidos no _prep_demanda."""
-    from services.ficha import ler_ficha
+    from services.agente.ficha import ler_ficha
     from services.termos.demanda import nome_proprio
 
     f = ler_ficha(s.pagina, str(args.get("chamado") or ""), s.log)
@@ -1608,7 +1664,7 @@ def _inv_buscar_chamado(args: dict, s: Sessao) -> str:
     técnicos lembram de "o chamado da Carla", não do número. A comparação é
     feita aqui no código; para a IA só vão os chamados que BATEM com o nome
     que o próprio técnico citou, nunca a fila inteira."""
-    from services.flow_minhafila_pw import ler_fila
+    from services.fluxos.flow_minhafila_pw import ler_fila
 
     nome = _sem_acento(args.get("nome") or "").strip()
     setor = _sem_acento(args.get("setor") or "").strip()
@@ -1640,8 +1696,8 @@ def _inv_buscar_chamado(args: dict, s: Sessao) -> str:
 
 def _inv_verificar_sla(args: dict, s: Sessao) -> str:
     """SLA para a IA DECIDIR: só número, fila e tempo — nada do usuário."""
-    from services.flow_sla_pw import extrair_historico_chamado
-    from services.sla_engine import calcular_sla
+    from services.fluxos.flow_sla_pw import extrair_historico_chamado
+    from services.regras.sla_engine import calcular_sla
 
     chamados = _lista(args.get("chamados"))
     if not chamados:
@@ -1665,7 +1721,7 @@ def _inv_verificar_sla(args: dict, s: Sessao) -> str:
 # Triagem do chamado (22/10) — o Assistente olhando como técnico
 # --------------------------------------------------------------------------- #
 #
-# Regras em services/triagem.py. A DESCRIÇÃO é lida pelo código; a IA recebe
+# Regras em services/agente/triagem.py. A DESCRIÇÃO é lida pelo código; a IA recebe
 # seção, edifício, Item B, os tombos e o PEDIDO sem o bloco de dados pessoais
 # (triagem.pedido_seguro) — para propor o desmembramento sem perguntar.
 
@@ -1673,15 +1729,15 @@ _MAX_TRIAGEM = 15   # ~5 s por chamado: a conversa não pode ficar presa
 
 
 def _inv_analisar_chamado(args: dict, s: Sessao) -> str:
-    from services.ficha import ler_ficha
-    from services.triagem import triar_ficha
+    from services.agente.ficha import ler_ficha
+    from services.agente.triagem import triar_ficha
 
     chamados = _lista(args.get("chamados"))
     page, saida = s.pagina(), []
     if args.get("minha_fila"):
         # "Analisa minha fila" (22/10): lê a fila AQUI — para a IA vão só os
         # números (os nomes dos usuários ficam no código).
-        from services.flow_minhafila_pw import ler_fila
+        from services.fluxos.flow_minhafila_pw import ler_fila
         fila = ler_fila(page, s.log)
         if fila is None:
             return "Não consegui ler a fila do técnico (a tela não carregou)."
@@ -1931,10 +1987,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
     ),
     Ferramenta(
         "despachar_operacao",
-        "DESPACHO ao Serviço de Operações (condenar/mandar equipamento para a "
-        "Operação): pausa 'Aguardando Info do Fornecedor' com o script de "
-        "despacho, que o SISTEMA monta. Testes/defeito não ditos: o sistema "
-        "usa o script pronto do tipo — não pergunte.",
+        _desc_despacho,  # montada na hora: os nomes dos modelos de despacho
         {"type": "object", "properties": {
             "chamado": {"type": "string"},
             "tipo": {"type": "string", "description":
@@ -1948,10 +2001,16 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
                       "Computador/Notebook/Monitor/Impressora. Teclado, mouse, "
                       "webcam e caixa de som não têm."},
             "obs": {"type": "string"},
-            "testes": {"type": "string", "description": "Um por linha. Só se o técnico disser."},
-            "defeito": {"type": "string", "description": "Um por linha. Só se o técnico disser."},
+            "defeito_modelo": {"type": "string", "description":
+                               "Nome do modelo de despacho (lista na descrição) que "
+                               "casa com o defeito que o técnico contou."},
+            "testes": {"type": "string", "description":
+                       "Um por linha. Só se o técnico DITAR os testes."},
+            "defeito": {"type": "string", "description":
+                        "Só se o técnico DITAR o texto do defeito; se ele só contou "
+                        "o problema, use defeito_modelo."},
         }, "required": ["chamado", "tipo"]},
-        preparar=_prep_despacho, executar=_exec_fornecedor,
+        preparar=_prep_despacho, executar=_exec_despacho,
         dominio="chamados",
     ),
     Ferramenta(

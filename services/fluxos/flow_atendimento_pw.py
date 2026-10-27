@@ -1,5 +1,5 @@
 """
-services/flow_atendimento_pw.py — Fluxo "Iniciar Atendimento" em Playwright.
+services/fluxos/flow_atendimento_pw.py — Fluxo "Iniciar Atendimento" em Playwright.
 
 Portado do antigo `services/flow_atendimento.py` (Selenium, ja removido). Mesma
 sequencia no Assyst; so muda a API para `page`.
@@ -19,8 +19,8 @@ Seletores confirmados por captura do registry Dojo (2026-07-06):
 Ver memoria: project_flow_atendimento, project_ckeditor_fix, project_sla_regras.
 """
 
-from services.browser_pw import _navegar_para_chamado_pw
-from services.ckeditor_pw import AZUL_MARINHO, paragrafo, preencher_formatado_popup, trecho
+from services.assyst.browser_pw import _navegar_para_chamado_pw
+from services.assyst.ckeditor_pw import AZUL_MARINHO, paragrafo, preencher_formatado_popup, trecho
 
 # Os `except Exception` deste modulo sao largos DE PROPOSITO (como no fluxo
 # Selenium original). O Playwright levanta PWTimeout so na espera estourada:
@@ -140,7 +140,7 @@ def iniciar_atendimento(page, log, numero_chamado: str,
 
     # 6. Preencher a descricao no pop-up (mira o editor do pop-up), em AZUL
     # MARINHO — padrao de texto da auditoria (2026-09-30). Digitando nao da
-    # para colorir, entao entra pela API do CKEditor (services/ckeditor_pw.py,
+    # para colorir, entao entra pela API do CKEditor (services/assyst/ckeditor_pw.py,
     # a mesma validada no Atendimento Programado). O `_preencher_descricao_dialog`
     # (digitacao, sem cor) continua acima, sem uso, caso precise voltar.
     texto = paragrafo(trecho(descricao, AZUL_MARINHO))

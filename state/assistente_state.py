@@ -214,7 +214,7 @@ class AssistenteState(rx.State):
             self.status_pensando = "Pensando..."
         yield
 
-        from services import credenciais
+        from services.dados import credenciais
         from services.agente.assistente import responder
         from services.agente.llm import ErroLLM
         matricula, senha = credenciais.carregar()
@@ -349,7 +349,7 @@ class AssistenteState(rx.State):
             self.status_vivo = inicio
             self.logs_vivos = [inicio]
             self._marcar(indice, estado="rodando")
-            from services import credenciais
+            from services.dados import credenciais
             matricula, senha = credenciais.carregar()
         yield
 

@@ -3,7 +3,7 @@ bot/cmd_fornecedor.py — /fornecedor: registra 'Aguardando Info do Fornecedor'
 em varios chamados.
 
 So existe no bot: nao ha tela no app desktop para isto (ver
-services/flow_fornecedor_pw.py). Irmao do /informacao — mesma wizard, mesma
+services/fluxos/flow_fornecedor_pw.py). Irmao do /informacao — mesma wizard, mesma
 execucao imediata com o MESMO texto pra todos os chamados da lista; só muda o
 botao clicado no Assyst (Ações de relógio -> Aguardando Info do Fornecedor).
 """

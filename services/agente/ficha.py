@@ -1,5 +1,5 @@
 """
-services/ficha.py — A FICHA do chamado: tudo o que as ferramentas do
+services/agente/ficha.py — A FICHA do chamado: tudo o que as ferramentas do
 Assistente precisam saber de um chamado, lido UMA vez (23/10).
 
 Antes cada ferramenta lia o chamado do seu jeito, e uma "sabia" o que a
@@ -20,7 +20,7 @@ dados pessoais) e os campos de lotação/equipamento.
 import dataclasses
 import time
 
-from services import triagem
+from services.agente import triagem
 
 _VALIDADE = 15 * 60   # s — o chamado pode mudar; 15 min cobre uma conversa
 _cache: dict[str, tuple[float, "Ficha"]] = {}
@@ -129,7 +129,7 @@ def _valor(page, seletor: str) -> str:
 
 
 def _ler(page, numero: str) -> Ficha:
-    from services.assyst_common import _so_o_nome
+    from services.assyst.assyst_common import _so_o_nome
 
     f = Ficha(numero=numero)
     for chave, nome in _CAMPOS.items():
@@ -158,7 +158,7 @@ def ler_ficha(pagina, numero: str, log, recente: bool = True) -> "Ficha | None":
     `pagina` = função que devolve a página logada (ex.: Sessao.pagina) — só
     é chamada se precisar abrir o Assyst. None = não abriu. `recente=False`
     força reler."""
-    from services.browser_pw import _navegar_para_chamado_pw
+    from services.assyst.browser_pw import _navegar_para_chamado_pw
 
     numero = (numero or "").strip().upper()
     if not numero:

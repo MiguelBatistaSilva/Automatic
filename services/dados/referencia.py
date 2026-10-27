@@ -1,5 +1,5 @@
 """
-services/referencia.py — Dados de REFERÊNCIA do CATI para o Assistente
+services/dados/referencia.py — Dados de REFERÊNCIA do CATI para o Assistente
 completar o que o técnico não diz (21/10).
 
 Arquivos em data/referencia/ (versionados; a atualização leva a todos — mesmo
@@ -10,7 +10,7 @@ motivo que tirou os tipos de solicitação do SQLite em 01/10):
   - edificios.csv (secao,grupo,edificio,qtd): em que edifício os chamados de
                  cada Seção foram atendidos (teste_extrair_edificios.py e
                  teste_ampliar_edificios.py). Usado na triagem
-                 (services/triagem.py).
+                 (services/agente/triagem.py).
   - tecnicos.csv (nome,fila): UMA LINHA POR PAR — o mesmo técnico pode estar
                  em várias filas (ex.: FCB e Remoto, conforme o local). Nome
                  exatamente como no Assyst. Editável à mão.

@@ -15,7 +15,7 @@ from telegram.ext import ContextTypes
 from bot.comum import MAX_CHAMADOS, SIMULADO, WIZARD, liberado, log_bot, quem
 from bot.services import credencial_servico
 from bot.services.sla_service import analisar_chamados
-from services.sla_engine import FILAS
+from services.regras.sla_engine import FILAS
 
 _FILAS = list(FILAS.keys())
 

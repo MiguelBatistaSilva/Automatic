@@ -111,7 +111,7 @@ class MeusFluxosState(rx.State):
 
     @rx.event
     def on_load(self):
-        from services import checkpoint, credenciais
+        from services.dados import checkpoint, credenciais
         self.matricula = credenciais._ler_matricula()
         self.rodadas = (
             [_rodada(h) for h in checkpoint.historico(self.matricula)]

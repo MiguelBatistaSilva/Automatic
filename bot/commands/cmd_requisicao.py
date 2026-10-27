@@ -7,7 +7,7 @@ PERGUNTA campo por campo, na ordem de `requisicao_campos.ORDEM_COLUNAS`, e
 UM chamado por vez só — no celular não faz sentido colar 40 linhas de uma vez
 como no formato antigo.
 
-Campo com valores pré-cadastrados (`services/requisicao_presets.py`, aba
+Campo com valores pré-cadastrados (`services/dados/requisicao_presets.py`, aba
 "Presets" da tela Configurações no app) vira BOTÃO — sem opção de digitar por cima,
 decisão do usuário (se não tiver o valor certo, ajeita depois no PC). Campo
 SEM preset cadastrado pede texto digitado. Usuário afetado e Descrição são
@@ -29,7 +29,7 @@ from telegram.ext import ContextTypes
 
 from bot.comum import WIZARD, liberado, log_bot, quem
 from bot.services import credencial_servico, requisicao_service
-from services.requisicao_campos import ORDEM_COLUNAS, POR_CHAVE
+from services.regras.requisicao_campos import ORDEM_COLUNAS, POR_CHAVE
 
 # Preenche tudo e PARA antes de salvar. Mesmo padrao dos outros fluxos: flag
 # de ambiente, nao botao — o app desktop nao expoe isto.
@@ -115,7 +115,7 @@ async def cmd_requisicao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not liberado(update):
         return
 
-    from services import requisicao_presets
+    from services.dados import requisicao_presets
 
     estado = {
         "fluxo": "requisicao",
@@ -223,7 +223,7 @@ async def confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # Igual ao parse do formato antigo: campo vazio/pulado NAO entra no dict
-    # ("nao mexer", nunca "apagar") — ver services/flow_requisicao_pw.parse_linha.
+    # ("nao mexer", nunca "apagar") — ver services/fluxos/flow_requisicao_pw.parse_linha.
     valores = {k: v for k, v in estado["valores"].items() if v}
 
     await query.edit_message_text("▶️ Criando a requisição...")

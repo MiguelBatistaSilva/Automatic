@@ -1,12 +1,12 @@
 """
-services/kb_store.py — Bases de Conhecimento cadastradas nesta maquina.
+services/dados/kb_store.py — Bases de Conhecimento cadastradas nesta maquina.
 
-Moram no banco (services/db.py, tabela kb_bases) desde 2026-09-28. Antes era
+Moram no banco (services/dados/db.py, tabela kb_bases) desde 2026-09-28. Antes era
 data/kb_configs.json — versionado no git, e por isso o updater o sobrescrevia
 a cada atualizacao, apagando as bases que cada tecnico cadastrou. O JSON e
 importado uma vez so; depois disso o updater pode trazer o que quiser.
 """
-from services import db
+from services.dados import db
 
 
 def carregar() -> list[dict]:

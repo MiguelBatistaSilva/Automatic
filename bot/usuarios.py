@@ -9,11 +9,11 @@ usuário, 2026-08-17: cadastrar a senha de cada colega não é viável) e mora e
 Guarda tambem um nome/apelido por chat_id — não vem do perfil do Telegram
 (que a pessoa pode mudar a qualquer hora) para os logs ficarem previsíveis.
 """
-from services import db
+from services.dados import db
 
 
 def _mapa() -> dict:
-    """chat_id (str) -> nome. Mora no banco (services/db.py) desde 2026-09-28;
+    """chat_id (str) -> nome. Mora no banco (services/dados/db.py) desde 2026-09-28;
     antes era data/usuarios_bot.json."""
     return {r["chat_id"]: r["nome"] for r in
             db.consultar("SELECT chat_id, nome FROM bot_usuarios")}

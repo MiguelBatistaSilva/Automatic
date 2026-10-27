@@ -11,7 +11,7 @@ abas de um agrupador em vez de itens separados na sidebar.
 
 Aba "Presets": cadastro dos valores fixos que o /requisicao do bot
 (Telegram) oferece como BOTÃO em vez de pedir texto digitado. CRUD em
-`state/requisicao_presets_state.py`, sobre `services/requisicao_presets.py`.
+`state/requisicao_presets_state.py`, sobre `services/dados/requisicao_presets.py`.
 Campo sem nenhum valor cadastrado aqui não trava o bot: ele simplesmente
 pede texto digitado pra aquele campo (ver bot/commands/cmd_requisicao.py).
 
@@ -21,7 +21,7 @@ view mudou de lugar.
 
 Aba "Bases de Conhecimento": cadastro de keyword+artigo usado pelos modos
 Criar + Base e Só Base do Desmembramento (tela e bot, ambos lêem
-o banco SQLite via `services/kb_store.py`). CRUD continua em
+o banco SQLite via `services/dados/kb_store.py`). CRUD continua em
 `state/kb_state.py` (KBState) — não duplicado aqui, só a view mudou de
 lugar, igual às outras duas abas.
 
@@ -35,8 +35,8 @@ import reflex as rx
 from state.requisicao_presets_state import RequisicaoPresetsState
 from state.kb_state import KBState
 from bot.state import TelegramState
-from services.requisicao_campos import POR_CHAVE
-from services.requisicao_presets import CAMPOS_COM_PRESET
+from services.regras.requisicao_campos import POR_CHAVE
+from services.dados.requisicao_presets import CAMPOS_COM_PRESET
 from components.layout import page_layout
 from components.botoes import botao_primario, botao_secundario, botao_tabela
 

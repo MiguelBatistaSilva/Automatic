@@ -2,7 +2,7 @@
 bot/informacao_service.py — Adicionar Informação sem interface.
 
 So existe aqui: nao ha tela no app desktop para este fluxo (ver
-services/flow_informacao_pw.py). Mesmo papel do atendimento_service.py: a
+services/fluxos/flow_informacao_pw.py). Mesmo papel do atendimento_service.py: a
 orquestracao (login -> laco de chamados) roda sozinha, para o bot poder
 chamar.
 
@@ -11,8 +11,8 @@ ATENCAO — este fluxo ESCREVE no chamado. Com modo_teste=True o
 "Salvar acao": da para exercitar o caminho inteiro, com chamado real, sem
 alterar nada. Use isso para testar.
 """
-from services.browser_pw import NavegadorPW, _fazer_login_pw
-from services.flow_informacao_pw import adicionar_informacao
+from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw
+from services.fluxos.flow_informacao_pw import adicionar_informacao
 
 
 def _silencioso(msg, tipo="info"):

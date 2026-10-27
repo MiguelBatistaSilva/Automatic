@@ -1,5 +1,5 @@
 """
-services/flow_minhafila_pw.py — leitura da grade "Minha Fila" em Playwright.
+services/fluxos/flow_minhafila_pw.py — leitura da grade "Minha Fila" em Playwright.
 
 Portado do link fornecido pelo usuario: uma pesquisa salva no proprio Assyst
 (queryProfileId=4 / columnProfileId=2) que lista os chamados da fila do
@@ -22,7 +22,7 @@ linhas da fila, entao rolamos ate o fim da grade acumulando por referencia
 
 import time
 
-from services.browser_pw import _aguardar_pagina_assentar
+from services.assyst.browser_pw import _aguardar_pagina_assentar
 
 _URL_MINHA_FILA = (
     "https://cati.tjce.jus.br/assystweb/application.do"

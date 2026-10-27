@@ -9,6 +9,9 @@ ESCREVE no Assyst passa por um cartão de confirmação na tela antes de rodar.
   llm.py          cliente HTTP da Groq (API compatível com a da OpenAI)
   ferramentas.py  catálogo: esquema para o modelo, validação, cartão, execução
   assistente.py   a conversa: histórico -> texto OU ação a confirmar
+  ficha.py        a FICHA do chamado, lida uma vez para todas as ferramentas
+  triagem.py      regras de triagem (Edifício, Item B) sobre a ficha
+  despacho_operacao.py  script do despacho ao Serviço de Operações
 
 Não importa reflex: a página (state/assistente_state.py) é só quem chama.
 """

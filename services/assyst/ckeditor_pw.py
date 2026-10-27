@@ -1,5 +1,5 @@
 """
-services/ckeditor_pw.py — Texto FORMATADO (com cor) no CKEditor do Assyst.
+services/assyst/ckeditor_pw.py — Texto FORMATADO (com cor) no CKEditor do Assyst.
 
 Os fluxos digitam a descrição (press_sequentially), o que não permite cor. O
 padrão de texto da auditoria (2026-09-30) exige cor — azul marinho no texto,

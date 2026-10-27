@@ -1,5 +1,5 @@
 """
-services/requisicao_campos.py — Catalogo dos campos da tela "Requisição de Serviço".
+services/regras/requisicao_campos.py — Catalogo dos campos da tela "Requisição de Serviço".
 
 Extraido do HTML real da tela (arquivo `html_requisicao` na raiz, capturado em
 2026-07-30). NAO tem navegador nem reflex: e so a descricao dos campos, para o

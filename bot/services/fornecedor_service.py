@@ -2,7 +2,7 @@
 bot/fornecedor_service.py — Aguardando Info do Fornecedor sem interface.
 
 So existe aqui: nao ha tela no app desktop para este fluxo (ver
-services/flow_fornecedor_pw.py). Mesmo papel do informacao_service.py: a
+services/fluxos/flow_fornecedor_pw.py). Mesmo papel do informacao_service.py: a
 orquestracao (login -> laco de chamados) roda sozinha, para o bot poder
 chamar.
 
@@ -11,8 +11,8 @@ ATENCAO — este fluxo ESCREVE no chamado. Com modo_teste=True o
 em "Salvar acao": da para exercitar o caminho inteiro, com chamado real, sem
 alterar nada. Use isso para testar.
 """
-from services.browser_pw import NavegadorPW, _fazer_login_pw
-from services.flow_fornecedor_pw import aguardar_info_fornecedor
+from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw
+from services.fluxos.flow_fornecedor_pw import aguardar_info_fornecedor
 
 
 def _silencioso(msg, tipo="info"):

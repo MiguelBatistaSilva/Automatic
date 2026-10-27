@@ -14,9 +14,9 @@ Duas coisas herdadas do fluxo e que valem manter em qualquer interface:
    na linha 5 de 10, nao ha retomada: quem for repetir precisa colar so o que
    faltou. Por isso o relatorio diz linha a linha o que entrou.
 """
-from services.browser_pw import NavegadorPW, _fazer_login_pw
-from services.flow_requisicao_pw import criar_requisicao, parse_entrada
-from services.requisicao_campos import ORDEM_COLUNAS, POR_CHAVE, SEPARADOR
+from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw
+from services.fluxos.flow_requisicao_pw import criar_requisicao, parse_entrada
+from services.regras.requisicao_campos import ORDEM_COLUNAS, POR_CHAVE, SEPARADOR
 
 
 def _silencioso(msg, tipo="info"):

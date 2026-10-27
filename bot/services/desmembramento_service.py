@@ -14,16 +14,16 @@ state/desmembramento_state.py, amarrada a tela. Aqui ela roda sozinha.
 import csv
 import io
 
-from services import checkpoint, kb_store
-from services.assyst_common import _path_filhos
-from services.browser_pw import NavegadorPW
-from services.flow_desmembramento_pw import (
+from services.dados import checkpoint, kb_store
+from services.assyst.assyst_common import _path_filhos
+from services.assyst.browser_pw import NavegadorPW
+from services.fluxos.flow_desmembramento_pw import (
     FluxoBCPW,
     FluxoCompletoPW,
     FluxoCriarPW,
     _chave_checkpoint,
 )
-from services.kb_manager_pw import executar_kb_unica_pw
+from services.fluxos.kb_manager_pw import executar_kb_unica_pw
 
 # Estados possiveis do checkpoint antes de comecar. Quem chama usa isto para
 # decidir o que perguntar ao usuario.

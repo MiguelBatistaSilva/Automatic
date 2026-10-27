@@ -11,7 +11,7 @@ import dataclasses
 
 import reflex as rx
 
-from services.sla_engine import FILAS, FILA_PADRAO, HORA_INICIO, HORA_FIM
+from services.regras.sla_engine import FILAS, FILA_PADRAO, HORA_INICIO, HORA_FIM
 from state.flow_runner import FlowRunnerState
 
 # ── Resumo das regras, para a ajuda da tela ────────────────────────────────────
@@ -89,7 +89,7 @@ class SLAState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/rodando pro
             return
 
         # Credenciais salvas (keyring), cadastradas no pop-up Opcoes -> Credenciais.
-        from services import credenciais
+        from services.dados import credenciais
         matricula, senha = credenciais.carregar()
         if not matricula or not senha:
             async with self:
@@ -99,11 +99,11 @@ class SLAState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/rodando pro
             return
 
         def worker(log, emit):
-            from services.browser_pw import (
+            from services.assyst.browser_pw import (
                 NavegadorPW, _fazer_login_pw, _usuario_afetado_pw,
             )
-            from services.flow_sla_pw import extrair_historico_chamado
-            from services.sla_engine import calcular_sla
+            from services.fluxos.flow_sla_pw import extrair_historico_chamado
+            from services.regras.sla_engine import calcular_sla
 
             log(f"Iniciando analise de {len(chamados)} chamado(s)...", "status")
             with NavegadorPW(log) as page:

@@ -11,9 +11,9 @@ o bot se provar, o state pode passar a chamar daqui e a duplicacao some.
 
 SO LEITURA: abre o chamado, le o historico de acoes e calcula. Nao altera nada.
 """
-from services.browser_pw import NavegadorPW, _fazer_login_pw, _usuario_afetado_pw
-from services.flow_sla_pw import extrair_historico_chamado
-from services.sla_engine import calcular_sla, FILAS, FILA_PADRAO
+from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw, _usuario_afetado_pw
+from services.fluxos.flow_sla_pw import extrair_historico_chamado
+from services.regras.sla_engine import calcular_sla, FILAS, FILA_PADRAO
 
 
 def _silencioso(msg, tipo="info"):

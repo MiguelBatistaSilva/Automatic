@@ -119,7 +119,7 @@ class AtendimentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/rod
             self.logs = self.logs + [self._linha("Agendamento ativado. Verificando a cada 20s.", "success")]
 
         # Valida credenciais uma vez (relidas a cada lote; nunca guardadas).
-        from services import credenciais
+        from services.dados import credenciais
         mat, senha = credenciais.carregar()
         if not mat or not senha:
             async with self:
@@ -152,8 +152,8 @@ class AtendimentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/rod
                 chamados = vencidos
 
                 def worker(log, emit):
-                    from services.browser_pw import NavegadorPW, _fazer_login_pw
-                    from services.flow_atendimento_pw import iniciar_atendimento, DESCRICAO_PADRAO
+                    from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw
+                    from services.fluxos.flow_atendimento_pw import iniciar_atendimento, DESCRICAO_PADRAO
                     with NavegadorPW(log) as page:
                         if not _fazer_login_pw(page, matricula, senha, log):
                             for c in chamados:

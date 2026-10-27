@@ -1,5 +1,5 @@
 """
-services/triagem.py — O Assistente olhando o chamado COMO TÉCNICO (22/10).
+services/agente/triagem.py — O Assistente olhando o chamado COMO TÉCNICO (22/10).
 
 Regras de triagem no CÓDIGO (a IA só recebe o resultado):
   - Edifício: "Por definir" (ou vazio) -> o edifício sai da Seção do usuário,
@@ -19,7 +19,7 @@ import re
 import unicodedata
 from collections import Counter
 
-from services import referencia
+from services.dados import referencia
 
 POR_DEFINIR = "por definir"
 IC_NAO_LOCALIZADO = "IC NÃO LOCALIZADO"
@@ -327,7 +327,7 @@ def triar(chamado: str, campos: dict, descricao: str) -> Triagem:
 
 
 def triar_ficha(f) -> Triagem:
-    """A triagem de uma services.ficha.Ficha (23/10: todas as ferramentas
+    """A triagem de uma services.agente.ficha.Ficha (23/10: todas as ferramentas
     leem o chamado pela ficha)."""
     t = triar(f.numero, {"secao": f.secao, "grupo": f.grupo, "edificio": f.edificio,
                          "item_b": f.item_b, "fila": f.fila}, f.descricao)

@@ -1,7 +1,7 @@
 """
 services/agente/registro.py — Registro dos pedidos ao Assistente (08/10).
 
-Uma linha por pedido na tabela `agente_pedidos` (services/db.py, v8): o que
+Uma linha por pedido na tabela `agente_pedidos` (services/dados/db.py, v8): o que
 o técnico pediu, que domínio o roteador escolheu, que ferramentas a IA
 chamou e com quê, idas/tokens/tempo, o que o técnico fez com o cartão e o
 resultado de cada passo.
@@ -58,7 +58,7 @@ def gravar_pedido(matricula: str, modelo: str, pedido: str, resposta=None,
     `assistente.Resposta` (None quando a IA deu erro). Devolve o id da linha
     (para o desfecho e o resultado chegarem depois) ou None se não gravou."""
     try:
-        from services import db
+        from services.dados import db
         m = getattr(resposta, "metricas", None) or {}
         acoes = getattr(resposta, "acoes", None) or []
         with db.transacao() as con:
@@ -82,7 +82,7 @@ def marcar_desfecho(id_pedido: int | None, desfecho: str) -> None:
     if not id_pedido:
         return
     try:
-        from services import db
+        from services.dados import db
         with db.transacao() as con:
             con.execute("UPDATE agente_pedidos SET desfecho = ? WHERE id = ?",
                         (desfecho, id_pedido))
@@ -95,7 +95,7 @@ def gravar_resultado(id_pedido: int | None, resultados: list[dict], erro: str = 
     if not id_pedido:
         return
     try:
-        from services import db
+        from services.dados import db
         with db.transacao() as con:
             con.execute("UPDATE agente_pedidos SET resultado = ?, erro = ? WHERE id = ?",
                         (_json(resultados), erro, id_pedido))

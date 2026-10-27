@@ -13,6 +13,7 @@ roteador (services/agente/roteador.py). Arquivo na raiz vale para todos.
   indice()        -> a lista de TODOS os assuntos (vai nas instruções, curta);
   ler(assunto)    -> um assunto inteiro (ferramenta consultar_conhecimento);
   tipos()         -> os tipos de solicitação, lidos pelo CÓDIGO.
+  despachos()     -> os modelos de despacho, lidos SÓ pelo código (26/10).
 
 Lido a cada pedido (são poucos KB): editar um arquivo vale na hora, sem
 reiniciar o app.
@@ -24,6 +25,11 @@ from pathlib import Path
 
 PASTA = Path(__file__).parent / "conhecimento"
 _ARQ_TIPOS = PASTA / "requisicao" / "tipos_solicitacao.md"
+# Dado que só o CÓDIGO lê: fica fora das instruções, do índice e do
+# consultar_conhecimento (os modelos de despacho são ~3.000 tokens, que iriam
+# em todo pedido de chamados; a IA só precisa dos nomes — ver despachos()).
+_ARQ_DESPACHOS = PASTA / "chamados" / "despachos.md"
+_SO_CODIGO = {_ARQ_DESPACHOS}
 
 
 @dataclasses.dataclass
@@ -36,11 +42,20 @@ class Tipo:
     descricao: str
 
 
+@dataclasses.dataclass
+class ModeloDespacho:
+    nome: str
+    tipo: str
+    pedidos: str
+    defeito: str
+    testes: list[str]
+
+
 def _arquivos(dominios: "set[str] | None" = None) -> list[Path]:
     """Raiz sempre; subpastas só as de `dominios` (None = todas)."""
     saida = []
     for p in sorted(PASTA.rglob("*.md")):
-        if p.name.lower() == "readme.md":
+        if p.name.lower() == "readme.md" or p in _SO_CODIGO:
             continue
         rel = p.relative_to(PASTA)
         if len(rel.parts) == 1 or dominios is None or rel.parts[0] in dominios:
@@ -116,4 +131,33 @@ def tipos() -> list[Tipo]:
                 resumo=campos.get("resumo") or "Requisição de Serviço",
                 descricao=campos["descricao"],
             ))
+    return saida
+
+
+def despachos() -> list[ModeloDespacho]:
+    """Os modelos de chamados/despachos.md (formato descrito lá).
+
+    Bloco = título `## Nome` + `- campo: valor` + `- testes:` com um teste
+    por linha (`  - ...`). Bloco sem tipo, defeito ou testes é ignorado.
+    """
+    try:
+        conteudo = _ARQ_DESPACHOS.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    saida = []
+    for bloco in re.split(r"^##\s+", conteudo, flags=re.M)[1:]:
+        linhas = bloco.strip().splitlines()
+        campos, testes = {}, []
+        for l in linhas[1:]:
+            if re.match(r"\s{2,}-\s", l):          # item da lista de testes
+                testes.append(l.strip()[1:].strip().rstrip(";.").strip())
+                continue
+            m = re.match(r"-\s*(\w+)\s*:\s*(.*)$", l)
+            if m:
+                campos[m[1].lower()] = m[2].strip()
+        if campos.get("tipo") and campos.get("defeito") and testes:
+            saida.append(ModeloDespacho(
+                nome=linhas[0].strip(), tipo=campos["tipo"],
+                pedidos=campos.get("pedidos", ""),
+                defeito=campos["defeito"].rstrip(";.").strip(), testes=testes))
     return saida

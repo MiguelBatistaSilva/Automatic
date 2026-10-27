@@ -2,7 +2,7 @@
 bot/cmd_informacao.py — /informacao: adiciona um texto em varios chamados.
 
 So existe no bot: nao ha tela no app desktop para isto (ver
-services/flow_informacao_pw.py). Fica na mesma familia do /atendimento no
+services/fluxos/flow_informacao_pw.py). Fica na mesma familia do /atendimento no
 Assyst (Ações de relógio), mas executa NA HORA — nao tem agenda, nao tem
 horario marcado, e o MESMO texto vale para todos os chamados da lista.
 """
