@@ -17,6 +17,9 @@ Como o Assistente usa:
   outro domínio, lê com a ferramenta `consultar_conhecimento`.
 - `requisicao/tipos_solicitacao.md` também é LIDO PELO CÓDIGO (Requisição
   por tombo): respeite o formato descrito lá.
+- Lidos SÓ pelo código (não vão para a IA): `chamados/despachos.md` e a
+  pasta `referencia/` (técnicos, filas e edifícios, em tabelas). Respeite o
+  formato: texto no começo e UMA tabela, com os nomes das colunas na 1ª linha.
 
 Para ensinar algo novo: edite ou crie um arquivo na pasta do domínio certo.
 Domínio NOVO (ex.: documentos): crie a subpasta E avise quem programa — o

@@ -15,6 +15,9 @@ roteador (services/agente/roteador.py). Arquivo na raiz vale para todos.
   tipos()         -> os tipos de solicitação, lidos pelo CÓDIGO.
   despachos()     -> os modelos de despacho, lidos SÓ pelo código (26/10).
 
+A subpasta referencia/ (técnicos, filas, edifícios) também é SÓ do código:
+quem lê é services/dados/referencia.py.
+
 Lido a cada pedido (são poucos KB): editar um arquivo vale na hora, sem
 reiniciar o app.
 """
@@ -30,6 +33,9 @@ _ARQ_TIPOS = PASTA / "requisicao" / "tipos_solicitacao.md"
 # em todo pedido de chamados; a IA só precisa dos nomes — ver despachos()).
 _ARQ_DESPACHOS = PASTA / "chamados" / "despachos.md"
 _SO_CODIGO = {_ARQ_DESPACHOS}
+# Pasta inteira só do código: as tabelas de técnicos, filas e edifícios
+# (services/dados/referencia.py; ~500 linhas — nunca em toda ida à IA).
+_PASTAS_SO_CODIGO = {"referencia"}
 
 
 @dataclasses.dataclass
@@ -55,9 +61,10 @@ def _arquivos(dominios: "set[str] | None" = None) -> list[Path]:
     """Raiz sempre; subpastas só as de `dominios` (None = todas)."""
     saida = []
     for p in sorted(PASTA.rglob("*.md")):
-        if p.name.lower() == "readme.md" or p in _SO_CODIGO:
-            continue
         rel = p.relative_to(PASTA)
+        if (p.name.lower() == "readme.md" or p in _SO_CODIGO
+                or rel.parts[0] in _PASTAS_SO_CODIGO):
+            continue
         if len(rel.parts) == 1 or dominios is None or rel.parts[0] in dominios:
             saida.append(p)
     return saida

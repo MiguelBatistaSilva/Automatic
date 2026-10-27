@@ -3,7 +3,7 @@ services/agente/triagem.py — O Assistente olhando o chamado COMO TÉCNICO (22/
 
 Regras de triagem no CÓDIGO (a IA só recebe o resultado):
   - Edifício: "Por definir" (ou vazio) -> o edifício sai da Seção do usuário,
-    pelo histórico do data/referencia/edificios.csv.
+    pelo histórico de conhecimento/referencia/edificios.md.
   - Item B: o tombo vem da descrição ("máquina de tombo 332244") -> o técnico
     digita *332244 + TAB no Item B; sem tombo, ou com vários (desmembrar
     depois) -> IC NÃO LOCALIZADO.

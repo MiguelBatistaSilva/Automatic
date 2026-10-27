@@ -1,0 +1,215 @@
+# Filas (Departamentos de Serviço do Assyst)
+
+Lido SÓ pelo código (services/dados/referencia.py) — não vai para a IA.
+Os 205 Departamentos de Serviço, extraídos da busca '*' da Atribuição
+Interna (testes/teste_extrair_filas.py). Para atualizar, rode de novo.
+
+Colunas: nome (exato como no Assyst), codigo, ans.
+
+| nome | codigo | ans |
+|---|---|---|
+| 1N CATI | 1 NIVEL | Atend. 1º Nível |
+| 1N CIAT | 1N CIAT |  |
+| 1N TJ Digitalização | 1NTJDIGITALIZAÇ |  |
+| 2N CATI Demais Capital | 2NDEMAISCAPITAL | ANO 2N DEMAIS CAPITAIS |
+| 2N CATI FCB | 2NCATIFCB | ANO 2N TJ E FCB |
+| 2N CATI JUIZADO DA MULHER | 2NJUIZADODAMULHER | ANO 2N Presencial Interior |
+| 2N CATI Polo Caucaia | 2NPOLOCAUCAIA | ANO 2N Presencial Interior |
+| 2N CATI Polo Crateús | 2NPOLOCRATEUS | ANO 2N Presencial Interior |
+| 2N CATI Polo Iguatu | 2NPOLOIGUATU | ANO 2N Presencial Interior |
+| 2N CATI Polo Juazeiro | 2NPOLOJUAZEIRO | ANO 2N Presencial Interior |
+| 2N CATI Polo Maracanaú | 2NPOLOMARACANAU | ANO 2N Presencial Interior |
+| 2N CATI Polo Quixadá | 2NPOLOQUIXADA | ANO 2N Presencial Interior |
+| 2N CATI Polo Sobral | 2NPOLOSOBRAL | ANO 2N Presencial Interior |
+| 2N CATI Remoto | 2NREMOTO | ANO Atendimento 2N Remoto |
+| 2N CATI Sala de Imagem - FCB | 2N CATI SI(FCB) | ANO 2N Presencial Salas de Imagem |
+| 2N CATI Sala de Imagem - Galpão BR | 2N CATI SI(BR) | ANO 2N Presencial Salas de Imagem |
+| 2N CATI Sistemas | 2NCATISISTEMAS | ANO 2N Sistemas |
+| 2N CATI TJ | 2NCATITJ | ANO 2N TJ E FCB |
+| 2N CATI Vara de Custódia | 2NVARADECUSTODIA | ANO 2N Presencial Vara de Custódia |
+| 2N CIAT APOIO DEA | 2N CIAT APOIO DEA |  |
+| 2N CIAT COGES | 2N CIAT COGES |  |
+| 2N CIAT CONFECÇÃO DE CRACHÁ | 2N CIAT CONFECÇÃO DE CRACHÁ |  |
+| 2N CIAT ENVIO DE CRACHÁ / ID FUNCIONAL | 2N CIAT ENVIO DE CRACHÁ / ID FUNCIONAL |  |
+| 2N CIAT FCB Educação Corporativa | 2N CIAT FCB EDU CORP |  |
+| 2N CIAT FCB Manutenção | 2N CIAT FCB MAN |  |
+| 2N CIAT FCB Patrimônio | 2N CIAT FCB PAT |  |
+| 2N CIAT FCB RH | 2N CIAT FCB RH |  |
+| 2N CIAT FCB Transporte | 2N CIAT FCB TRA |  |
+| 2N CIAT GRÁFICA Coord. de Apoio Operacional da Assessoria de Comunicação | 2NCIATGRÁFICA |  |
+| 2N CIAT NAGPG | 2N CIAT NAGPG |  |
+| 2N CIAT NAM | 2N CIAT NAM |  |
+| 2N CIAT SEADI Diretoria Administrativa | 2N CIAT SEADI DIRETORIA ADMINISTRATIVA |  |
+| 2N CIAT SEADI Fornecimento de Água | 2N CIAT SEADI AGUA |  |
+| 2N CIAT SEADI Manutenção | 2N CIAT SEADI MANUT |  |
+| 2N CIAT SEADI Patrimônio | 2N CIAT SEADI PAT |  |
+| 2N CIAT SEADI Readequação de perfil para pedidos de material de consumo | 2N CIAT SEADI PED |  |
+| 2N CIAT SEADI Serviços de Limpeza | 2N CIAT SEADI LIMP |  |
+| 2N CIAT SEADI Transporte | 2N CIAT SEADI TRANSP |  |
+| 2N CIAT SEFIN | 2N CIAT SEFIN |  |
+| 2N CIAT SEPLAG | 2N CIAT SEPLAG |  |
+| 2N CIAT SGP Coord. Acompanhamento de Contratos | 2N CIAT SGP CON |  |
+| 2N CIAT SGP Coord. Assuntos Previdenciários | 2N CIAT SGP PREV |  |
+| 2N CIAT SGP Coord. Atenção a Saúde | 2N CIAT SGP SAU |  |
+| 2N CIAT SGP Coord. de Benefícios | 2N CIAT SGP BEN |  |
+| 2N CIAT SGP Coord. de Comissionamento | 2N CIAT SGP COM |  |
+| 2N CIAT SGP Coord. de Folha de Pagamento | 2N CIAT SGP FOLHA PAG |  |
+| 2N CIAT SGP Coord. de Gestão de Registros Funcionais | 2N CIAT SERV CONTR REG FUNC |  |
+| 2N CIAT SGP Coord. Desenv. Pessoal | 2N CIAT SGP DES PES |  |
+| 2N CIAT SGP Coord. Diárias e Frequências | 2N CIAT SGP DIA |  |
+| 2N CIAT SGP Coord. Educação Corporativa | 2N CIAT SGP EDU |  |
+| 2N CIAT SGP Coord. Estágio | 2N CIAT SGP EST |  |
+| 2N CIAT SGP Coord. Provimento e Movimentação de Pessoal | 2N CIAT SGP MOV PES |  |
+| 2N CIAT SGP Coord. Vantagens | 2N CIAT SGP VAN |  |
+| 2N CIAT SGP Ger. Adm. de Pessoal | 2N CIAT SGP ADM PES |  |
+| 2N CIAT SGP Ger. Desenvolvimento e Atenção a Saúde | 2N CIAT SGP SAUDE |  |
+| 2N CIAT SGP Ger. Pagamento de Pessoal | 2N CIAT SGP PAG |  |
+| 2N CIAT SGP Gerência de Benefícios e Registros Funcionais | 2N GERÊNCIA DE BENEFÍCIOS E REGISTROS FUNCIONAI |  |
+| 2N Softplan SAJPG Contingência | 2NSAJPGCONT |  |
+| 2N TJ Sistemas Judiciais - Distribuição | 2NTJSISTJUDDIS |  |
+| 3N BID Tarefas | 3NBIDTR |  |
+| 3N CATI Armazenamento | 3NARMAZENAMENTO | ANO CATI |
+| 3N CATI Backup | 3NBACKUP | ANO CATI |
+| 3N CATI Banco de Dados | 3NCATIBD | ANO CATI |
+| 3N CATI Conectividade | 3NCONECTIVIDAD | ANO CATI |
+| 3N CATI DevOps | 3N CATI DEVOPS | ANO CATI |
+| 3N CATI Gerencia | 3NCATICOORD | ANO CATI |
+| 3N CATI Linux | 3NLINUX/UNIX/S | ANO CATI |
+| 3N CATI Monitoramento | 3NMONITORAMENTO | ANO CATI |
+| 3N CATI Monitoramento PJE | 3N CATI MONITORAMENTO PJE | ANO CATI |
+| 3N CATI Netscaler | 3NNETSCALER | ANO CATI |
+| 3N CATI Office 365 | 3N CATI OFFICE 365 | ANO CATI |
+| 3N CATI Pje - Aplicação | 3N CATI PJE APLICACAO | ANO CATI |
+| 3N CATI Pje - Banco de dados | 3N CATI PJE BANCO DE DADOS | ANO CATI |
+| 3N CATI Pje - Devops | 3N CATI PJE DEVOPS | ANO CATI |
+| 3N CATI Pje - Linux | 3N CATI PJE LINUX | ANO CATI |
+| 3N CATI Pje - Nuvem | 3N CATI PJE NUVEM | ANO CATI |
+| 3N CATI Seg da Informação | 3NSEGINFO | ANO CATI |
+| 3N CATI Seg Endpoint | 3NSEGENDPOINT | ANO CATI |
+| 3N CATI Seg Firewall | 3NFIREWALL | ANO CATI |
+| 3N CATI Seg Linux | 3NSEGLINUX | ANO CATI |
+| 3N CATI Seg Windows | 3NSEGWINDOWS | ANO CATI |
+| 3N CATI Servidor de Aplicação | 3NSERVAPLICACAO | ANO CATI |
+| 3N CATI Suporte computacional | 3N CATI APOIO | ANO CATI |
+| 3N CATI Virtualização | 3NVIRTUAL | ANO CATI |
+| 3N CATI Windows | 3NWINDOWS | ANO CATI |
+| 3N DNPJE MIGRAÇÃO | 3NDNPJEMIGRAÇÃO |  |
+| 3N ENGESOFTWARE Tarefas | 3NIENGESWTR |  |
+| 3N FCB BNMP - Servidor | 3NFCBBNMP |  |
+| 3N FCB Inovação | 3NFCBINV |  |
+| 3N FCB Inovação - Scripts | 3NFCBINVSCR |  |
+| 3N FCB SAJPG - Servidor | 3NFCBSAJPGSERVI |  |
+| 3N FCB SEEU - Servidor | 3NFCBSEEU |  |
+| 3N FCB Sistemas Nacionais - Acessos | 3N FCB SIST NAC ACESSOS |  |
+| 3N FCB Sistemas Nacionais - Suporte | 3N FCB SIST NAC SUPORTE |  |
+| 3N INDRA Tarefas | 3NINDRATR |  |
+| 3N IVIA Judicial | 3NIVIAJUD |  |
+| 3N IVIA Tarefas | 3NIVIATR |  |
+| 3N SEGOV Dados Administrativos | 3N SEGOV DADOS ADMINISTRATIVOS |  |
+| 3N SEGOV Dados Judiciais | 3N SEGOV DADOS JUDICIAIS |  |
+| 3N SEPLAG GERINFE | 3NSEPLAGGERINFE |  |
+| 3N SEPLAG GERINFE CID | 3NSEPLAGGERINFECID |  |
+| 3N SOC BlueTeam | 3NSOCBLUETEAM |  |
+| 3N SOC Monitoramento | 3NSOCMONITORAMENTO |  |
+| 3N SOC RedTeam | 3NSOCREDTEAM |  |
+| 3N Softplan SAJ - Sustentação | 3NSOFTPLANSAJSUST |  |
+| 3N SUPJUD PJe | 3NSUPJUDPJE |  |
+| 3N SUPJUD PJE Cadastro | 3N SUPJUD PJE CADASTRO |  |
+| 3N SUPJUD PJE Erro ou Falha | 3N SUPJUD PJE ERRO OU FALHA |  |
+| 3N SUPJUD PJE Migração | 3N SUPJUD PJE MIGRAÇÃO |  |
+| 3N SUPJUD PJE Orientação | 3N SUPJUD PJE ORIENTAÇÃO |  |
+| 3N SUPJUD PJE REDMINES | 3NSUPJUDPJEREDMINES |  |
+| 3N TJ AdmDados Administrativo | 3NTJADMDADADM |  |
+| 3N TJ AdmDados Judicial | 3NTJADMDADJUD |  |
+| 3N TJ ADMRH | 3NTJADMRH |  |
+| 3N TJ BD PJE | 3NTJBDPJE |  |
+| 3N TJ Desenv Dinâmico | 3NTJDESDINAMICO |  |
+| 3N TJ DevOps | 3NTJDEVOPS |  |
+| 3N TJ DIRETORIA NEGOCIAL DE AUTOMAÇÃO | 3N TJ DIRETORIA NEGOCIAL DE AUTOMAÇÃO |  |
+| 3N TJ DIRETORIA NEGOCIAL DE IA | 3N TJ DIRETORIA NEGOCIAL DE IA |  |
+| 3N TJ Escritório de Processos | 3NTJESCRITPROC |  |
+| 3N TJ FERMOJU | 3NTJFERMOJU |  |
+| 3N TJ Ferramentas | 3NTJFERRAM |  |
+| 3N TJ Inteligência Artificial | 3NTJIA |  |
+| 3N TJ Mobile | 3N TJ MOBILE |  |
+| 3N TJ Patrimônio Atendimento | 3N TJ PATRIMÔNIO ATENDIMENTO |  |
+| 3N TJ PJe | 3NTJPJE |  |
+| 3N TJ Portais | 3NTJPORT |  |
+| 3N TJ RH | 3NTJRH |  |
+| 3N TJ Robotização | 3NTJROBOTIZACAO |  |
+| 3N TJ SAA | 3NTJSAA |  |
+| 3N TJ SAJADM | 3NTJSAJADM |  |
+| 3N TJ SAJSG - Migração | 3NTJSAJSGMIGR |  |
+| 3N TJ SAJSG - Servidor | 3NTJSAJSGSERV |  |
+| 3N TJ SAU | 3NTJSAU | ANO SERVCENTI |
+| 3N TJ Segurança Sistemas | 3NTJSEGSIS |  |
+| 3N TJ SEI_ADM | 3N TJ SEI_ADM |  |
+| 3N TJ Serv Seg Informação | 3NTJSERVSEGINFO |  |
+| 3N TJ Serv. de Operação | 3NTJSERV.DEOPE |  |
+| 3N TJ Serviços assyst | 3NTJSERVASSYST |  |
+| 3N TJ Sistemas Administrativos | 3NTJSISTADMIN |  |
+| 3N TJ Sistemas Judiciais | 3NTJSISTJUDIC |  |
+| 3N TJ SPROC | 3NTJSPROC |  |
+| 3N TJ SYDLE | 3N TJ SYDLE |  |
+| Aprovadores Administrativos | APROV ADMINISTR |  |
+| Aprovadores Banco de Dados | APROV BANCO DAD |  |
+| Aprovadores Data Center | APROV DATA CENT |  |
+| Aprovadores Estações de Trabal | APROV EST TRAB |  |
+| Aprovadores Ger de Aplicações | APROV GER APLIC |  |
+| Aprovadores Judiciais | APROV JUDICIAIS |  |
+| Aprovadores Judiciais PJe | APROV JUD PJE |  |
+| Aprovadores Judiciais SAJPG | APROV JUD SAJPG |  |
+| Aprovadores Judiciais SAJSG | APROV JUD SAJSG |  |
+| Aprovadores Portais | APROV PORTAIS |  |
+| Aprovadores Redes e Segurança | APROV RED E SEG |  |
+| Aprovadores Reuniões e Eventos | APROV RNS EVNT |  |
+| Aprovadores SAJADM / ADMRH | APROV SAJADM |  |
+| Aprovadores SO e Servidores | APROV SO E SERV |  |
+| Aprovadores Solução de Problemas | APR SOL PRO |  |
+| Assistente Virtual | ASSISTENTE_VIRTUAL |  |
+| CCM | CAB |  |
+| CCM-E | ECAB |  |
+| Div. de Patrimônio TJ | DIVPATTJ |  |
+| Equipe de Liberação | EQUI LIBERAÇÃO |  |
+| Fornecedor Simpress | FORNECEDOR SIMPRESS |  |
+| Ger. da Central de Serviços | GESTÃOCENTRALDE |  |
+| Ger. de Configuração | GER CONF |  |
+| Ger. de Conhecimento | GER CONHEC |  |
+| Ger. de Incidente | INCIDENT MGMT |  |
+| Ger. de Infraestrutura | GESTÃODEINFRAES |  |
+| Ger. de Liberação | GER LIB |  |
+| Ger. de Mudança | GER MUD |  |
+| Ger. de Mudança Administrativo | GER MUD ADM |  |
+| Ger. de Mudança Infra | GER MUD INFRA |  |
+| Ger. de Mudança Judiciais | GER MUD JUD |  |
+| Ger. de Mudança Portais | GER MUD POR |  |
+| Ger. de Problema | PROBLEM MGMT |  |
+| Ger. de Processos | GER PROC |  |
+| Ger. de Sistemas Administrativos | GER SIST ADM |  |
+| Ger. de Sistemas Judiciais | GER SIST JUD |  |
+| Ger. de Versão | RELEASE MGMT |  |
+| Ger. de Virtualização | GESTÃODEVIRTUAL |  |
+| Ger. do Catalogo de Serviço | GER CAT SER |  |
+| Gestores 1N Lanlink | GES LLK 1N-TOD |  |
+| GRISI | GRISI |  |
+| NÚCLEO DE JUSTIÇA 4.0 – CUMPRIMENTO DE SENTENÇA FAZENDÁRIO | NUCLEO_DE_JUSTICA_40_CUMPRIMENTO_DE_SENTENCA_FAZENDARIO |  |
+| Publicadores Administrativos | PUB ADMINISTR |  |
+| Publicadores Banco de Dados | PUB BANCO DAD |  |
+| Publicadores Data Center | PUB DATA CENT |  |
+| Publicadores de Conhecimento | APROV CONHEC |  |
+| Publicadores Estações de Trabalho | PUB EST TRAB |  |
+| Publicadores Ger de Aplicações | PUB GER APLIC |  |
+| Publicadores Judiciais | PUB JUDICIAIS |  |
+| Publicadores Judiciais PJe | PUB JUD PJE |  |
+| Publicadores Judiciais SAJPG | PUB JUD SAJPG |  |
+| Publicadores Judiciais SAJSG | PUB JUD SAJSG |  |
+| Publicadores Portais | PUB PORTAIS |  |
+| Publicadores Redes e Segurança | PUB RED E SEG |  |
+| Publicadores Reuniões e Evento | PUB RNS EVNT |  |
+| Publicadores SAJADM / ADMRH | PUB SAJADM |  |
+| Publicadores SO e Servidores | PUB SO E SERV |  |
+| Seção de Patrimônio FCB | SECPATFCB |  |
+| Zz Assystnet Users | ZZ ANET USERS |  |
+| Zz Automation Svd | ZZ AUTOMATION |  |
+| Zz Suporte a Aplicações | ZZAPP SUP |  |
+| Zz System Accounts | SYSTEM ACCOUNTS |  |
