@@ -463,6 +463,24 @@ def _valor_gravado(page, sel: str, timeout_s: float = 8.0) -> str:
         page.wait_for_timeout(200)
 
 
+def _esperar_lista_fechar(page, prefixo, campo, timeout_s: float = 3.0) -> None:
+    """Depois do clique na sugestao, espera a lista FECHAR antes do proximo campo.
+
+    Medido em 27/10 (sem janela): o campo ja tem o valor, mas a lista ainda esta
+    aberta; ~30 ms depois o Dojo a fecha e DEVOLVE O FOCO ao campo. Se o proximo
+    campo for digitado nessa janela, o texto cai aqui — o Resumo virou
+    "6ª Unidade do JECC - MessejanaRequisição de Serviço", o Edifício deixou de
+    existir e o Assyst abriu a busca de Edifício por cima da tela (lote de 10
+    requisições abortado na Descrição). Se a lista nao fechar no prazo, segue:
+    o pior caso e o comportamento de antes.
+    """
+    try:
+        page.wait_for_selector(id_dropdown(prefixo, campo), state="hidden",
+                               timeout=timeout_s * 1000)
+    except Exception:
+        pass
+
+
 def selecionar_lookup(page, log, prefixo, campo, valor: str) -> bool:
     """Preenche um campo type-ahead: digita, espera a lista e ESCOLHE o item.
 
@@ -526,6 +544,7 @@ def selecionar_lookup(page, log, prefixo, campo, valor: str) -> bool:
             "error")
         return False
 
+    _esperar_lista_fechar(page, prefixo, campo)
     log(f"{campo.rotulo}: {gravado}", "success")
     return True
 
@@ -654,6 +673,7 @@ def _preencher_item_b(page, log, prefixo, campo, valor: str) -> bool:
         log(f"'{campo.rotulo}': cliquei em {alvo['texto']!r} mas o campo ficou vazio.",
             "error")
         return False
+    _esperar_lista_fechar(page, prefixo, campo)
     log(f"{campo.rotulo}: {gravado}", "success")
     return True
 
