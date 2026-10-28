@@ -19,5 +19,11 @@ Colunas: campo (item, item_b, categoria ou resumo), valor.
 | item | Softwares e Aplicativos |
 | item_b | IC NÃO LOCALIZADO |
 | item_b | Impressoras |
-| categoria | Configuração |
+| categoria | Desinstalar |
+| categoria | Empréstimo |
+| categoria | Informação / Orientação Técnica |
+| categoria | Instalar / Configurar |
+| categoria | Movimentar / Remanejar |
+| categoria | Substituir |
 | resumo | Requisição de Serviço |
+| item | Apoio a Eventos e Audiências |
