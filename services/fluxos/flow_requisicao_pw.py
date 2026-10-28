@@ -607,19 +607,24 @@ def _preencher_item_b(page, log, prefixo, campo, valor: str) -> bool:
 
     sel_dropdown = id_dropdown(prefixo, campo)
     sel_cancelar = id_lookup_dialog_cancelar(campo)
-    try:
-        page.wait_for_selector(f"{sel_dropdown}, {sel_cancelar}",
-                               state="visible", timeout=5000)
-    except Exception:
-        # NEM dropdown NEM dialogo apareceram — o caminho feliz do tombo: o
-        # widget resolveu sozinho. Confirma olhando o campo, em vez de supor.
-        gravado = _valor_gravado(page, sel, timeout_s=3.0)
-        if gravado:
-            log(f"{campo.rotulo}: {gravado} (resolvido direto, sem popup)", "success")
+    # Espera UM dos tres desfechos. "Resolvido direto" so conta quando o campo
+    # MUDA do que foi digitado ('*332255' -> 'C091SJURI332255'): ate 27/10 bastava
+    # ter valor, e o '*tombo' digitado passava por resolvido quando o Assyst
+    # demorava mais de 5 s — o dialogo "nao localizado" abria DEPOIS, por cima
+    # da tela, e travava o clique na Categoria (28/10).
+    fim = time.monotonic() + 15.0
+    while True:
+        if page.locator(f"{sel_dropdown}:visible, {sel_cancelar}:visible").count():
+            break
+        resolvido = _valor_de(page, prefixo, campo)
+        if resolvido and resolvido.lstrip("*") != valor.lstrip("*"):
+            log(f"{campo.rotulo}: {resolvido} (resolvido direto, sem popup)", "success")
             return True
-        log(f"'{campo.rotulo}': nem a lista de sugestoes, nem o dialogo de busca, "
-            f"nem um valor resolvido apareceram para {valor!r}.", "error")
-        return False
+        if time.monotonic() >= fim:
+            log(f"'{campo.rotulo}': em 15 s nem a lista de sugestoes, nem o dialogo "
+                f"de busca, nem um valor resolvido apareceram para {valor!r}.", "error")
+            return False
+        page.wait_for_timeout(200)
 
     if page.locator(sel_cancelar).count() > 0 and page.locator(sel_cancelar).is_visible():
         contagem = page.evaluate(
