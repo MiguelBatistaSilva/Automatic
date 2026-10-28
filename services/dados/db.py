@@ -237,6 +237,14 @@ _ESQUEMA: list[str] = [
     );
     CREATE INDEX agente_pedidos_quando ON agente_pedidos (quando)
     """,
+    # v9 — 2026-10-28: os Presets da Requisição saem. O /requisicao do bot e o
+    # Assistente passam a ler o banco de referência (services/dados/
+    # referencia.py; itens em conhecimento/referencia/itens.md) — dado
+    # escrito por gente mora em .md, versionado. Conferido antes: os valores
+    # já estavam lá (técnicos, filas, edifícios) ou foram para o itens.md.
+    """
+    DROP TABLE IF EXISTS requisicao_presets
+    """,
 ]
 
 _init_lock = threading.Lock()
@@ -359,7 +367,6 @@ def _importar_jsons(con: sqlite3.Connection) -> list[Path]:
     importadores = {
         "usuarios_bot.json": _imp_usuarios,
         "credencial_bot.json": _imp_credenciais,
-        "requisicao_presets.json": _imp_presets,
         "kb_configs.json": _imp_kb,
         "agenda_bot.json": _imp_agenda,
         "credenciais.json": _imp_credenciais_app,
@@ -400,14 +407,6 @@ def _imp_credenciais(con, dados: dict) -> None:
     for chat_id, matricula in dados.items():
         con.execute("INSERT OR REPLACE INTO bot_credenciais VALUES (?, ?)",
                     (str(chat_id), matricula))
-
-
-def _imp_presets(con, dados: dict) -> None:
-    for campo, valores in dados.items():
-        for ordem, valor in enumerate(valores):
-            con.execute(
-                "INSERT OR IGNORE INTO requisicao_presets VALUES (?, ?, ?)",
-                (campo, valor, ordem))
 
 
 def _imp_kb(con, dados: list) -> None:

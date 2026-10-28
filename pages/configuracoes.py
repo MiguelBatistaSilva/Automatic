@@ -9,11 +9,10 @@ existir como rota própria e virou a aba "Bases de Conhecimento" aqui — as
 três são telas de cadastro sem fluxo/navegador, então faz sentido virarem
 abas de um agrupador em vez de itens separados na sidebar.
 
-Aba "Presets": cadastro dos valores fixos que o /requisicao do bot
-(Telegram) oferece como BOTÃO em vez de pedir texto digitado. CRUD em
-`state/requisicao_presets_state.py`, sobre `services/dados/requisicao_presets.py`.
-Campo sem nenhum valor cadastrado aqui não trava o bot: ele simplesmente
-pede texto digitado pra aquele campo (ver bot/commands/cmd_requisicao.py).
+Aba "Referência" (substituiu a "Presets" em 28/10): consulta e edição das
+tabelas do banco de referência (itens da Requisição, técnicos, filas,
+edifícios), em `state/referencia_state.py` sobre `services/dados/referencia.py`.
+Edição só na máquina com .git (a de quem publica); nas outras, só consulta.
 
 Aba "Usuários Autorizados": whitelist de chat_ids que podem falar com o bot.
 CRUD continua em `bot/state.py` (TelegramState) — não duplicado aqui, só a
@@ -25,85 +24,92 @@ o banco SQLite via `services/dados/kb_store.py`). CRUD continua em
 `state/kb_state.py` (KBState) — não duplicado aqui, só a view mudou de
 lugar, igual às outras duas abas.
 
-A aba ativa (`RequisicaoPresetsState.aba`) é estado de UI puro, sem
+A aba ativa (`ReferenciaState.aba`) é estado de UI puro, sem
 persistência — mesmo padrão do `modo` em `state/desmembramento_state.py`
 para o segmented_control daquela página.
 """
 
 import reflex as rx
 
-from state.requisicao_presets_state import RequisicaoPresetsState
+from state.referencia_state import ReferenciaState, TABELAS
 from state.kb_state import KBState
 from bot.state import TelegramState
-from services.regras.requisicao_campos import POR_CHAVE
-from services.dados.requisicao_presets import CAMPOS_COM_PRESET
 from components.layout import page_layout
 from components.botoes import botao_primario, botao_secundario, botao_tabela
 
 
-def _valor_linha(campo: str):
-    def render(valor: rx.Var, idx: rx.Var) -> rx.Component:
-        return rx.hstack(
-            rx.text(valor, size="2"),
-            rx.spacer(),
-            botao_tabela(rx.icon("x", size=13),
-                        on_click=RequisicaoPresetsState.remover(campo, idx)),
-            width="100%",
-            align="center",
-        )
-    return render
+def _celula(valor: rx.Var) -> rx.Component:
+    return rx.table.cell(valor)
 
 
-def _secao_campo(campo: str) -> rx.Component:
-    rotulo = POR_CHAVE[campo].rotulo
-    return rx.vstack(
-        rx.text(rotulo, weight="bold", size="3"),
-        rx.vstack(
-            rx.foreach(RequisicaoPresetsState.presets[campo], _valor_linha(campo)),
-            rx.cond(
-                RequisicaoPresetsState.presets[campo].length() == 0,
-                rx.text(
-                    "Nenhum valor cadastrado — esse campo vai pedir texto "
-                    "digitado no bot.",
-                    size="1", color="#6B7280",
-                ),
-            ),
-            width="100%",
-            spacing="1",
-            align_items="start",
+def _linha_referencia(linha: rx.Var, idx: rx.Var) -> rx.Component:
+    return rx.table.row(
+        rx.foreach(linha, _celula),
+        rx.cond(
+            ReferenciaState.editavel,
+            rx.table.cell(botao_tabela(rx.icon("x", size=13),
+                                       on_click=ReferenciaState.remover(idx))),
         ),
-        rx.hstack(
-            rx.input(
-                placeholder=f"Novo valor para {rotulo}",
-                value=RequisicaoPresetsState.novos_valores[campo],
-                on_change=RequisicaoPresetsState.set_novo_valor(campo),
-                flex="1",
-            ),
-            botao_secundario("+ Adicionar", on_click=RequisicaoPresetsState.adicionar(campo)),
-            width="100%",
-            spacing="2",
-        ),
-        spacing="2",
-        align_items="start",
-        width="100%",
-        padding="12px",
-        border=f"1px solid {rx.color('gray', 6)}",
-        border_radius="8px",
     )
 
 
-def _aba_presets() -> rx.Component:
+def _campo_novo(coluna: rx.Var, i: rx.Var) -> rx.Component:
+    return rx.input(placeholder=coluna, value=ReferenciaState.novo[i],
+                    on_change=lambda v: ReferenciaState.set_novo(i, v), flex="1")
+
+
+def _aba_referencia() -> rx.Component:
     return rx.vstack(
         rx.text(
-            "Valores fixos que aparecem como botão no /requisicao do bot do "
-            "Telegram, em vez da pessoa ter que digitar. Usuário afetado e "
-            "Descrição não entram aqui — são sempre texto livre, cada "
-            "chamado é diferente.",
+            "O que o Assistente e o /requisicao do bot usam para completar e "
+            "conferir a Requisição: itens, técnicos, filas e edifícios. Fica "
+            "em services/agente/conhecimento/referencia/ e vai a todos pela "
+            "atualização.",
             color="#6B7280",
         ),
-        *[_secao_campo(c) for c in CAMPOS_COM_PRESET],
-        rx.text(RequisicaoPresetsState.status, color=RequisicaoPresetsState.status_cor),
-        spacing="4",
+        rx.cond(
+            ReferenciaState.editavel,
+            rx.callout("Depois de editar, commite: é o update que leva a "
+                       "mudança às outras máquinas.", icon="info", size="1"),
+            rx.callout("Só consulta: a edição é feita na máquina de publicação "
+                       "(a deste computador seria sobrescrita no próximo update).",
+                       icon="lock", size="1", color_scheme="gray"),
+        ),
+        rx.hstack(
+            rx.select(list(TABELAS), value=ReferenciaState.tabela,
+                      on_change=ReferenciaState.set_tabela),
+            rx.input(placeholder="Buscar...", value=ReferenciaState.busca,
+                     on_change=ReferenciaState.set_busca, flex="1"),
+            rx.text(ReferenciaState.visiveis.length().to_string() + " de "
+                    + ReferenciaState.total.to_string(), size="1", color="#6B7280"),
+            width="100%",
+            align="center",
+            spacing="2",
+        ),
+        rx.cond(
+            ReferenciaState.editavel,
+            rx.hstack(
+                rx.foreach(ReferenciaState.colunas, _campo_novo),
+                botao_secundario("+ Adicionar", on_click=ReferenciaState.adicionar),
+                width="100%",
+                spacing="2",
+            ),
+        ),
+        rx.text(ReferenciaState.status, color=ReferenciaState.status_cor, size="1"),
+        rx.table.root(
+            rx.table.header(
+                rx.table.row(
+                    rx.foreach(ReferenciaState.colunas,
+                               lambda c: rx.table.column_header_cell(c)),
+                    rx.cond(ReferenciaState.editavel, rx.table.column_header_cell("")),
+                ),
+            ),
+            rx.table.body(rx.foreach(ReferenciaState.visiveis, _linha_referencia)),
+            width="100%",
+            variant="surface",
+            size="1",
+        ),
+        spacing="3",
         width="100%",
         align_items="start",
     )
@@ -269,23 +275,22 @@ def configuracoes_page() -> rx.Component:
         rx.heading("Configurações", size="6"),
         rx.segmented_control.root(
             rx.segmented_control.item("Bases de Conhecimento", value="kb"),
-            rx.segmented_control.item("Presets", value="presets"),
+            rx.segmented_control.item("Referência", value="referencia"),
             rx.segmented_control.item("Usuários Autorizados", value="usuarios"),
-            value=RequisicaoPresetsState.aba,
-            on_change=RequisicaoPresetsState.set_aba,
+            value=ReferenciaState.aba,
+            on_change=ReferenciaState.set_aba,
         ),
         rx.match(
-            RequisicaoPresetsState.aba,
+            ReferenciaState.aba,
             ("kb", _aba_base_conhecimento()),
-            ("presets", _aba_presets()),
+            ("referencia", _aba_referencia()),
             ("usuarios", _aba_usuarios_autorizados()),
             _aba_base_conhecimento(),
         ),
         spacing="4",
         width="100%",
-        # A aba "Bases de Conhecimento" quer a tabela ocupando a página toda
-        # (mesmo comportamento de quando era rota própria, pages/kb.py); as
-        # outras duas são formulários estreitos — só elas ficam com teto.
-        max_width=rx.cond(RequisicaoPresetsState.aba == "kb", "100%", "640px"),
+        # As abas de tabela (Bases de Conhecimento e Referência) ocupam a
+        # página toda; a de Usuários Autorizados é formulário estreito.
+        max_width=rx.cond(ReferenciaState.aba == "usuarios", "640px", "100%"),
     )
     return page_layout(conteudo)

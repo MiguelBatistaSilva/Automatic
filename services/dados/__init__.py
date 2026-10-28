@@ -5,7 +5,6 @@ services/dados — O que lê e grava dado LOCAL (sem navegador).
   checkpoint.py          progresso linha a linha dos fluxos (no banco)
   credenciais.py         matrícula (banco) + senha (Cofre do Windows)
   kb_store.py            Bases de Conhecimento cadastradas (no banco)
-  requisicao_presets.py  valores pré-cadastrados do /requisicao (no banco)
   referencia.py          tabelas de services/agente/conhecimento/referencia/
                          (filas, técnicos, edifícios)
 

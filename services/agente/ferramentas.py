@@ -567,27 +567,22 @@ def _resolver_nome(valor: str, opcoes: list[str], rotulo: str) -> tuple[str, str
     lista = f"Cadastrados: {', '.join(opcoes)}. " if len(opcoes) <= 15 else ""
     return "", (f"{rotulo} '{valor}' não está cadastrado. {lista}"
                 f"Pergunte ao técnico qual é (ou peça para "
-                "cadastrar em Configurações -> Presets).")
+                "cadastrar em Configurações -> Referência).")
 
 
 def _opcoes() -> dict[str, list[str]]:
-    from services.dados import referencia, requisicao_presets
-    p = requisicao_presets.carregar()
-    filas = list(dict.fromkeys(p["grupo_atribuido"] + list(FILAS)))
-    # Técnicos: o banco de técnicos (nome exato do Assyst) + os dos Presets,
-    # senão quem não está nos Presets "não está cadastrado" (23/10). Mesmo nome
-    # com/sem acento fica o do banco.
-    tecnicos = {}
-    for n in referencia.tecnicos() + p["usuario_atribuido"]:
-        tecnicos.setdefault(_sem_acento(n), n)
-    return {"tecnicos": sorted(tecnicos.values()), "filas": filas,
-            "edificios": p["edificio"], "itens": p["item"]}
+    # Tudo do banco de referência (conhecimento/referencia/); os Presets do
+    # SQLite saíram em 28/10.
+    from services.dados import referencia
+    return {"tecnicos": referencia.tecnicos(), "filas": list(FILAS),
+            "edificios": referencia.nomes_edificios(),
+            "itens": referencia.valores("item")}
 
 
 def _tecnico_da_req(dito: str, opcoes: list[str], rotulo: str = "O técnico") -> tuple[str, str]:
     """(nome, erro) do técnico da Requisição: primeiro pelo banco de técnicos
     (mesma regra da atribuição: cada palavra é começo de palavra do nome),
-    depois pelos Presets."""
+    depois pela lista de técnicos (nome com/sem acento)."""
     from services.dados import referencia
 
     achou = referencia.resolver_tecnico(dito or "")
@@ -630,14 +625,13 @@ def _aviso_fila(tecnico: str, fila: str) -> str:
 
 
 def _desc_por_tombo() -> str:
-    o = _opcoes()
     return (
         "Abre Requisições de Serviço, uma por tombo (o sistema monta cada uma). "
         "Use para pedidos com tombos ou de um tipo de solicitação da base."
         # Técnicos e filas saíram (06/10): o código resolve nome parcial e,
         # se ambíguo/desconhecido, devolve as opções para o modelo perguntar.
-        # Edifícios ficam: nome fora dos Presets não trava, só avisa.
-        + f"\nEdifícios: {', '.join(o['edificios'])}."
+        # Edifícios saíram em 28/10: o banco tem ~70 nomes, peso demais em
+        # todo pedido; o código confere e, fora da lista, só avisa.
     )
 
 
@@ -656,13 +650,13 @@ def _prep_por_tombo(args: dict) -> "Acao | str":
         return erro
     if not str(args.get("edificio") or "").strip():
         return "Falta o edifício. Pergunte ao técnico."
-    # Edifício e Item não travam se não estiverem nos Presets (a lista ainda é
-    # curta): usa o cadastrado quando bate e, senão, segue com aviso no cartão.
+    # Edifício e Item não travam se não estiverem no banco de referência (a
+    # lista de edifícios ainda é incompleta): usa o cadastrado quando bate e, senão, segue com aviso no cartão.
     avisos = [a for a in (_aviso_fila(tecnico, fila),) if a]
     edificio, erro = _resolver_nome(args["edificio"], o["edificios"], "O edifício")
     if erro:
         edificio = args["edificio"].strip()
-        avisos.append(f"Edifício '{edificio}' não está nos Presets.")
+        avisos.append(f"Edifício '{edificio}' não está na referência.")
 
     tipo = None
     if args.get("tipo"):
@@ -673,7 +667,7 @@ def _prep_por_tombo(args: dict) -> "Acao | str":
         return "Não consegui deduzir o Item. Pergunte ao técnico."
     item_ok, erro = _resolver_nome(item, o["itens"], "O item")
     if erro:
-        avisos.append(f"Item '{item}' não está nos Presets.")
+        avisos.append(f"Item '{item}' não está na referência.")
     else:
         item = item_ok
     categoria = (args.get("categoria") or (tipo.categoria if tipo else "Configuração")).strip()

@@ -17,6 +17,14 @@ tabelas .md para todo dado escrito por gente ficar num formato só (o SQLite
   - tecnicos.md  (nome, fila): UMA LINHA POR PAR — o mesmo técnico pode estar
                  em várias filas (ex.: FCB e Remoto, conforme o local). Nome
                  exatamente como no Assyst. Editável à mão.
+  - itens.md     (campo, valor): valores aceitos nos campos da Requisição
+                 que não têm banco próprio — item, item_b, categoria e
+                 resumo. Substituiu os "Presets" (tabela do SQLite) em 28/10.
+
+Edição pela aba "Referência" de Configurações, mas SÓ onde há `.git` (a
+máquina de quem publica): o updater copia o zip do GitHub por cima e não
+leva a .git, então edição em outra máquina sumiria no próximo update.
+Editou -> commit -> o updater leva a todos.
 
 Formato: texto livre no começo (explicação para quem edita) e UMA tabela
 markdown; a 1ª linha da tabela são os nomes das colunas. `|` dentro de um
@@ -33,7 +41,11 @@ import re
 import unicodedata
 from pathlib import Path
 
-PASTA = Path(__file__).resolve().parents[1] / "agente" / "conhecimento" / "referencia"
+RAIZ = Path(__file__).resolve().parents[2]
+PASTA = RAIZ / "services" / "agente" / "conhecimento" / "referencia"
+# Tabela -> coluna obrigatória (linha sem ela é descartada na leitura).
+TABELAS = {"itens.md": "valor", "tecnicos.md": "nome", "filas.md": "nome",
+           "edificios.md": "secao"}
 _cache: dict[str, tuple[float, list[dict]]] = {}
 
 _DIVISOR = re.compile(r"^\|?[\s:|-]+$")          # |---|:--|
@@ -76,6 +88,25 @@ def _ler(nome: str, chave: str = "nome") -> list[dict]:
         linhas = _tabela(arq.read_text(encoding="utf-8"))
         _cache[nome] = (mtime, [l for l in linhas if l.get(chave)])
     return _cache[nome][1]
+
+
+def colunas(nome: str) -> list[str]:
+    """Nomes das colunas da tabela (a 1ª linha dela)."""
+    try:
+        texto = (PASTA / nome).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    cab = next((l for l in texto.splitlines() if l.strip().startswith("|")), "")
+    return [c.lower() for c in _celulas(cab)] if cab else []
+
+
+def linhas(nome: str) -> list[dict]:
+    return _ler(nome, TABELAS.get(nome, "nome"))
+
+
+def pode_editar() -> bool:
+    """Só na máquina de quem publica (ver o topo do módulo)."""
+    return (RAIZ / ".git").exists()
 
 
 def gravar(nome: str, colunas: list[str], linhas: list[list]) -> Path:
@@ -168,3 +199,13 @@ def resolver_tecnico(texto: str) -> Achado:
 def edificios() -> list[dict]:
     """Linhas do edificios.md: secao, grupo, edificio, qtd (texto)."""
     return _ler("edificios.md", chave="secao")
+
+
+def nomes_edificios() -> list[str]:
+    return sorted({l["edificio"] for l in edificios() if l.get("edificio")})
+
+
+def valores(campo: str) -> list[str]:
+    """Valores do itens.md para um campo da Requisição (item, item_b,
+    categoria, resumo), na ordem do arquivo."""
+    return [l["valor"] for l in _ler("itens.md", "valor") if l.get("campo") == campo]

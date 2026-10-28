@@ -28,7 +28,7 @@ from state.desmembramento_state import DesmembramentoState
 from state.kb_state import KBState
 from state.meus_fluxos_state import MeusFluxosState
 from state.assistente_state import AssistenteState
-from state.requisicao_presets_state import RequisicaoPresetsState
+from state.referencia_state import ReferenciaState
 from bot.state import TelegramState
 
 app = rx.App(
@@ -77,7 +77,7 @@ app.add_page(
     # TelegramState.carregar_usuarios e KBState.on_load: as abas "Usuários
     # Autorizados" e "Bases de Conhecimento" migraram pra cá (ver
     # pages/configuracoes.py) — a rota /kb não existe mais.
-    on_load=[RequisicaoPresetsState.on_load, TelegramState.carregar_usuarios, KBState.on_load],
+    on_load=[ReferenciaState.on_load, TelegramState.carregar_usuarios, KBState.on_load],
 )
 # Sem item na navegação: abre pelo menu Opções da sidebar (era pop-up até 06/10).
 app.add_page(

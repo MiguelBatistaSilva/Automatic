@@ -3,7 +3,7 @@ state/kb_state.py — Back-end da aba "Bases de Conhecimento" em Configurações
 
 Antes rota própria (/kb, pages/kb.py); migrou em 2026-09-15 pra virar a
 terceira aba do segmented_control de pages/configuracoes.py, junto de
-"Presets" e "Usuários Autorizados" — mesmo padrão das outras duas.
+"Referência" (antes "Presets") e "Usuários Autorizados" — mesmo padrão das outras duas.
 
 Lista/adiciona/remove as bases (keyword + nome_artigo) persistidas em `kb_store`.
 Sem fluxo/navegador — é só edição de dados; usa rx.State direto (não FlowRunnerState).

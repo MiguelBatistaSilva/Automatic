@@ -18,7 +18,8 @@ Como o Assistente usa:
 - `requisicao/tipos_solicitacao.md` também é LIDO PELO CÓDIGO (Requisição
   por tombo): respeite o formato descrito lá.
 - Lidos SÓ pelo código (não vão para a IA): `chamados/despachos.md` e a
-  pasta `referencia/` (técnicos, filas e edifícios, em tabelas). Respeite o
+  pasta `referencia/` (itens da Requisição, técnicos, filas e edifícios, em
+  tabelas; editáveis na aba "Referência" de Configurações). Respeite o
   formato: texto no começo e UMA tabela, com os nomes das colunas na 1ª linha.
 
 Para ensinar algo novo: edite ou crie um arquivo na pasta do domínio certo.
