@@ -22,10 +22,10 @@ from collections import Counter
 from services.dados import referencia
 
 POR_DEFINIR = "por definir"
-# Vários equipamentos num chamado (regra da equipe, 30/10). Vincular os filhos
-# ainda não é feito pelo Assistente.
-CAMINHO_VARIOS = ("coletar os tombos no atendimento → desmembrar pelo chamado pai "
-                  "(um filho por tombo) → vincular os filhos ao pai → resolver")
+# Vários equipamentos num chamado (regra da equipe, 30/10): vai desmembrar.
+# Um FATO, não o passo a passo — com o roteiro inteiro a IA o recitava ao
+# técnico (30/10). Vincular e resolver ficam no triagem.md, para a baixa.
+SINAL_VARIOS = "vários equipamentos: vai precisar desmembrar (um filho por tombo)"
 IC_NAO_LOCALIZADO = "IC NÃO LOCALIZADO"
 _EXTERNO = "externo"
 _DOMINANTE = 0.75   # 75% dos chamados da seção no mesmo edifício = sugere
@@ -212,7 +212,7 @@ _TIPOS = (  # a ordem decide: o 1º que casar
     ("evento", r"\bevento|capacita|treinament|palestra|semin[aá]rio|solenidade|j[uú]ri"
                r"|videoconfer|transmiss[aã]o|apoio t[eé]cnico (para|n[ao]s?) "),
     # Vários equipamentos de uma vez (30/10, S2503433): o caminho é coletar os
-    # tombos, desmembrar pelo pai e vincular os filhos (ver CAMINHO_VARIOS).
+    # tombos, desmembrar pelo pai e vincular os filhos (ver SINAL_VARIOS).
     ("desmontagem/mudança", r"desmont|transport|reforma|mudan[cç]a d[aoe]s? (setor|unidade|sede|equip)"
                             r"|recolh\w* (os |de )?equipamentos|remo[cç][aã]o d[eo]s? equipamentos"),
     ("acesso/sistema", r"\bsenha|\bacesso|\blogin|permiss|\bpje\b|\bsaj\b|e-?mail\b|cadastr"
@@ -324,7 +324,7 @@ class Triagem:
         if self.faltas:
             extras += f" FALTA: {'; '.join(self.faltas)}."
         if self.varios:
-            extras += f" Caminho: {CAMINHO_VARIOS}."
+            extras += f" {SINAL_VARIOS[0].upper()}{SINAL_VARIOS[1:]}."
         pedido = f' Pedido: "{self.pedido}"' if self.pedido else ""
         return f"{self.chamado} (seção {self.secao or '?'}): {ed}. {ib}.{extras}{pedido}"
 
