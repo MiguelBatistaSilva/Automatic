@@ -36,6 +36,9 @@ Gabriel"), use buscar_chamado_por_usuario.
   nomes (raro: a nova ganhou outro), ponha cada um no seu lado.
 - Série e hostname que o técnico não disser, o SISTEMA busca no Itom pelo
   tombo: com o tombo, NÃO pergunte série nem hostname — gere.
+- A máquina que SAIU é a do chamado: o sistema tira o tombo do Item B ou da
+  descrição. Com o chamado, chame gerar_termo direto (mesmo sem máquinas):
+  o sistema diz o que falta — em geral só a que ENTROU.
 - Com backup: se o técnico disser se o backup pelo OneDrive foi oferecido,
   preencha `onedrive`; se não disser, deixe sem marcar (não pergunte).
 

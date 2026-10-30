@@ -22,6 +22,10 @@ from collections import Counter
 from services.dados import referencia
 
 POR_DEFINIR = "por definir"
+# Vários equipamentos num chamado (regra da equipe, 30/10). Vincular os filhos
+# ainda não é feito pelo Assistente.
+CAMINHO_VARIOS = ("coletar os tombos no atendimento → desmembrar pelo chamado pai "
+                  "(um filho por tombo) → vincular os filhos ao pai → resolver")
 IC_NAO_LOCALIZADO = "IC NÃO LOCALIZADO"
 _EXTERNO = "externo"
 _DOMINANTE = 0.75   # 75% dos chamados da seção no mesmo edifício = sugere
@@ -207,6 +211,10 @@ def pedido_seguro(texto: str) -> str:
 _TIPOS = (  # a ordem decide: o 1º que casar
     ("evento", r"\bevento|capacita|treinament|palestra|semin[aá]rio|solenidade|j[uú]ri"
                r"|videoconfer|transmiss[aã]o|apoio t[eé]cnico (para|n[ao]s?) "),
+    # Vários equipamentos de uma vez (30/10, S2503433): o caminho é coletar os
+    # tombos, desmembrar pelo pai e vincular os filhos (ver CAMINHO_VARIOS).
+    ("desmontagem/mudança", r"desmont|transport|reforma|mudan[cç]a d[aoe]s? (setor|unidade|sede|equip)"
+                            r"|recolh\w* (os |de )?equipamentos|remo[cç][aã]o d[eo]s? equipamentos"),
     ("acesso/sistema", r"\bsenha|\bacesso|\blogin|permiss|\bpje\b|\bsaj\b|e-?mail\b|cadastr"
                        r"|certificado digital|\btoken\b"),
     ("manutenção", r"n[aã]o (liga|funciona|imprime|conecta|abre|inicia)|parou|defeito|quebr|lent[ao]"
@@ -271,6 +279,13 @@ class Triagem:
     equipamentos: dict = dataclasses.field(default_factory=dict)
     faltas: list = dataclasses.field(default_factory=list)   # o que falta para atender
 
+    @property
+    def varios(self) -> bool:
+        """Vários equipamentos: desmontagem/mudança, mais de um equipamento
+        ou mais de um tombo — o caminho é o do desmembramento."""
+        return (self.tipo == "desmontagem/mudança" or sum(self.equipamentos.values()) > 1
+                or len(self.item_b.tombos) > 1)
+
     def correcoes(self) -> dict[str, str]:
         """Campo -> valor novo, só o que tem sugestão CERTA."""
         c = {}
@@ -308,6 +323,8 @@ class Triagem:
             extras += f" Equipamentos: {_texto_equip(self.equipamentos)}."
         if self.faltas:
             extras += f" FALTA: {'; '.join(self.faltas)}."
+        if self.varios:
+            extras += f" Caminho: {CAMINHO_VARIOS}."
         pedido = f' Pedido: "{self.pedido}"' if self.pedido else ""
         return f"{self.chamado} (seção {self.secao or '?'}): {ed}. {ib}.{extras}{pedido}"
 
@@ -344,19 +361,34 @@ def triar_ficha(f) -> Triagem:
     return t
 
 
+def e_demanda(categoria: str) -> bool:
+    """Tarefa de Demanda (Categoria 'TD ...' / '... Demanda'): a única em que
+    Início e Fim agendado valem — e o relógio fica sempre rodando (30/10)."""
+    c = _chave(categoria)
+    return "demanda" in c or c.startswith("td ")
+
+
+def tombo_do_item_b(item_b: str) -> str:
+    """'FJE06JECC332154' -> '332154' (o tombo fica no fim do nome do IC)."""
+    m = re.search(r"(\d{5,7})\s*$", item_b or "")
+    return m[1] if m else ""
+
+
 def _faltas(t: Triagem, f) -> list[str]:
     """O que falta para atender — o técnico resolve antes de sair."""
     faltas = []
     if t.edificio.por_definir and not t.edificio.sugerido:
         faltas.append("Edifício (seção sem histórico ou ambígua)")
     qtd = sum(t.equipamentos.values())
-    if t.tipo in ("manutenção", "instalação") and qtd:
+    if t.tipo in ("manutenção", "instalação", "desmontagem/mudança") and (qtd or t.varios):
         if not t.item_b.tombos:
             faltas.append("tombos (coletar no atendimento)")
         elif len(t.item_b.tombos) < qtd:
             faltas.append(f"tombos: {qtd} equipamento(s) e só {len(t.item_b.tombos)} tombo(s)")
-    if t.tipo == "evento" and not f.inicio_data:
-        faltas.append("Início agendado do evento")
-    if t.tipo == "evento" and not (f.sala and "definir" not in f.sala.lower()):
-        faltas.append("Sala do evento")
+    # Agendamento só existe na Tarefa de Demanda (30/10): nos outros, vazio é normal.
+    if e_demanda(f.categoria):
+        if not (f.inicio_data and f.fim_data):
+            faltas.append("Início e Fim agendado (tarefa de demanda)")
+        if not (f.sala and "definir" not in f.sala.lower()):
+            faltas.append("Sala da tarefa de demanda")
     return faltas

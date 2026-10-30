@@ -419,6 +419,97 @@ def _executar_correcoes(a: dict, s: Sessao) -> dict[str, tuple[bool, str]]:
     return saida
 
 
+# --------------------------------------------------------------------------- #
+# Relógio pausado antes de resolver (30/10)
+# --------------------------------------------------------------------------- #
+#
+# Chamado pausado (ex.: Atendimento Programado) NÃO tem "Resolvido" no menu
+# Ações — só o par da pausa (visto no S2503433). O `antes` do resolver lê o
+# histórico; pausado = a IA pergunta se retoma. Os pares sem texto do técnico
+# o Assistente faz; Fornecedor/Gestor pedem texto, então só avisa.
+
+_PAR_DA_PAUSA = {
+    "Atendimento Programado": "Atendimento Iniciado",
+    "Aguardando Info do Usuário *": "Info Recebidas do Usuário *",
+    "Aguardando Info do Fornecedor": "Info Recebida do Fornecedor",
+    "Aguardando Info do Gestor": "Info Recebidas do Gestor",
+}
+_RETOMA_SOZINHO = {"Atendimento Programado", "Aguardando Info do Usuário *"}
+
+
+def _pausa_atual(historico: list[dict]) -> "tuple[str, str] | None":
+    """(pausa, data) se a última ação de relógio for uma pausa."""
+    from services.regras.sla_engine import TIPOS_FIM, TIPOS_RETOMADA
+
+    relogio = []
+    for h in historico:
+        tipo = h.get("tipo", "")
+        if tipo in _PAR_DA_PAUSA or tipo in TIPOS_RETOMADA or tipo in TIPOS_FIM or tipo == "Reabrir":
+            try:
+                relogio.append((datetime.datetime.strptime(h["data"], "%d/%m/%y %H:%M"), tipo, h["data"]))
+            except (KeyError, ValueError):
+                continue
+    if not relogio:
+        return None
+    # Mesmo minuto: o histórico vem do mais novo para o mais antigo, e o max
+    # fica com o primeiro empatado.
+    _, tipo, data = max(relogio, key=lambda r: r[0])
+    return (tipo, data) if tipo in _PAR_DA_PAUSA else None
+
+
+def _antes_resolver(args: dict, s: Sessao) -> dict:
+    from services.fluxos.flow_sla_pw import extrair_historico_chamado
+
+    args = _antes_corrigir(args, s)
+    pausados = {}
+    for numero in (c.strip().upper() for c in _lista(args.get("chamados"))):
+        p = _pausa_atual(extrair_historico_chamado(s.pagina(), numero, s.log) or [])
+        if p:
+            pausados[numero] = p
+    return {**args, "_pausados": pausados}
+
+
+def _retomada(args: dict) -> "str | dict | None":
+    """Pergunta (str), {numero: pausa} a retomar antes, ou None."""
+    pausados = args.get("_pausados") or {}
+    if not pausados:
+        return None
+    texto = "; ".join(f"{n} está em '{t}' desde {d}" for n, (t, d) in pausados.items())
+    manuais = {n: t for n, (t, _) in pausados.items() if t not in _RETOMA_SOZINHO}
+    if manuais:
+        return (f"Não dá para resolver ainda: {texto}. O Assyst só oferece 'Resolvido' "
+                "depois da retomada, e essa ('" + "', '".join(_PAR_DA_PAUSA[t] for t in manuais.values())
+                + "') precisa de um texto do técnico: pergunte o que foi recebido e use "
+                "info_recebida_fornecedor (Gestor: ele retoma no Assyst). Depois, resolver.")
+    if not args.get("retomar"):
+        pares = ", ".join(sorted({_PAR_DA_PAUSA[t] for t, _ in pausados.values()}))
+        return (f"Pausado: {texto}. O Assyst só oferece 'Resolvido' depois de retomar "
+                f"('{pares}'). Pergunte ao técnico se retoma agora (o sistema faz) e chame "
+                "de novo com retomar=true — ou ele retoma pelo Reflex (Iniciar Atendimento).")
+    return {n: t for n, (t, _) in pausados.items()}
+
+
+def _executar_retomadas(a: dict, s: Sessao) -> dict[str, tuple[bool, str]]:
+    from services.agente.ficha import esquecer
+    from services.fluxos.flow_atendimento_pw import iniciar_atendimento
+    from services.fluxos.flow_info_recebida_pw import info_recebida_usuario
+
+    saida = {}
+    for numero, pausa in (a.get("retomar") or {}).items():
+        s.log(f"Retomando o chamado {numero} ({_PAR_DA_PAUSA[pausa]})...", "status")
+        try:
+            if pausa == "Atendimento Programado":
+                ok = iniciar_atendimento(s.pagina(), s.log, numero, modo_teste=s.modo_teste)
+            else:
+                ok, _ = info_recebida_usuario(s.pagina(), s.log, numero, modo_teste=s.modo_teste)
+        except Exception as e:
+            ok = False
+            s.log(f"Falha ao retomar {numero}: {e}", "error")
+        esquecer(numero)
+        saida[numero] = (bool(ok), _PAR_DA_PAUSA[pausa])
+    return saida
+
+
 def _prep_corrigir(args: dict) -> "Acao | str":
     chamados = _lista(args.get("chamados"))
     if not chamados:
@@ -1545,7 +1636,10 @@ def _prep_resolver(args: dict) -> "Acao | str":
     fila = args.get("fila") or FILA_PADRAO
     if fila not in FILAS:
         return f"Fila desconhecida: '{fila}'. Filas válidas: {', '.join(FILAS)}."
-    return _com_correcoes(Acao(
+    retomar = _retomada(args)
+    if isinstance(retomar, str):
+        return retomar
+    r = _com_correcoes(Acao(
         ferramenta="resolver_chamado",
         args={"chamados": chamados, "procedimentos": procedimentos, "fila": fila},
         titulo="Resolver chamado",
@@ -1554,15 +1648,32 @@ def _prep_resolver(args: dict) -> "Acao | str":
         escreve=True,
         pode_simular=True,
     ), args, "resolver")
+    if isinstance(r, Acao) and retomar:
+        r.args["retomar"] = retomar
+        r.linhas.insert(1, "**Retomar antes:**\n" + "\n".join(
+            f"- {n}: {p} → {_PAR_DA_PAUSA[p]}" for n, p in retomar.items()))
+    return r
 
 
 def _exec_resolver(a, s: Sessao) -> Resultado:
     from services.fluxos.flow_resolver_pw import resolver_chamado
-    # Corrige antes (30/10): correção que falhou = não resolve aquele chamado.
+    # Retoma e corrige antes (30/10): se um dos dois falhar, não resolve.
+    retomadas = _executar_retomadas(a, s)
     correcoes = _executar_correcoes(a, s)
     page = s.pagina()
     feitos, linhas = 0, []
     for numero in a["chamados"]:
+        ret = retomadas.get(numero.strip().upper())
+        if ret and not ret[0]:
+            linhas.append(f"- {_ok_falha(False)} {numero} — NÃO resolvido: '{ret[1]}' falhou")
+            continue
+        if ret:
+            linhas.append(f"- Retomado {numero} — {ret[1]}")
+            if s.modo_teste:
+                # A retomada simulada não salva: sem ela o Assyst não mostra
+                # 'Resolvido', então simular o resto só daria erro falso.
+                linhas.append(f"- {numero} — Resolver não simulado: depende da retomada salva")
+                continue
         corr = correcoes.get(numero.strip().upper())
         if corr and not corr[0]:
             linhas.append(f"- {_ok_falha(False)} {numero} — NÃO resolvido: {corr[1]}")
@@ -1690,6 +1801,33 @@ def _maquinas_do_itom(args: dict, s: Sessao) -> dict:
     return {**args, "maquinas": trocas, "_do_itom": notas}
 
 
+def _saiu_do_chamado(args: dict, f) -> dict:
+    """Tombo da máquina que SAIU, não dito pelo técnico, vem do chamado (30/10):
+    do Item B (FJE06JECC332154) ou, se lá não tiver, do ÚNICO tombo da
+    descrição. Vários na descrição: `_tombos_saiu` vira pergunta no preparar."""
+    from services.agente.triagem import tombo_do_item_b, tombos_da_descricao
+
+    if f is None:
+        return args
+    maquinas = [m for m in (args.get("maquinas") or []) if isinstance(m, dict)]
+    if len(maquinas) > 1 or (maquinas and _equip(maquinas[0].get("saiu"))["tombo"]):
+        return args
+    tombo = tombo_do_item_b(f.item_b)
+    if not tombo:
+        da_descricao = tombos_da_descricao(f.descricao)
+        if len(da_descricao) > 1:
+            return {**args, "_tombos_saiu": da_descricao}
+        tombo = da_descricao[0] if da_descricao else ""
+    if not tombo:
+        return args
+    if maquinas:
+        saiu = {**(maquinas[0].get("saiu") or {}), "tombo": tombo}
+        return {**args, "maquinas": [{**maquinas[0], "saiu": saiu}], "_saiu_do_chamado": tombo}
+    # Sem máquinas no pedido: a que saiu é a do chamado; falta a que entrou.
+    return {**args, "maquinas": [{"saiu": {"tombo": tombo}, "entrou": {}}],
+            "_saiu_do_chamado": tombo, "_perguntar_entrou": True}
+
+
 def _antes_termo(args: dict, s: Sessao) -> dict:
     """Lê nome, matrícula e unidade do usuário afetado do chamado. O que o
     técnico disse na conversa vale mais que o lido. Série e hostname que
@@ -1697,8 +1835,9 @@ def _antes_termo(args: dict, s: Sessao) -> dict:
     from services.assyst.assyst_common import _so_o_nome
     from services.agente.ficha import ler_ficha
 
-    args = _maquinas_do_itom(_hostname_fora_do_nome(args), s)
+    args = _hostname_fora_do_nome(args)
     f = ler_ficha(s.pagina, str(args.get("chamado") or ""), s.log)
+    args = _maquinas_do_itom(_saiu_do_chamado(args, f), s)
     if f is None:
         return args
     return _completar(args, {"matricula": f.afetado_matricula, "nome": f.afetado_nome,
@@ -1718,6 +1857,18 @@ def _prep_termo(args: dict) -> "Acao | str":
     trocas = [{"saiu": _equip(m.get("saiu")), "entrou": _equip(m.get("entrou"))}
               for m in (args.get("maquinas") or []) if isinstance(m, dict)]
     trocas = [t for t in trocas if any(t["saiu"].values()) or any(t["entrou"].values())]
+    # A que saiu veio do chamado (30/10): só falta a que entrou.
+    if args.get("_tombos_saiu") and not any(t["saiu"]["tombo"] for t in trocas):
+        return (f"O chamado cita os tombos {', '.join(args['_tombos_saiu'])}. Pergunte qual "
+                "SAIU e a máquina que ENTROU (série e hostname o sistema busca no Itom).")
+    if args.get("_perguntar_entrou") and trocas:
+        s = trocas[0]["saiu"]
+        do_itom = ", ".join(f"{r} {s[k]}" for k, r in (("serie", "série"), ("hostname", "hostname")) if s[k])
+        return (f"A máquina que SAIU é a do chamado: tombo {s['tombo']}"
+                + (f" ({do_itom}, do Itom)" if do_itom else "") + ". Pergunte só a que "
+                "ENTROU (marca/modelo e tombo; série e hostname o sistema busca no Itom) e "
+                f"chame de novo com saiu.tombo={s['tombo']}. Se ele não souber, gere com a "
+                "que entrou em branco.")
     if not trocas:
         return ("Faltam as máquinas trocadas. Pergunte, de uma vez, para cada troca: "
                 "a que saiu e a que entrou (marca/modelo, tombo, nº de série, hostname). "
@@ -2094,9 +2245,12 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
                 "Ditos pelo técnico, no formato de Procedimentos da base."},
             "fila": _FILA,
             "edificio": _EDIFICIO_DITO,
+            "retomar": {"type": "boolean", "description":
+                        "Só quando o sistema avisar que está pausado e o técnico "
+                        "autorizar retomar antes."},
         }, "required": ["chamados", "procedimentos"]},
-        # Confere Edifício/Item B e corrige antes de resolver (30/10).
-        preparar=_prep_resolver, executar=_exec_resolver, antes=_antes_corrigir,
+        # Confere relógio, Edifício e Item B antes de resolver (30/10).
+        preparar=_prep_resolver, executar=_exec_resolver, antes=_antes_resolver,
         dominio="chamados",
     ),
     Ferramenta(
@@ -2420,6 +2574,10 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "observacoes": {"type": "string"},
         }, "required": ["backup", "maquinas"]},
         preparar=_prep_termo, executar=_exec_termo, antes=_antes_termo,
+        # Com o chamado, lê mesmo sem as máquinas: a que saiu vem dele (30/10).
+        # Sem chamado, lê só o Itom (máquinas ditas).
+        precisa_ler=lambda a: isinstance(a.get("backup"), bool)
+        and bool(str(a.get("chamado") or "").strip() or a.get("maquinas")),
         dominio="termos",
     ),
     Ferramenta(
