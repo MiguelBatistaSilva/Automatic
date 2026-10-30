@@ -34,6 +34,8 @@ Gabriel"), use buscar_chamado_por_usuario.
   nome do usuário. Na troca a nova quase sempre herda o nome da antiga: com
   UM hostname, o sistema repete nos dois lados. Se o técnico disser dois
   nomes (raro: a nova ganhou outro), ponha cada um no seu lado.
+- Série e hostname que o técnico não disser, o SISTEMA busca no Itom pelo
+  tombo: com o tombo, NÃO pergunte série nem hostname — gere.
 - Com backup: se o técnico disser se o backup pelo OneDrive foi oferecido,
   preencha `onedrive`; se não disser, deixe sem marcar (não pergunte).
 

@@ -1273,6 +1273,17 @@ def _desc_despacho() -> str:
             f"chame sem defeito_modelo: o sistema diz o que perguntar. Modelos: {nomes}.")
 
 
+def _antes_despacho(args: dict, s: Sessao) -> dict:
+    """Série não dita vem do Itom pelo tombo (30/10)."""
+    tombo = str(args.get("tombo") or "").strip()
+    m = _itom([tombo], s).get(tombo, False)
+    if m is None:
+        return {**args, "_do_itom": f"o tombo {tombo} não está no Itom"}
+    if m and m.serial:
+        return {**args, "serie": m.serial, "_do_itom": f"série {m.serial} (tombo {tombo})"}
+    return args
+
+
 def _prep_despacho(args: dict) -> "Acao | str":
     """Despacho ao Serviço de Operações (20/10): a mesma pausa do fornecedor,
     com o script montado pelo código (services/agente/despacho_operacao.py)."""
@@ -1316,6 +1327,8 @@ def _prep_despacho(args: dict) -> "Acao | str":
     if faltam or pergunta:
         partes = ([f"Falta(m): {', '.join(faltam)}"] if faltam else []) + \
                  ([pergunta] if pergunta else [])
+        if "nº de série" in faltam and args.get("_do_itom"):
+            partes.append(f"Itom: {args['_do_itom']}")
         return ". ".join(partes) + ". Pergunte ao técnico, de uma vez."
 
     pronto = []
@@ -1331,6 +1344,8 @@ def _prep_despacho(args: dict) -> "Acao | str":
                  f"{'vieram' if len(pronto) > 1 or pronto == ['testes'] else 'veio'} "
                  f"do script genérico de {tipo} (sem modelo da equipe): confira."
                  if pronto else "")
+    if args.get("_do_itom") and v["serie"]:
+        aviso = " ".join(x for x in (aviso, f"Do Itom: {args['_do_itom']}.") if x)
     campos = {"tipo": tipo, "localizacao": v["localizacao"], "marca": v["marca"],
               "modelo": v["modelo"], "serie": v["serie"],
               "testes": testes, "defeitos": defeitos,
@@ -1639,13 +1654,50 @@ def _hostname_fora_do_nome(args: dict) -> dict:
     return {**args, "nome": "", "_hostname": nome.upper()}
 
 
+def _itom(tombos: list[str], s: Sessao) -> dict:
+    """{tombo: Maquina|None} pelo Itom (30/10); {} se não deu para entrar."""
+    from services.fluxos.flow_itom_pw import consultar
+    try:
+        return consultar(tombos, s.matricula, s.senha, s.log)
+    except Exception as e:
+        s.log(f"Não consegui consultar o Itom: {e}", "error")
+        return {}
+
+
+def _maquinas_do_itom(args: dict, s: Sessao) -> dict:
+    """Série (e o hostname da que SAIU) que o técnico não disse vêm do Itom
+    pelo tombo. A que entrou herda o nome da antiga (_arrumar_trocas)."""
+    trocas = [{"saiu": _equip(m.get("saiu")), "entrou": _equip(m.get("entrou"))}
+              for m in (args.get("maquinas") or []) if isinstance(m, dict)]
+    pedir = [e["tombo"] for t in trocas for lado, e in t.items() if e["tombo"]
+             and (not e["serie"] or (lado == "saiu" and not e["hostname"]))]
+    if not pedir:
+        return args
+    achados, notas = _itom(pedir, s), []
+    for t in trocas:
+        for lado, e in t.items():
+            m = achados.get(e["tombo"]) if e["tombo"] else None
+            if e["tombo"] in pedir and e["tombo"] in achados and m is None:
+                notas.append(f"tombo {e['tombo']} não está no Itom")
+            if not m:
+                continue
+            if not e["serie"] and m.serial:
+                e["serie"] = m.serial
+                notas.append(f"série {m.serial} (tombo {e['tombo']})")
+            if lado == "saiu" and not e["hostname"] and m.hostname:
+                e["hostname"] = m.hostname
+                notas.append(f"hostname {m.hostname} (tombo {e['tombo']})")
+    return {**args, "maquinas": trocas, "_do_itom": notas}
+
+
 def _antes_termo(args: dict, s: Sessao) -> dict:
     """Lê nome, matrícula e unidade do usuário afetado do chamado. O que o
-    técnico disse na conversa vale mais que o lido."""
+    técnico disse na conversa vale mais que o lido. Série e hostname que
+    faltarem vêm do Itom (30/10)."""
     from services.assyst.assyst_common import _so_o_nome
     from services.agente.ficha import ler_ficha
 
-    args = _hostname_fora_do_nome(args)
+    args = _maquinas_do_itom(_hostname_fora_do_nome(args), s)
     f = ler_ficha(s.pagina, str(args.get("chamado") or ""), s.log)
     if f is None:
         return args
@@ -1708,6 +1760,8 @@ def _prep_termo(args: dict) -> "Acao | str":
     aviso = ""
     if a["chamado"] and not args.get("_lido_do_chamado"):
         aviso = "Não consegui ler o usuário afetado do chamado: confira nome, matrícula e unidade."
+    if args.get("_do_itom"):
+        aviso = " ".join(x for x in (aviso, "Do Itom: " + "; ".join(args["_do_itom"]) + ".") if x)
     return Acao(ferramenta="gerar_termo", args=a,
                 titulo="Termo de Responsabilidade de Instalação", linhas=linhas,
                 escreve=True,
@@ -1948,6 +2002,23 @@ def _inv_verificar_sla(args: dict, s: Sessao) -> str:
 _MAX_TRIAGEM = 15   # ~5 s por chamado: a conversa não pode ficar presa
 
 
+def _inv_consultar_maquina(args: dict, s: Sessao) -> str:
+    """Série, hostname e ficha da máquina pelo tombo, no Itom (30/10). Dado
+    de máquina, sem dado pessoal: volta à IA."""
+    tombos = _lista(args.get("tombos"))
+    if not tombos:
+        return "Falta o tombo."
+    achados = _itom(tombos, s)
+    if not achados:
+        return "Não consegui entrar no Itom."
+    linhas = []
+    for t in tombos:
+        m = achados.get(t)
+        linhas.append(m.resumo() + (f" (outros hosts: {', '.join(m.outras)})" if m.outras else "")
+                      if m else f"Tombo {t}: não está no Itom (sem agente ou tombo errado).")
+    return "\n".join(linhas)
+
+
 def _inv_analisar_chamado(args: dict, s: Sessao) -> str:
     from services.agente.ficha import ler_ficha
     from services.agente.triagem import triar_ficha
@@ -2049,6 +2120,16 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
         }},
         preparar=lambda a: "", investiga=_inv_analisar_chamado,
         dominio="chamados",
+    ),
+    Ferramenta(
+        "consultar_maquina",
+        "INVESTIGAÇÃO: nº de série, hostname, IP e configuração da máquina pelo "
+        "tombo, no Itom (só leitura). Termo e despacho já buscam a série sozinhos.",
+        {"type": "object", "properties": {
+            "tombos": {"type": "array", "items": {"type": "string"}},
+        }, "required": ["tombos"]},
+        preparar=lambda a: "", investiga=_inv_consultar_maquina,
+        dominio=("chamados", "termos", "requisicao"),
     ),
     Ferramenta(
         "corrigir_chamado",
@@ -2250,6 +2331,10 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
                         "o problema, use defeito_modelo."},
         }, "required": ["chamado", "tipo"]},
         preparar=_prep_despacho, executar=_exec_despacho,
+        # Série não dita: o sistema busca no Itom pelo tombo (30/10).
+        antes=_antes_despacho,
+        precisa_ler=lambda a: bool(str(a.get("tombo") or "").strip())
+        and not str(a.get("serie") or "").strip(),
         dominio="chamados",
     ),
     Ferramenta(

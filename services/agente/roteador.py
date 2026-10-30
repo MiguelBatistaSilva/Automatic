@@ -34,7 +34,10 @@ DOMINIOS: dict[str, re.Pattern] = {
         # Atribuição Interna (21/10): atribuir_chamado.
         r"|atribu|encaminh|escalon|\bpux|\bpega"
         # Triagem (22/10): analisar_chamado.
-        r"|analis|triag|item b\b|corrig"),
+        r"|analis|triag|item b\b|corrig"
+        # Itom (30/10): consultar_maquina. Só "itom": "série"/"hostname"
+        # aparecem em todo termo; "tombo" já leva à requisicao, que tem ela.
+        r"|\bitom\b"),
     # Plantão Judiciário do fim de semana (13/10): criar_plantoes.
     "requisicao": re.compile(r"requisic|tombo|patrimon|matricula|plant(ao|oes)"),
     # Verbo antes OU depois de "fila" ("configura a fila X" / "a fila X

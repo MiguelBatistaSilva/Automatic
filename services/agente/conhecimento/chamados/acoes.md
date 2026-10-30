@@ -22,7 +22,8 @@
   aguardar_fornecedor). O sistema monta o script.
 - Precisa: chamado, tipo, localização do equipamento, marca, modelo e nº de
   série; tombo só para computador, notebook, monitor e impressora (teclado,
-  mouse, webcam e caixa de som não têm).
+  mouse, webcam e caixa de som não têm). Com o tombo, a série o SISTEMA
+  busca no Itom: não pergunte a série (só se ele avisar que não achou).
 - Testes realizados e defeito: vêm dos MODELOS POR DEFEITO da equipe. Pelo
   problema que o técnico contou ("scroll travando", "não liga"), escolha o
   modelo em defeito_modelo; nunca invente testes. Se ele não contou o

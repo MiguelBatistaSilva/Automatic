@@ -206,6 +206,9 @@ def _status(nome: str, args: dict) -> tuple[str, str]:
         return "Analisando os chamados da sua fila...", "Analisou os chamados da fila"
     if nome == "analisar_chamado":
         return f"Analisando o chamado{alvo}...", f"Analisou o chamado{alvo}"
+    if nome == "consultar_maquina":
+        tombos = _lista_curta(_lista(args.get("tombos")), 4)
+        return (f"Buscando o tombo {tombos} no Itom...", f"Consultou o Itom (tombo {tombos})")
     if nome == "listar_bases_conhecimento":
         filtro = f" ('{args['filtro']}')" if args.get("filtro") else ""
         return "Consultando as bases de conhecimento...", f"Consultou as bases de conhecimento{filtro}"
