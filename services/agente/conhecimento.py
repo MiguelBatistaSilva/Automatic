@@ -134,7 +134,7 @@ def tipos() -> list[Tipo]:
                 nome=linhas[0].strip(),
                 pedidos=campos.get("pedidos", ""),
                 item=campos["item"],
-                categoria=campos.get("categoria") or "Configuração",
+                categoria=campos.get("categoria") or "Instalar / Configurar",
                 resumo=campos.get("resumo") or "Requisição de Serviço",
                 descricao=campos["descricao"],
             ))

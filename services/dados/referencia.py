@@ -17,9 +17,18 @@ tabelas .md para todo dado escrito por gente ficar num formato só (o SQLite
   - tecnicos.md  (nome, fila): UMA LINHA POR PAR — o mesmo técnico pode estar
                  em várias filas (ex.: FCB e Remoto, conforme o local). Nome
                  exatamente como no Assyst. Editável à mão.
-  - itens.md     (campo, valor): valores aceitos nos campos da Requisição
-                 que não têm banco próprio — item, item_b, categoria e
-                 resumo. Substituiu os "Presets" (tabela do SQLite) em 28/10.
+  - itens.md     (campo, valor, quando_usar): valores aceitos nos campos da
+                 Requisição que não têm banco próprio — item, item_b,
+                 categoria e resumo. Substituiu os "Presets" (tabela do
+                 SQLite) em 28/10. `quando_usar` são exemplos da equipe (ex.:
+                 troca de ventoinha = Computador / Instalar / Configurar): o
+                 nome do item não diz qual usar, é convenção — vai para a IA.
+  - catalogo_itens.md (produto, item, codigo): TODOS os 423 Itens de serviço
+                 do Assyst com o Produto de cada um (29/10, lupa "Pesquisar
+                 por Item"). Desde então o Item só lista depois do Produto.
+                 Só consulta: o itens.md continua sendo o que a equipe usa.
+  - catalogo_categorias.md (produto, item, categoria): as Categorias de cada
+                 Item da equipe — a lista MUDA conforme o Item (29/10).
 
 Edição pela aba "Referência" de Configurações, mas SÓ onde há `.git` (a
 máquina de quem publica): o updater copia o zip do GitHub por cima e não
@@ -32,10 +41,13 @@ valor vai escrito `\\|`.
 
 Resolver = transformar o que o técnico disse ("iguatu", "Gabriel") no nome
 EXATO do Assyst, ou dizer por que não deu (ambíguo / não achou). Nada aqui
-chuta: ambíguo volta as opções para o agente perguntar.
+chuta: ambíguo volta as opções para o agente perguntar. `conferir()` é a
+porta única das ferramentas do Assistente (28/10): o técnico pode errar ao
+escrever, então todo campo que tem tabela aqui passa por ela.
 """
 
 import dataclasses
+import difflib
 import os
 import re
 import unicodedata
@@ -45,7 +57,8 @@ RAIZ = Path(__file__).resolve().parents[2]
 PASTA = RAIZ / "services" / "agente" / "conhecimento" / "referencia"
 # Tabela -> coluna obrigatória (linha sem ela é descartada na leitura).
 TABELAS = {"itens.md": "valor", "tecnicos.md": "nome", "filas.md": "nome",
-           "edificios.md": "secao"}
+           "edificios.md": "secao", "catalogo_itens.md": "item",
+           "catalogo_categorias.md": "categoria"}
 _cache: dict[str, tuple[float, list[dict]]] = {}
 
 _DIVISOR = re.compile(r"^\|?[\s:|-]+$")          # |---|:--|
@@ -163,6 +176,10 @@ def resolver_fila(texto: str) -> Achado:
             if alvo in (_chave(l["nome"]), _chave(l["codigo"])):
                 return Achado(l["nome"])
     contem = [l["nome"] for l in linhas if k in _chave(l["nome"])]
+    if not contem:
+        # Palavras soltas: "2N Demais Capital" -> 2N CATI Demais Capital (28/10).
+        contem = [l["nome"] for l in linhas
+                  if all(w in _chave(l["nome"]).split() for w in k.split())]
     # Preferência para as do 2N CATI: "fcb" é a 2N CATI FCB, não as 2N CIAT FCB.
     cati = [n for n in contem if n.startswith("2N CATI")]
     for grupo in (cati, contem):
@@ -209,3 +226,92 @@ def valores(campo: str) -> list[str]:
     """Valores do itens.md para um campo da Requisição (item, item_b,
     categoria, resumo), na ordem do arquivo."""
     return [l["valor"] for l in _ler("itens.md", "valor") if l.get("campo") == campo]
+
+
+def itens() -> list[dict]:
+    """Linhas do itens.md: campo, valor, quando_usar."""
+    return _ler("itens.md", "valor")
+
+
+# --------------------------------------------------------------------------- #
+# Conferência única (28/10)
+# --------------------------------------------------------------------------- #
+
+@dataclasses.dataclass
+class Conferido:
+    dito: str
+    valor: str = ""                                   # nome do banco, se UM só
+    opcoes: list[str] = dataclasses.field(default_factory=list)    # ambíguo
+    proximos: list[str] = dataclasses.field(default_factory=list)  # não achou
+
+    @property
+    def ok(self) -> bool:
+        return bool(self.valor)
+
+    @property
+    def corrigido(self) -> bool:
+        """Achou, mas escrito diferente do banco (vai para o cartão). Só
+        maiúscula/acento não conta."""
+        return self.ok and _chave(self.valor) != _chave(self.dito)
+
+
+ROTULOS = {"tecnico": "Técnico", "fila": "Fila", "edificio": "Edifício",
+           "item": "Item", "categoria": "Categoria"}
+
+
+def _lista(campo: str) -> list[str]:
+    if campo == "tecnico":
+        return tecnicos()
+    if campo == "fila":
+        return filas()
+    if campo == "edificio":
+        return nomes_edificios()
+    return valores(campo)
+
+
+def _resolver(nomes: list[str], texto: str) -> Achado:
+    """Igual (sem acento/maiúscula); senão UM nome que contenha o texto; senão
+    UM que contenha todas as palavras; senão ambíguo/não achou."""
+    k = _chave(texto)
+    if not k:
+        return Achado()
+    for n in nomes:
+        if _chave(n) == k:
+            return Achado(n)
+    contem = [n for n in nomes if k in _chave(n)]
+    if not contem:
+        contem = [n for n in nomes if all(w in _chave(n) for w in k.split())]
+    if len(contem) > 1:
+        # Desempate: cada palavra dita é COMEÇO de palavra do nome ("instalar"
+        # é Instalar / Configurar, não Desinstalar).
+        inicio = [n for n in contem
+                  if all(any(p.startswith(w) for p in _chave(n).split()) for w in k.split())]
+        contem = inicio if len(inicio) == 1 else contem
+    if len(contem) == 1:
+        return Achado(contem[0])
+    return Achado(opcoes=contem[:10])
+
+
+def conferir(campo: str, dito: str) -> Conferido:
+    """O que o técnico disse num campo que tem tabela aqui (tecnico, fila,
+    edificio, item, categoria) contra o banco: igual / corrigido / ambíguo /
+    não achou (com os mais próximos, para o agente perguntar)."""
+    dito = (dito or "").strip()
+    if campo == "tecnico":
+        a = resolver_tecnico(dito)
+    elif campo == "fila":
+        a = resolver_fila(dito)
+    else:
+        a = _resolver(_lista(campo), dito)
+    if a.ok:
+        return Conferido(dito, valor=a.valor)
+    if a.opcoes:
+        return Conferido(dito, opcoes=a.opcoes)
+    nomes = {_chave(n): n for n in _lista(campo)}
+    perto = difflib.get_close_matches(_chave(dito), list(nomes), n=5, cutoff=0.5)
+    return Conferido(dito, proximos=[nomes[k] for k in perto])
+
+
+def fora_do_banco(campo: str, valor: str) -> bool:
+    """O valor não está na tabela do campo (nem com outra grafia)."""
+    return not conferir(campo, valor).ok

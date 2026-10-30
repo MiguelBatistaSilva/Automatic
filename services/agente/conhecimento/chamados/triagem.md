@@ -29,5 +29,10 @@
 - Responda curto: o que está certo e o que corrigir. Seção ambígua ou sem
   histórico: mostre as opções e pergunte o edifício; não escolha por ele.
 - "confirme" no resultado = palpite pela cidade: peça a confirmação.
-- A correção do Edifício/Item B no Assyst ainda não é feita pelo
-  Assistente: diga o que mudar para o técnico fazer.
+- Corrigir Edifício/Item B: "corrige o chamado X" → corrigir_chamado (o
+  sistema lê o chamado e decide os valores pela triagem).
+- resolver_chamado e aplicar_base JÁ conferem e corrigem Edifício e Item B
+  antes (o cartão mostra "Corrigir antes"). Não chame analisar_chamado nem
+  corrigir_chamado antes deles.
+- Se o sistema perguntar o Edifício, pergunte ao técnico e chame a MESMA
+  ferramenta de novo com edificio = o que ele escolheu.

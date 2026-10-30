@@ -12,28 +12,28 @@ linhas `- pedidos:`, `- item:`, `- categoria:`, `- resumo:` e
 
 ## Atualização de Java
 - pedidos: java, atualizar java, instalar java
-- item: Softwares e Aplicativos
-- categoria: Configuração
+- item: Java
+- categoria: Instalar / Configurar
 - resumo: Requisição de Serviço
 - descricao: Solicito atualização de Java na máquina de tombo: {tombo}.
 
 ## Limpeza de disco
 - pedidos: limpeza de disco, limpar disco, disco cheio
 - item: Computador
-- categoria: Configuração
+- categoria: Instalar / Configurar
 - resumo: Requisição de Serviço
 - descricao: Solicito limpeza de disco na máquina de tombo: {tombo}.
 
 ## Visita técnica preventiva
 - pedidos: preventiva, visita técnica, manutenção preventiva
 - item: Computador
-- categoria: Configuração
+- categoria: Instalar / Configurar
 - resumo: Requisição de Serviço
 - descricao: Solicito visita técnica preventiva nas máquinas da unidade. Segue o número do tombo: {tombo}.
 
 ## Instalação de micro
 - pedidos: instalar micro, instalação de computador, instalar computador, micro novo
 - item: Computador
-- categoria: Configuração
+- categoria: Instalar / Configurar
 - resumo: Requisição de Serviço
 - descricao: Solicito instalação do micro de tombo {tombo} na unidade {edificio}.

@@ -75,6 +75,12 @@ def _aba_referencia() -> rx.Component:
                        "(a deste computador seria sobrescrita no próximo update).",
                        icon="lock", size="1", color_scheme="gray"),
         ),
+        rx.foreach(
+            ReferenciaState.alertas,
+            lambda a: rx.callout(a + " Corrija em services/agente/conhecimento/"
+                                 "requisicao/tipos_solicitacao.md ou cadastre o valor aqui.",
+                                 icon="triangle_alert", size="1", color_scheme="orange"),
+        ),
         rx.hstack(
             rx.select(list(TABELAS), value=ReferenciaState.tabela,
                       on_change=ReferenciaState.set_tabela),

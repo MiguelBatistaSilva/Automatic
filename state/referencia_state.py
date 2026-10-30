@@ -20,6 +20,8 @@ TABELAS = {
     "Técnicos": "tecnicos.md",
     "Filas": "filas.md",
     "Edifícios": "edificios.md",
+    "Catálogo de Itens (Assyst)": "catalogo_itens.md",
+    "Categorias por Item (Assyst)": "catalogo_categorias.md",
 }
 
 
@@ -34,6 +36,9 @@ class ReferenciaState(rx.State):
     editavel: bool = False
     status: str = ""
     status_cor: str = "#16A34A"
+    # Tipos de solicitação (conhecimento/requisicao/tipos_solicitacao.md) que
+    # citam item/categoria fora do itens.md — a base ficou desatualizada.
+    alertas: list[str] = []
 
     _linhas: list[list[str]] = []
     _indices: list[int] = []            # visiveis[i] é _linhas[_indices[i]]
@@ -77,6 +82,18 @@ class ReferenciaState(rx.State):
         self.novo = [""] * len(self.colunas)
         self.status = ""
         self._filtrar()
+        self._conferir_tipos()
+
+    def _conferir_tipos(self):
+        from services.agente import conhecimento
+        from services.dados import referencia
+        alertas = []
+        for t in conhecimento.tipos():
+            for campo, valor in (("item", t.item), ("categoria", t.categoria)):
+                if valor not in referencia.valores(campo):
+                    alertas.append(f"O tipo '{t.nome}' usa {campo} '{valor}', que não "
+                                   "está em Itens da Requisição.")
+        self.alertas = alertas
 
     def _filtrar(self):
         from services.dados.referencia import _chave
@@ -99,6 +116,7 @@ class ReferenciaState(rx.State):
         self.status = msg + " Lembre de commitar para levar a todos."
         self.status_cor = cor
         self._filtrar()
+        self._conferir_tipos()
 
     @rx.event
     def adicionar(self):

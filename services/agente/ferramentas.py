@@ -324,6 +324,132 @@ def _exec_desmembrar(a: dict, s: Sessao) -> Resultado:
 
 
 # --------------------------------------------------------------------------- #
+# Correção do chamado (30/10) — Edifício e Item B antes de resolver/aplicar base
+# --------------------------------------------------------------------------- #
+#
+# O técnico pede "aplica a base e resolve" sem olhar o chamado: o `antes`
+# lê a ficha, roda a triagem (services/agente/triagem.py) e o cartão já sai
+# com o que corrigir. Correção certa entra no cartão; dúvida (seção ambígua,
+# palpite pela cidade) volta à IA como pergunta, e a resposta vem em
+# `edificio`. O fluxo é o flow_corrigir_chamado_pw.
+
+_EDIFICIO_DITO = {"type": "string", "description":
+                  "Só quando o sistema perguntar o Edifício: o que o técnico escolheu."}
+
+
+def _antes_corrigir(args: dict, s: Sessao) -> dict:
+    from services.agente.ficha import ler_ficha
+    from services.agente.triagem import IC_NAO_LOCALIZADO, triar_ficha
+    from services.dados import referencia
+
+    dito = str(args.get("edificio") or "").strip()
+    correcoes, linhas, pendencias = {}, [], []
+    for numero in (c.strip().upper() for c in _lista(args.get("chamados"))):
+        f = ler_ficha(s.pagina, numero, s.log)
+        if f is None:
+            linhas.append(f"{numero}: não consegui abrir para conferir Edifício e Item B")
+            continue
+        t = triar_ficha(f)
+        c, partes = {}, []
+        e, b = t.edificio, t.item_b
+        if e.por_definir:
+            if dito:
+                c["edificio"] = referencia.conferir("edificio", dito).valor or dito
+                partes.append(f"Edifício '{e.atual or 'vazio'}' → {c['edificio']} (dito pelo técnico)")
+            elif e.sugerido and "confirme" not in e.motivo:
+                c["edificio"] = e.sugerido
+                partes.append(f"Edifício '{e.atual or 'vazio'}' → {e.sugerido} ({e.motivo})")
+            elif e.sugerido:
+                pendencias.append(f"{numero}: Edifício '{e.atual or 'vazio'}'; pela cidade seria "
+                                  f"{e.sugerido}. Peça a confirmação e mande em edificio.")
+            elif e.opcoes:
+                pendencias.append(f"{numero}: Edifício '{e.atual or 'vazio'}'; opções: "
+                                  f"{' | '.join(e.opcoes)}. Pergunte qual e mande em edificio.")
+            else:
+                pendencias.append(f"{numero}: Edifício '{e.atual or 'vazio'}' e a seção não tem "
+                                  "histórico. Pergunte o edifício e mande em edificio.")
+        # Só corrige Item B vazio ou IC NÃO LOCALIZADO: um item de verdade
+        # foi escolhido por alguém.
+        if b.sugerido and (not b.atual.strip() or b.atual.strip() == IC_NAO_LOCALIZADO) \
+                and b.sugerido != b.atual.strip():
+            c["item_b"] = b.sugerido
+            partes.append(f"Item B '{b.atual or 'vazio'}' → {b.sugerido}; {b.motivo}")
+        if c:
+            correcoes[numero] = c
+            linhas.append(f"{numero}: " + " · ".join(partes))
+    return {**args, "_lido_do_chamado": True, "_correcoes": correcoes,
+            "_linhas_correcao": linhas, "_pendencias": pendencias}
+
+
+def _pergunta_edificio(args: dict, verbo: str) -> str:
+    return (f"Antes de {verbo}, o Edifício precisa ser definido:\n- "
+            + "\n- ".join(args["_pendencias"])
+            + "\nPergunte ao técnico (tudo de uma vez) e chame de novo com edificio.")
+
+
+def _com_correcoes(r: "Acao | str", args: dict, verbo: str) -> "Acao | str":
+    """Junta ao cartão o que o `antes` achou. Dúvida no Edifício = pergunta."""
+    if isinstance(r, str) or not args.get("_lido_do_chamado"):
+        return r
+    if args.get("_pendencias"):
+        return _pergunta_edificio(args, verbo)
+    r.args["correcoes"] = args.get("_correcoes") or {}
+    if args.get("_linhas_correcao"):
+        r.linhas.insert(1, "**Corrigir antes:**\n" + "\n".join(f"- {l}" for l in args["_linhas_correcao"]))
+    return r
+
+
+def _executar_correcoes(a: dict, s: Sessao) -> dict[str, tuple[bool, str]]:
+    """Corrige os chamados do cartão. {numero: (ok, texto para o resultado)}."""
+    from services.agente.ficha import esquecer
+    from services.fluxos.flow_corrigir_chamado_pw import corrigir_chamado
+
+    saida = {}
+    for numero, c in (a.get("correcoes") or {}).items():
+        s.log(f"Corrigindo o chamado {numero}...", "status")
+        try:
+            ok, info = corrigir_chamado(s.pagina(), s.log, numero, c.get("edificio", ""),
+                                        c.get("item_b", ""), s.modo_teste)
+        except Exception as e:
+            ok, info = False, {"erro": str(e), "mudou": {}}
+        esquecer(numero)
+        mudou = "; ".join(f"{k}: {d}" for k, (_, d) in info.get("mudou", {}).items())
+        saida[numero] = (ok, (mudou or "já estava certo") if ok
+                         else f"correção falhou: {info.get('erro')}")
+    return saida
+
+
+def _prep_corrigir(args: dict) -> "Acao | str":
+    chamados = _lista(args.get("chamados"))
+    if not chamados:
+        return "Falta o número do chamado."
+    if not args.get("_lido_do_chamado"):
+        return "Não consegui ler o chamado no Assyst para conferir."
+    if args.get("_pendencias"):
+        return _pergunta_edificio(args, "corrigir")
+    if not args.get("_correcoes"):
+        return ("Nada a corrigir: Edifício e Item B estão certos em "
+                f"{_lista_curta(chamados)}. Diga isso ao técnico.")
+    return Acao(
+        ferramenta="corrigir_chamado",
+        args={"chamados": list(args["_correcoes"]), "correcoes": args["_correcoes"]},
+        titulo="Corrigir chamado",
+        linhas=["**Corrigir:**\n" + "\n".join(f"- {l}" for l in args["_linhas_correcao"])],
+        escreve=True,
+        pode_simular=True,
+    )
+
+
+def _exec_corrigir(a: dict, s: Sessao) -> Resultado:
+    feitos = _executar_correcoes(a, s)
+    linhas = [f"- {_ok_falha(ok)} {n} — {txt}" for n, (ok, txt) in feitos.items()]
+    n_ok = sum(ok for ok, _ in feitos.values())
+    sufixo = " (simulação, nada salvo)" if s.modo_teste else ""
+    cab = f"**Corrigir chamado{sufixo}** — {n_ok} de {len(feitos)}."
+    return Resultado("\n".join([cab] + linhas), ok=n_ok == len(feitos))
+
+
+# --------------------------------------------------------------------------- #
 # Desmembramento — Só Base
 # --------------------------------------------------------------------------- #
 
@@ -339,7 +465,7 @@ def _prep_aplicar_base(args: dict) -> "Acao | str":
     if erro:
         return erro
     sit = ds.situacao(ds.chave_bc(chamados))
-    return Acao(
+    return _com_correcoes(Acao(
         ferramenta="aplicar_base",
         args={"chamados": chamados, "base": base},
         titulo="Aplicar Base (Só Base)",
@@ -348,7 +474,7 @@ def _prep_aplicar_base(args: dict) -> "Acao | str":
         escreve=True,
         checkpoint=sit["estado"],
         aviso=sit.get("resumo", ""),
-    )
+    ), args, "aplicar a base")
 
 
 def _exec_aplicar_base(a: dict, s: Sessao) -> Resultado:
@@ -356,6 +482,9 @@ def _exec_aplicar_base(a: dict, s: Sessao) -> Resultado:
     from services.fluxos.flow_desmembramento_pw import FluxoBCPW, _chave_checkpoint
     from services.fluxos.kb_manager_pw import executar_kb_unica_pw
 
+    # Corrige antes (30/10). Aqui a falha não segura a base (ela não fecha o
+    # chamado): só vai para o resultado.
+    correcoes = _executar_correcoes(a, s)
     kb = _kb_config(a["base"])
     FluxoBCPW(s.pagina(), s.matricula, s.senha, s.log, origem="ui").executar(
         filhos=a["chamados"],
@@ -369,6 +498,7 @@ def _exec_aplicar_base(a: dict, s: Sessao) -> Resultado:
         st = por_indice.get(i, "pendente")
         feitos += st == "concluido"
         linhas.append(f"- {_ok_falha(st == 'concluido')} {c}" + ("" if st == "concluido" else f" ({st})"))
+    linhas += [f"- {_ok_falha(ok)} Correção {n} — {txt}" for n, (ok, txt) in correcoes.items()]
     cab = f"**Base {a['base']}** — {feitos} de {len(a['chamados'])} chamado(s)."
     return Resultado("\n".join([cab] + linhas), ok=feitos == len(a["chamados"]))
 
@@ -384,6 +514,37 @@ def _texto_requisicoes(reqs: list[dict]) -> str:
         SEPARADOR.join(str(r.get(c) or "").strip() for c in ORDEM_COLUNAS)
         for r in reqs
     )
+
+
+def _prep_requisicoes_ia(args: dict) -> "Acao | str":
+    """criar_requisicoes pedido pela IA: confere técnico, fila, edifício,
+    item e categoria de cada linha no banco (28/10) e cai no preparo comum.
+    O lote colado de volta (requisicoes_coladas) NÃO passa aqui: é o texto
+    exato de antes, e mudar um valor mudaria a chave do checkpoint."""
+    confirmados = _lista(args.get("confirmados"))
+    avisos: list[str] = []
+    reqs = []
+    for r in args.get("requisicoes") or []:
+        r = dict(r)
+        # Técnico e fila vêm inteiros do Assyst: fora do banco não passa
+        # (mesma regra da Requisição por tombo). Item e categoria aceitam o
+        # que o técnico confirmar; edifício só avisa.
+        for chave, campo, aceita in (("usuario_atribuido", "tecnico", None),
+                                     ("grupo_atribuido", "fila", None),
+                                     ("edificio", "edificio", None),
+                                     ("item", "item", confirmados),
+                                     ("categoria", "categoria", confirmados)):
+            if str(r.get(chave) or "").strip():
+                r[chave], erro = _conferir(campo, str(r[chave]), avisos, aceita,
+                                           brando=campo == "edificio")
+                if erro:
+                    return erro
+        reqs.append(r)
+    base = _prep_requisicoes({"requisicoes": reqs})
+    if isinstance(base, Acao):
+        avisos = list(dict.fromkeys(avisos))
+        base.aviso = " ".join(avisos + ([base.aviso] if base.aviso else []))
+    return base
 
 
 def _prep_requisicoes(args: dict) -> "Acao | str":
@@ -570,6 +731,49 @@ def _resolver_nome(valor: str, opcoes: list[str], rotulo: str) -> tuple[str, str
                 "cadastrar em Configurações -> Referência).")
 
 
+def _conferir(campo: str, dito: str, avisos: list[str],
+              confirmados: "list | None" = None, brando: bool = False) -> tuple[str, str]:
+    """(valor, erro) de um campo com tabela no banco de referência (28/10:
+    o técnico pode errar ao escrever — tudo passa por aqui).
+
+    Corrigido -> usa o do banco e anota a troca em `avisos` (vai ao cartão).
+    Ambíguo -> pergunta. Não achou -> pergunta com os mais próximos; se o
+    técnico confirmou (campo em `confirmados`), segue com aviso;
+    `confirmados=None` = o campo não aceita valor de fora. `brando`
+    (edifício: a lista ainda é incompleta) segue com aviso sem perguntar."""
+    from services.dados import referencia
+
+    rotulo = referencia.ROTULOS.get(campo, campo)
+    c = referencia.conferir(campo, dito)
+    if c.ok:
+        if c.corrigido:
+            avisos.append(f"{rotulo}: '{c.dito}' → '{c.valor}'.")
+        return c.valor, ""
+    if c.opcoes:
+        return "", f"{rotulo} '{c.dito}' é ambíguo: {', '.join(c.opcoes)}. Pergunte qual."
+    if brando or campo in (confirmados or []):
+        avisos.append(f"{rotulo} '{c.dito}' não está na referência.")
+        return c.dito, ""
+    perto = f" Mais próximos: {', '.join(c.proximos)}." if c.proximos else ""
+    erro = f"{rotulo} '{c.dito}' não está na referência.{perto} Pergunte ao técnico qual é"
+    if confirmados is None:
+        return "", erro + "."
+    return "", (erro + f"; se ele confirmar que '{c.dito}' está certo, chame de "
+                f"novo com confirmados=['{campo}'].")
+
+
+def _quando_usar() -> str:
+    """Itens e categorias do banco com os exemplos da equipe — a IA escolhe
+    por convenção, não pelo nome (28/10)."""
+    from services.dados import referencia
+
+    def bloco(campo: str) -> str:
+        return "; ".join(l["valor"] + (f" ({l['quando_usar']})" if l.get("quando_usar") else "")
+                         for l in referencia.itens() if l.get("campo") == campo)
+    return (f"\nItens: {bloco('item')}.\nCategorias: {bloco('categoria')}.\n"
+            "Escolha pelos exemplos; se nenhum bater com o pedido, pergunte ao técnico.")
+
+
 def _opcoes() -> dict[str, list[str]]:
     # Tudo do banco de referência (conhecimento/referencia/); os Presets do
     # SQLite saíram em 28/10.
@@ -632,6 +836,7 @@ def _desc_por_tombo() -> str:
         # se ambíguo/desconhecido, devolve as opções para o modelo perguntar.
         # Edifícios saíram em 28/10: o banco tem ~70 nomes, peso demais em
         # todo pedido; o código confere e, fora da lista, só avisa.
+        + _quando_usar()
     )
 
 
@@ -650,13 +855,14 @@ def _prep_por_tombo(args: dict) -> "Acao | str":
         return erro
     if not str(args.get("edificio") or "").strip():
         return "Falta o edifício. Pergunte ao técnico."
-    # Edifício e Item não travam se não estiverem no banco de referência (a
-    # lista de edifícios ainda é incompleta): usa o cadastrado quando bate e, senão, segue com aviso no cartão.
+    confirmados = _lista(args.get("confirmados"))
     avisos = [a for a in (_aviso_fila(tecnico, fila),) if a]
-    edificio, erro = _resolver_nome(args["edificio"], o["edificios"], "O edifício")
+    if args.get("fila") and _sem_acento(args["fila"]) != _sem_acento(fila):
+        avisos.append(f"Fila: '{args['fila']}' → '{fila}'.")
+    # Edifício: a lista do banco ainda é incompleta — fora dela só avisa.
+    edificio, erro = _conferir("edificio", args["edificio"], avisos, brando=True)
     if erro:
-        edificio = args["edificio"].strip()
-        avisos.append(f"Edifício '{edificio}' não está na referência.")
+        return erro
 
     tipo = None
     if args.get("tipo"):
@@ -665,12 +871,15 @@ def _prep_por_tombo(args: dict) -> "Acao | str":
     item = (args.get("item") or (tipo.item if tipo else "")).strip()
     if not item:
         return "Não consegui deduzir o Item. Pergunte ao técnico."
-    item_ok, erro = _resolver_nome(item, o["itens"], "O item")
+    # Item e Categoria, ditos ou vindos do tipo, conferidos no banco: um tipo
+    # desatualizado na base também cai aqui (28/10).
+    item, erro = _conferir("item", item, avisos, confirmados)
     if erro:
-        avisos.append(f"Item '{item}' não está na referência.")
-    else:
-        item = item_ok
-    categoria = (args.get("categoria") or (tipo.categoria if tipo else "Configuração")).strip()
+        return erro
+    categoria = (args.get("categoria") or (tipo.categoria if tipo else "Instalar / Configurar")).strip()
+    categoria, erro = _conferir("categoria", categoria, avisos, confirmados)
+    if erro:
+        return erro
     resumo = (args.get("resumo") or (tipo.resumo if tipo else "Requisição de Serviço")).strip()
     modelo = (args.get("descricao") or (tipo.descricao if tipo else "")).strip()
     if not modelo:
@@ -1141,12 +1350,21 @@ def _prep_despacho(args: dict) -> "Acao | str":
 
 def _prep_config_filas(args: dict) -> "Acao | str":
     from services.fluxos.flow_config_fila_pw import COLUNAS_PADRAO, PERFIL_PADRAO
-    filas = [f.strip() for f in (args.get("filas") or []) if str(f).strip()]
-    if not filas:
+    ditas = [f.strip() for f in (args.get("filas") or []) if str(f).strip()]
+    if not ditas:
         return "Falta a lista de filas a configurar."
     if not COLUNAS_PADRAO:
         return "As colunas padrão do perfil ainda não foram definidas no sistema."
-    return Acao(ferramenta="configurar_filas", args={"filas": filas},
+    # Nome exato do banco (28/10: "2N Demais Capital" ia como dito). A lista
+    # de filas veio inteira do Assyst: fora dela não passa.
+    filas, avisos = [], []
+    for dita in ditas:
+        fila, erro = _conferir("fila", dita, avisos)
+        if erro:
+            return erro
+        filas.append(fila)
+    filas = list(dict.fromkeys(filas))
+    return Acao(ferramenta="configurar_filas", args={"filas": filas}, aviso=" ".join(avisos),
                 titulo="Configurar filas",
                 linhas=[f"**Filas:** {len(filas)} ({_lista_curta(filas)})",
                         f"**Perfil de coluna:** {PERFIL_PADRAO} (criado na 1ª vez, "
@@ -1312,7 +1530,7 @@ def _prep_resolver(args: dict) -> "Acao | str":
     fila = args.get("fila") or FILA_PADRAO
     if fila not in FILAS:
         return f"Fila desconhecida: '{fila}'. Filas válidas: {', '.join(FILAS)}."
-    return Acao(
+    return _com_correcoes(Acao(
         ferramenta="resolver_chamado",
         args={"chamados": chamados, "procedimentos": procedimentos, "fila": fila},
         titulo="Resolver chamado",
@@ -1320,14 +1538,22 @@ def _prep_resolver(args: dict) -> "Acao | str":
                 f"**Procedimentos:**\n{procedimentos}"],
         escreve=True,
         pode_simular=True,
-    )
+    ), args, "resolver")
 
 
 def _exec_resolver(a, s: Sessao) -> Resultado:
     from services.fluxos.flow_resolver_pw import resolver_chamado
+    # Corrige antes (30/10): correção que falhou = não resolve aquele chamado.
+    correcoes = _executar_correcoes(a, s)
     page = s.pagina()
     feitos, linhas = 0, []
     for numero in a["chamados"]:
+        corr = correcoes.get(numero.strip().upper())
+        if corr and not corr[0]:
+            linhas.append(f"- {_ok_falha(False)} {numero} — NÃO resolvido: {corr[1]}")
+            continue
+        if corr:
+            linhas.append(f"- Corrigido {numero} — {corr[1]}")
         s.log(f"Resolvendo o chamado {numero}...", "status")
         try:
             ok, info = resolver_chamado(page, s.log, numero, a["procedimentos"],
@@ -1796,8 +2022,10 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "procedimentos": {"type": "string", "description":
                 "Ditos pelo técnico, no formato de Procedimentos da base."},
             "fila": _FILA,
+            "edificio": _EDIFICIO_DITO,
         }, "required": ["chamados", "procedimentos"]},
-        preparar=_prep_resolver, executar=_exec_resolver,
+        # Confere Edifício/Item B e corrige antes de resolver (30/10).
+        preparar=_prep_resolver, executar=_exec_resolver, antes=_antes_corrigir,
         dominio="chamados",
     ),
     Ferramenta(
@@ -1820,6 +2048,18 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
                            "true = analisar os chamados da fila do técnico."},
         }},
         preparar=lambda a: "", investiga=_inv_analisar_chamado,
+        dominio="chamados",
+    ),
+    Ferramenta(
+        "corrigir_chamado",
+        "Corrige Edifício e Item B do chamado pela triagem (o sistema lê e decide "
+        "o valor). Resolver e aplicar base já corrigem sozinhos.",
+        {"type": "object", "properties": {
+            "chamados": _CHAMADOS,
+            "edificio": _EDIFICIO_DITO,
+        }, "required": ["chamados"]},
+        preparar=_prep_corrigir, executar=_exec_corrigir, antes=_antes_corrigir,
+        precisa_ler=lambda a: bool(_lista(a.get("chamados"))),
         dominio="chamados",
     ),
     Ferramenta(
@@ -1855,8 +2095,9 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "base": {"type": "string", "description":
                      "As palavras que o técnico disse (ex.: 'memória'); o sistema acha "
                      "a base ou devolve as opções. Não peça o nome completo antes."},
+            "edificio": _EDIFICIO_DITO,
         }, "required": ["chamados", "base"]},
-        preparar=_prep_aplicar_base, executar=_exec_aplicar_base,
+        preparar=_prep_aplicar_base, executar=_exec_aplicar_base, antes=_antes_corrigir,
         dominio="chamados",
     ),
     Ferramenta(
@@ -1875,9 +2116,11 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
                 "categoria": {"type": "string"},
                 "grupo_atribuido": {"type": "string"},
                 "usuario_atribuido": {"type": "string", "description": "Técnico."},
-            }, "required": ["usuario_afetado", "item"]}}},
+            }, "required": ["usuario_afetado", "item"]}},
+            "confirmados": {"type": "array", "items": {"type": "string"}, "description":
+                            "Campos fora da referência que o técnico confirmou."}},
          "required": ["requisicoes"]},
-        preparar=_prep_requisicoes, executar=_exec_requisicoes,
+        preparar=_prep_requisicoes_ia, executar=_exec_requisicoes,
         dominio="requisicao",
     ),
     Ferramenta(
@@ -1897,6 +2140,8 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "resumo": {"type": "string"},
             "descricao": {"type": "string", "description":
                           "Só se diferente da do tipo. {tombo} onde entra o tombo."},
+            "confirmados": {"type": "array", "items": {"type": "string"}, "description":
+                            "Campos fora da referência que o técnico confirmou."},
         }, "required": ["matricula", "edificio", "tecnico"]},
         preparar=_prep_por_tombo, executar=_exec_requisicoes,
         dominio="requisicao",
@@ -2047,7 +2292,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
         "padrão). Não mexe em chamados.",
         {"type": "object", "properties": {
             "filas": {"type": "array", "items": {"type": "string"},
-                      "description": "Nomes exatos das filas."},
+                      "description": "Como o técnico disse; o sistema acha o nome exato."},
         }, "required": ["filas"]},
         preparar=_prep_config_filas, executar=_exec_config_filas,
         dominio="filas",
