@@ -11,7 +11,7 @@ Duas partes:
     minutos; o modelo varia, por isso cada caso roda --rodadas vezes, com um
     número de chamado diferente em cada (a escolha da IA muda até com o número).
 
-NÃO abre o Assyst: a sessão e a ficha são falsas, e os chamados e tombos são
+NÃO abre o Assyst nem o Itom: a sessão, a ficha e o Itom são falsos, e os chamados e tombos são
 inventados. Só o texto destes casos vai para a plataforma de IA.
 
 Uso:
@@ -32,15 +32,23 @@ from typing import Callable
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.agente import assistente, cartao, ficha, llm, sessao
+from services.agente import assistente, cartao, ferramentas, ficha, llm, sessao
 from services.agente.ferramentas import FERRAMENTAS, Acao, ChameDeNovo
+from services.fluxos.flow_itom_pw import Maquina
 
 DOIS_TOMBOS = "Solicito a desmontagem de dois computadores. Tombos 111111 e 222222."
 SEM_TOMBO = "Solicito a desmontagem dos computadores do setor."
 UM_TOMBO = "Computador não liga. Tombo 333333."
 SEM_EQUIPAMENTO = "Usuário sem acesso ao PJe."
 
+TROCA = "Troca de computador."
+VELHA = Maquina("666666", hostname="FCB13TESTE666666", serial="SERIE666",
+                marca_modelo="POSITIVO C6200")
+NOVA = Maquina("777777", hostname="FCB13TESTE777777", serial="SERIE777",
+               marca_modelo="LENOVO 13E0S00400")
+
 _descricoes: dict[str, str] = {}   # número do chamado -> descrição da ficha falsa
+_no_itom: "list[Maquina] | None" = [VELHA, NOVA]   # None = Itom fora do ar
 
 
 class SessaoFalsa:
@@ -64,6 +72,13 @@ def _ficha_falsa(pagina, numero, log, recente=True):
                        item_b="", categoria="Instalar / Configurar", descricao=descricao)
 
 
+def _itom_falso(tombos, s):
+    if _no_itom is None:
+        return {}
+    achadas = {m.tombo: m for m in _no_itom}
+    return {t: achadas.get(t) for t in tombos}
+
+
 # --------------------------------------------------------------------------- #
 # REGRAS: a ferramenta, sem a IA
 # --------------------------------------------------------------------------- #
@@ -76,6 +91,33 @@ def _preparar(texto_da_ficha: "str | None", /, **args) -> "Acao | str":
         _descricoes["R1"] = texto_da_ficha
     f = FERRAMENTAS["desmembrar"]
     return f.preparar(f.antes({"chamado_pai": "R1", **args}, SessaoFalsa()))
+
+
+def _termo(no_itom, /, saiu=None, entrou=None, **args) -> "Acao | str":
+    """O termo só com os tombos, com estas máquinas no Itom."""
+    global _no_itom
+    _no_itom = no_itom
+    _descricoes.clear()
+    _descricoes["R1"] = TROCA
+    f = FERRAMENTAS["gerar_termo"]
+    r = f.preparar(f.antes({"chamado": "R1", "backup": False, "maquinas": [{
+        "saiu": {"tombo": "666666", **(saiu or {})},
+        "entrou": {"tombo": "777777", **(entrou or {})}}], **args}, SessaoFalsa()))
+    _no_itom = [VELHA, NOVA]
+    return r
+
+
+def _maquinas_do_termo(r, saiu: tuple, entrou: tuple, no_aviso: str = "") -> str:
+    """saiu/entrou = (série, hostname) esperados."""
+    if isinstance(r, str):
+        return f"não montou o cartão: {r}"
+    t = r.args["maquinas"][0]
+    viu = tuple((t[lado]["serie"], t[lado]["hostname"]) for lado in ("saiu", "entrou"))
+    if viu != (saiu, entrou):
+        return f"máquinas {viu}"
+    if no_aviso and no_aviso not in r.aviso:
+        return f"o aviso não traz '{no_aviso}': {r.aviso!r}"
+    return "" if "?" not in "".join(r.linhas) else f"'?' no cartão: {r.linhas}"
 
 
 def _regras() -> list[tuple[str, str]]:
@@ -131,6 +173,30 @@ def _regras() -> list[tuple[str, str]]:
          cartao_com(_preparar(None, tombos=["444444", "555555"],
                               descricao="Desmontagem de computador."),
                     ["444444", "555555"])),
+        # Gabarito do técnico (05/11): só os tombos; hostname do Itom; fora do Itom,
+        # a nova herda o nome da antiga, e sem nada sai só o tombo.
+        ("termo: marca/modelo vem do Itom, a dita pelo técnico vale mais",
+         "" if [(lambda t: (t["saiu"]["marca_modelo"], t["entrou"]["marca_modelo"]))(
+             _termo([VELHA, NOVA], entrou={"marca_modelo": "DELL 7010"}).args["maquinas"][0])]
+         == [("POSITIVO C6200", "DELL 7010")] else "marca/modelo errada"),
+        ("termo: as duas no Itom, cada uma com o seu nome",
+         _maquinas_do_termo(_termo([VELHA, NOVA]), ("SERIE666", VELHA.hostname),
+                            ("SERIE777", NOVA.hostname))),
+        ("termo: a nova fora do Itom herda o nome da antiga",
+         _maquinas_do_termo(_termo([VELHA]), ("SERIE666", VELHA.hostname),
+                            ("", VELHA.hostname), "777777 não está")),
+        ("termo: a antiga fora do Itom não pega o nome da nova",
+         _maquinas_do_termo(_termo([NOVA]), ("", ""), ("SERIE777", NOVA.hostname))),
+        ("termo: nenhuma no Itom sai só com os tombos",
+         _maquinas_do_termo(_termo([]), ("", ""), ("", ""), "666666 não está")),
+        ("termo: Itom fora do ar avisa no cartão",
+         _maquinas_do_termo(_termo(None), ("", ""), ("", ""), "Não consegui consultar o Itom")),
+        ("termo: nome ditado vale para os dois, a série vem do Itom",
+         _maquinas_do_termo(_termo([VELHA, NOVA], saiu={"hostname": "FCB13DITADO"}),
+                            ("SERIE666", "FCB13DITADO"), ("SERIE777", "FCB13DITADO"))),
+        ("termo: nome solto no pedido vale para os dois",
+         _maquinas_do_termo(_termo([VELHA, NOVA], nome="FCB13SOLTO"),
+                            ("SERIE666", "FCB13SOLTO"), ("SERIE777", "FCB13SOLTO"))),
     ]
 
 
@@ -158,6 +224,21 @@ def _cartao(r: assistente.Resposta, tombos: list[str], no_aviso: str = "",
     if descricao_tem and descricao_tem not in a.args["descricao"].lower():
         return f"descrição dos filhos errada: {a.args['descricao']!r}"
     return ""
+
+
+def _cartao_termo(r: assistente.Resposta) -> str:
+    if len(r.acoes) != 1 or r.acoes[0].ferramenta != "gerar_termo":
+        return f"sem o cartão do termo: {r.texto!r}"
+    return _maquinas_do_termo(r.acoes[0], ("SERIE666", VELHA.hostname), ("SERIE777", NOVA.hostname))
+
+
+def _pede_sem_ficha_tecnica(padrao: str) -> Callable[[assistente.Resposta], str]:
+    """Pergunta sobre `padrao`, sem pedir o que vem do Itom."""
+    cita = _sem_cartao_e_cita(padrao)
+    def conferir(r):
+        pediu = re.search(r"marca|modelo|s[ée]rie|hostname", r.texto, re.I)
+        return cita(r) or (f"pediu dado do Itom: {r.texto!r}" if pediu else "")
+    return conferir
 
 
 def _sem_cartao_e_cita(padrao: str) -> Callable[[assistente.Resposta], str]:
@@ -199,6 +280,12 @@ CASOS = [
     Caso("depois_da_analise", DOIS_TOMBOS, ["analisa o {n}", "então desmembra"],
          lambda r: _cartao(r, ["111111", "222222"], descricao_tem="desmont")),
     Caso("sem_numero", DOIS_TOMBOS, ["desmembra esse chamado aí"], _sem_cartao),
+    # Gabarito (05/11): o técnico passa só os tombos; o resto vem do Itom.
+    Caso("termo_so_tombos", TROCA, ["termo sem backup do {n}: 666666 -> 777777"], _cartao_termo),
+    Caso("termo_sem_backup_dito", TROCA, ["termo do {n}: 666666 -> 777777"],
+         _pede_sem_ficha_tecnica("backup")),
+    Caso("termo_sem_tombos", TROCA, ["termo sem backup do {n}"],
+         _pede_sem_ficha_tecnica("tombo")),
 ]
 
 
@@ -268,6 +355,7 @@ def main() -> int:
     # A troca que mantém o Assyst de fora: nada aqui abre navegador.
     sessao.Sessao = SessaoFalsa
     ficha.ler_ficha = _ficha_falsa
+    ferramentas._itom = _itom_falso
 
     falhas = 0
     if not a.so_ia:

@@ -21,6 +21,7 @@ curta de que a ação rodou.
 gravar só com confirmação).
 """
 
+import copy
 import dataclasses
 import datetime
 import difflib
@@ -1744,7 +1745,7 @@ def _exec_resolver(a, s: Sessao) -> Resultado:
 _CAMPOS_EQUIP = ("marca_modelo", "tombo", "serie", "hostname")
 # Repetido em "saiu" e "entrou" (sem $ref: o Gemini não aceita).
 _EQUIP_ESQUEMA = {"type": "object", "properties": {
-    "marca_modelo": {"type": "string", "description": "Ex.: POSITIVO C6200. Sem o tombo."},
+    "marca_modelo": {"type": "string", "description": "Só se o técnico disser. Ex.: POSITIVO C6200. Sem o tombo."},
     "tombo": {"type": "string", "description": "Patrimônio: só números, em geral 6 dígitos."},
     "serie": {"type": "string", "description": "Nº de série: letras e números (ex.: 1AM03Y878)."},
     "hostname": {"type": "string", "description":
@@ -1779,13 +1780,15 @@ def _equip(v) -> dict:
     return e
 
 
-def _arrumar_trocas(trocas: list[dict], hostname: str) -> None:
+def _arrumar_trocas(trocas: list[dict], hostname: str, so_entrou: tuple = ()) -> None:
     """Na troca a máquina nova herda o nome da antiga: hostname dito só de um
-    lado (ou solto no pedido) vale para os dois."""
+    lado (ou solto no pedido) vale para os dois. `so_entrou`: tombos que entraram
+    com o nome do Itom; esse nome é da nova, não vai para a que saiu."""
     solto = hostname if len(trocas) == 1 else ""
     for t in trocas:
         um = t["saiu"]["hostname"] or t["entrou"]["hostname"] or solto
-        t["saiu"]["hostname"] = t["saiu"]["hostname"] or um
+        if t["entrou"]["tombo"] not in so_entrou:
+            t["saiu"]["hostname"] = t["saiu"]["hostname"] or um
         t["entrou"]["hostname"] = t["entrou"]["hostname"] or um
 
 
@@ -1809,17 +1812,27 @@ def _itom(tombos: list[str], s: Sessao) -> dict:
 
 
 def _maquinas_do_itom(args: dict, s: Sessao) -> dict:
-    """Série (e o hostname da que SAIU) que o técnico não disse vêm do Itom
-    pelo tombo. A que entrou herda o nome da antiga (_arrumar_trocas)."""
+    """Marca/modelo, série e hostname que o técnico não disse vêm do Itom pelo
+    tombo, dos dois lados (05/11). Hostname ditado vale para a troca toda (_arrumar_trocas). A que
+    entrou e não está no Itom herda o nome da antiga."""
     trocas = [{"saiu": _equip(m.get("saiu")), "entrou": _equip(m.get("entrou"))}
               for m in (args.get("maquinas") or []) if isinstance(m, dict)]
-    pedir = [e["tombo"] for t in trocas for lado, e in t.items() if e["tombo"]
-             and (not e["serie"] or (lado == "saiu" and not e["hostname"]))]
+    solto = bool(args.get("_hostname")) and len(trocas) == 1
+
+    def sem_nome(t: dict) -> bool:
+        return not (solto or t["saiu"]["hostname"] or t["entrou"]["hostname"])
+
+    pedir = [e["tombo"] for t in trocas for e in t.values() if e["tombo"]
+             and (not e["serie"] or not e["marca_modelo"] or sem_nome(t))]
     if not pedir:
         return args
-    achados, notas = _itom(pedir, s), []
+    achados, notas, so_entrou = _itom(pedir, s), [], []
+    antes = copy.deepcopy(trocas)
+    if not achados:
+        return {**args, "maquinas": trocas, "_itom_fora": True}
     for t in trocas:
-        for lado, e in t.items():
+        buscar_nome = sem_nome(t)
+        for e in t.values():
             m = achados.get(e["tombo"]) if e["tombo"] else None
             if e["tombo"] in pedir and e["tombo"] in achados and m is None:
                 notas.append(f"tombo {e['tombo']} não está no Itom")
@@ -1827,11 +1840,15 @@ def _maquinas_do_itom(args: dict, s: Sessao) -> dict:
                 continue
             if not e["serie"] and m.serial:
                 e["serie"] = m.serial
-                notas.append(f"série {m.serial} (tombo {e['tombo']})")
-            if lado == "saiu" and not e["hostname"] and m.hostname:
+            if not e["marca_modelo"] and m.marca_modelo:
+                e["marca_modelo"] = m.marca_modelo
+            if buscar_nome and m.hostname:
                 e["hostname"] = m.hostname
-                notas.append(f"hostname {m.hostname} (tombo {e['tombo']})")
-    return {**args, "maquinas": trocas, "_do_itom": notas}
+        if buscar_nome and t["entrou"]["hostname"] and not t["saiu"]["hostname"]:
+            so_entrou.append(t["entrou"]["tombo"])
+    if trocas != antes:
+        notas.append("dados preenchidos, confira no cartão")
+    return {**args, "maquinas": trocas, "_do_itom": notas, "_nome_so_entrou": so_entrou}
 
 
 def _saiu_do_chamado(args: dict, f) -> dict:
@@ -1893,21 +1910,20 @@ def _prep_termo(args: dict) -> "Acao | str":
     # A que saiu veio do chamado (30/10): só falta a que entrou.
     if args.get("_tombos_saiu") and not any(t["saiu"]["tombo"] for t in trocas):
         return (f"O chamado cita os tombos {', '.join(args['_tombos_saiu'])}. Pergunte qual "
-                "SAIU e a máquina que ENTROU (série e hostname o sistema busca no Itom).")
+                "SAIU e o tombo da que ENTROU (o resto o sistema busca no Itom).")
     if args.get("_perguntar_entrou") and trocas:
         s = trocas[0]["saiu"]
         do_itom = ", ".join(f"{r} {s[k]}" for k, r in (("serie", "série"), ("hostname", "hostname")) if s[k])
         return (f"A máquina que SAIU é a do chamado: tombo {s['tombo']}"
                 + (f" ({do_itom}, do Itom)" if do_itom else "") + ". Pergunte só a que "
-                "ENTROU (marca/modelo e tombo; série e hostname o sistema busca no Itom) e "
+                "ENTROU (só o tombo; o resto o sistema busca no Itom) e "
                 f"chame de novo com saiu.tombo={s['tombo']}. Se ele não souber, gere com a "
                 "que entrou em branco.")
     if not trocas:
         return ("Faltam as máquinas trocadas. Pergunte, de uma vez, para cada troca: "
-                "a que saiu e a que entrou (marca/modelo, tombo, nº de série, hostname). "
-                "O que o técnico não souber fica em branco.")
+                "o tombo da que saiu e o da que entrou. O resto o sistema busca no Itom.")
     args = _hostname_fora_do_nome(args)
-    _arrumar_trocas(trocas, args.get("_hostname", ""))
+    _arrumar_trocas(trocas, args.get("_hostname", ""), tuple(args.get("_nome_so_entrou") or ()))
     a = {
         "chamado": str(args.get("chamado") or "").strip().upper(),
         "backup": args["backup"],
@@ -1923,8 +1939,10 @@ def _prep_termo(args: dict) -> "Acao | str":
     def maquina(e: dict) -> str:
         partes = [f"{rotulo} {e[k]}" for k, rotulo in
                   (("tombo", "tombo"), ("serie", "série"), ("hostname", "hostname")) if e[k]]
-        nome = e["marca_modelo"] or "?"
-        return f"{nome} ({', '.join(partes)})" if partes else nome
+        dados = ", ".join(partes)
+        if not e["marca_modelo"]:
+            return dados or "?"
+        return f"{e['marca_modelo']} ({dados})" if dados else e["marca_modelo"]
 
     linhas = [
         f"**Chamado:** {ou_branco(a['chamado'])} · **Data:** "
@@ -1946,6 +1964,9 @@ def _prep_termo(args: dict) -> "Acao | str":
         aviso = "Não consegui ler o usuário afetado do chamado: confira nome, matrícula e unidade."
     if args.get("_do_itom"):
         aviso = " ".join(x for x in (aviso, "Do Itom: " + "; ".join(args["_do_itom"]) + ".") if x)
+    if args.get("_itom_fora"):
+        aviso = " ".join(x for x in (aviso, "Não consegui consultar o Itom: o que o técnico "
+                                     "não disse ficou em branco.") if x)
     return Acao(ferramenta="gerar_termo", args=a,
                 titulo="Termo de Responsabilidade de Instalação", linhas=linhas,
                 escreve=True,
@@ -2595,10 +2616,12 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
         "gerar_termo",
         "TROCA DE MÁQUINA: gera o Termo de Responsabilidade de Instalação "
         "(com/sem backup) em PDF. Não é o termo de evento (gerar_termo_demanda). "
-        "Nome, matrícula e unidade o sistema lê do chamado.",
+        "Nome, matrícula e unidade o sistema lê do chamado; dos equipamentos basta "
+        "o tombo, o resto ele busca no Itom.",
         {"type": "object", "properties": {
             "chamado": {"type": "string"},
-            "backup": {"type": "boolean", "description": "true = COM backup e restore."},
+            "backup": {"type": "boolean", "description":
+                       "true = COM backup e restore. Só se o técnico disser: nunca deduza."},
             "maquinas": {"type": "array", "items": {"type": "object", "properties": {
                 "saiu": _EQUIP_ESQUEMA,
                 "entrou": _EQUIP_ESQUEMA,
@@ -2610,7 +2633,7 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
             "unidade": {"type": "string", "description": "Só se o técnico disser."},
             "onedrive": {"type": "boolean", "description": "Com backup: oferecido pelo OneDrive?"},
             "observacoes": {"type": "string"},
-        }, "required": ["backup", "maquinas"]},
+        }, "required": ["maquinas"]},
         preparar=_prep_termo, executar=_exec_termo, antes=_antes_termo,
         # Com o chamado, lê mesmo sem as máquinas: a que saiu vem dele (30/10).
         # Sem chamado, lê só o Itom (máquinas ditas).

@@ -13,12 +13,16 @@ Receita validada em 30/10 (tombos 333209 e 332154):
   - Na grade, o Host Name (`.x-grid-cell-dis-name span[onclick]`) termina com
     o tombo (FCB13FAMI333209); o onclick leva a InventoryDetails.jsp.
   - A ficha é uma grade de pares parâmetro/valor: 'System Serial No', IP,
-    sistema operacional, processador, RAM... Marca e modelo NÃO aparecem.
+    sistema operacional, processador, RAM...
+  - Marca e modelo ficam na aba Hardware da ficha, que abre pela URL com
+    `&id=2&Myasset=` (05/11): linhas 'Manufacturer : LENOVO' e 'Model : 13E0S00400'
+    (o modelo vem como código do fabricante). ~1 s a mais por tombo.
   ~6 s de login e ~4,5 s por tombo. O Itom é outro sistema: abre o próprio
 Chrome, separado da sessão do Assyst.
 """
 
 import dataclasses
+import re
 
 from services.assyst.browser_pw import NavegadorPW
 
@@ -49,10 +53,11 @@ class Maquina:
     ram: str = ""
     sem_comunicar: str = ""      # 'Down Since' do Itom
     outras: list[str] = dataclasses.field(default_factory=list)  # outros hosts achados
+    marca_modelo: str = ""       # 'LENOVO 13E0S00400' (aba Hardware)
 
     def resumo(self) -> str:
         partes = [f"hostname {self.hostname}", f"série {self.serial or '?'}"]
-        partes += [x for x in (self.sistema, self.processador) if x]
+        partes += [x for x in (self.marca_modelo, self.sistema, self.processador) if x]
         if self.ram:
             partes.append(f"RAM {self.ram} MB")
         if self.sem_comunicar:
@@ -95,7 +100,17 @@ def _ficha(page, tombo: str, h: dict) -> Maquina:
                    serial=p.get("System Serial No", ""), ip=p.get("IP Address", h["ip"]),
                    sistema=p.get("OS", ""), processador=p.get("Processor Name", ""),
                    ram=(p.get("RAM Size (MB)", "").split("[")[0]),
-                   sem_comunicar=p.get("Down Since", ""))
+                   sem_comunicar=p.get("Down Since", ""),
+                   marca_modelo=_marca_modelo(page, h))
+
+
+def _marca_modelo(page, h: dict) -> str:
+    page.goto(f"{BASE}/ITOM/{h['url']}&id=2&Myasset=", timeout=30000)
+    page.wait_for_load_state("networkidle", timeout=30000)
+    texto = page.evaluate("() => document.body.innerText")
+    achados = [re.search(rf"^\s*{campo}\s*:\s*(.*)$", texto, re.M)
+               for campo in ("Manufacturer", "Model")]
+    return " ".join(a[1].strip() for a in achados if a and a[1].strip())
 
 
 def consultar(tombos: list[str], matricula: str, senha: str, log) -> dict[str, "Maquina | None"]:
@@ -118,6 +133,8 @@ def consultar(tombos: list[str], matricula: str, senha: str, log) -> dict[str, "
             m = _ficha(page, tombo, hosts[0])
             m.outras = [h["host"] for h in hosts[1:]]
             _cache[tombo] = saida[tombo] = m
-            page.go_back()
-            page.wait_for_load_state("networkidle", timeout=30000)
+            # Da aba Hardware até a busca: são duas páginas para trás.
+            for _ in range(2):
+                page.go_back()
+                page.wait_for_load_state("networkidle", timeout=30000)
     return saida

@@ -82,6 +82,12 @@ class _Cel:
         self.conteudo, self.estilo_cel, self.estilo_p, self.span = \
             conteudo, estilo_cel, estilo_p, span
 
+    def dentro(self) -> str:
+        if self.estilo_p:
+            return _p(self.estilo_p, self.conteudo)
+        # Tabela dentro da célula: o Writer exige um parágrafo depois dela.
+        return self.conteudo + _p("Termo_Nada")
+
 
 def _rot(texto: str, span: int = 1, grupo: bool = False) -> _Cel:
     """`grupo` = 1ª linha de uma máquina: ganha o filete grosso em cima."""
@@ -107,7 +113,7 @@ class _Tabelas:
         self.n = 0
 
     def tabela(self, larguras: list[float], linhas: list[tuple[str, list[_Cel]]],
-               inteira: bool = False, cabecalho: int = 0) -> str:
+               inteira: bool = False, cabecalho: int = 0, estilo: str = "") -> str:
         """`linhas`: (estilo da linha, células). `inteira` = não quebra a
         tabela entre páginas. `cabecalho` = quantas linhas do topo se repetem
         em cada página quando a tabela quebra."""
@@ -122,7 +128,7 @@ class _Tabelas:
                 span = f' table:number-columns-spanned="{c.span}"' if c.span > 1 else ""
                 partes.append(
                     f'<table:table-cell table:style-name="{c.estilo_cel}"{span} '
-                    f'office:value-type="string">{_p(c.estilo_p, c.conteudo)}'
+                    f'office:value-type="string">{c.dentro()}'
                     '</table:table-cell>'
                     + "<table:covered-table-cell/>" * (c.span - 1))
             corpo.append(f'<table:table-row table:style-name="{estilo_linha}">'
@@ -130,7 +136,7 @@ class _Tabelas:
         if cabecalho:
             corpo = (["<table:table-header-rows>"] + corpo[:cabecalho]
                      + ["</table:table-header-rows>"] + corpo[cabecalho:])
-        estilo = "TabInteira" if inteira else "Tab"
+        estilo = estilo or ("TabInteira" if inteira else "Tab")
         return (f'<table:table table:name="Tabela{self.n}" table:style-name="{estilo}">'
                 + cols + "".join(corpo) + "</table:table>")
 
@@ -172,14 +178,19 @@ _CAMPOS = [
 def _bloco_equipamentos(t: Termo, tab: _Tabelas) -> str:
     """TODAS as máquinas numa tabela só (10/10): o cabeçalho Desinstalada /
     Instalada aparece uma vez (e se repete se a tabela virar a página) e um
-    filete grosso separa uma máquina da outra — sem título por máquina."""
+    filete grosso separa uma máquina da outra — sem título por máquina.
+    Cada máquina é uma tabela dentro de uma linha que não quebra (05/11): o
+    Writer só segura a LINHA inteira, e a máquina virava a página pela metade."""
     linhas = [("Linha", [_cab(""), _cab("Desinstalada"), _cab("Instalada")])]
     for n, troca in enumerate(t.trocas or [Troca()]):
+        maquina = []
         for k, (rotulo, campo) in enumerate(_CAMPOS):
             grupo = n > 0 and k == 0
-            linhas.append(("Linha", [_rot(rotulo, grupo=grupo),
-                                     _val(campo(troca.desinstalada), grupo=grupo),
-                                     _val(campo(troca.instalada), grupo=grupo)]))
+            maquina.append(("Linha", [_rot(rotulo, grupo=grupo),
+                                      _val(campo(troca.desinstalada), grupo=grupo),
+                                      _val(campo(troca.instalada), grupo=grupo)]))
+        linhas.append(("LinhaMaquina", [_Cel(tab.tabela([3.6, 6.7, 6.7], maquina, estilo="TabMaquina"),
+                                             "CelMaquina", "", 3)]))
     titulo = "Estações de trabalho" if t.varias else "Estação de trabalho"
     return _secao(titulo) + tab.tabela([3.6, 6.7, 6.7], linhas, cabecalho=1)
 
@@ -259,7 +270,14 @@ def _content(t: Termo) -> str:
         f'<style:table-properties style:width="{LARGURA}cm" table:align="margins" '
         'fo:margin-top="0cm" fo:margin-bottom="0.15cm" '
         'style:may-break-between-rows="false"/></style:style>'
+        '<style:style style:name="TabMaquina" style:family="table">'
+        f'<style:table-properties style:width="{LARGURA}cm" table:align="margins" '
+        'fo:margin-top="0cm" fo:margin-bottom="0cm"/></style:style>'
         + tab.estilos() +
+        '<style:style style:name="LinhaMaquina" style:family="table-row">'
+        '<style:table-row-properties fo:keep-together="always"/></style:style>'
+        '<style:style style:name="CelMaquina" style:family="table-cell">'
+        '<style:table-cell-properties fo:padding="0cm" fo:border="none"/></style:style>'
         '<style:style style:name="Linha" style:family="table-row">'
         '<style:table-row-properties style:min-row-height="0.52cm"/></style:style>'
         '<style:style style:name="LinhaAlta" style:family="table-row">'
@@ -339,6 +357,7 @@ def _styles(t: Termo) -> str:
         + _par("Termo_ColCab", 'fo:text-align="center"',
                f'fo:font-size="8pt" fo:font-weight="bold" fo:color="{TINTA}" '
                'fo:letter-spacing="0.03cm" fo:text-transform="uppercase"')
+        + _par("Termo_Nada", 'fo:line-height="0.01cm"', 'fo:font-size="1pt"')
         + _par("Termo_Declaracao",
                'fo:text-align="justify" fo:margin-bottom="0.08cm" fo:line-height="115%"',
                'fo:font-size="7pt"')
