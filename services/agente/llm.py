@@ -155,9 +155,10 @@ def _msg_limite(m: Modelo, detalhe: str) -> str:
 
 
 def conversar(mensagens: list[dict], ferramentas: list[dict],
-              modelo_id: str = PADRAO, chave: str = "") -> dict:
+              modelo_id: str = PADRAO, chave: str = "", forcar: str = "") -> dict:
     """Uma chamada ao modelo escolhido. Devolve a `message` da resposta (com
-    `content` e/ou `tool_calls`).
+    `content` e/ou `tool_calls`). `forcar` = nome da ferramenta que ele tem que
+    chamar nesta resposta (ver ferramentas.ChameDeNovo).
 
     `chave` vazia = a do Cofre desta máquina (app). O bot do Telegram passa a
     chave de QUEM pediu (10/10): cada técnico tem a sua, e o limite por
@@ -170,7 +171,8 @@ def conversar(mensagens: list[dict], ferramentas: list[dict],
         "model": m.modelo,
         "messages": mensagens,
         "tools": ferramentas,
-        "tool_choice": "auto",
+        "tool_choice": ({"type": "function", "function": {"name": forcar}}
+                        if forcar else "auto"),
         "temperature": 0.2,
     }
     req = urllib.request.Request(
@@ -198,6 +200,12 @@ def conversar(mensagens: list[dict], ferramentas: list[dict],
             if e.code in (401, 403):
                 raise ErroLLM(f"A chave do {m.rotulo} foi recusada ({e.code}). "
                               "Confira em Opções → API Keys.") from e
+            if e.code == 400 and forcar and "did not call a tool" in detalhe:
+                # A Groq recusa a resposta em texto quando a ferramenta é forçada
+                # (04/11). Sem forçar, o pior é o modelo responder em texto.
+                corpo["tool_choice"] = "auto"
+                req.data = json.dumps(corpo).encode("utf-8")
+                continue
             if (e.code == 400 and tentativa < 2
                     and ("output_parse_failed" in detalhe or "tool_use_failed" in detalhe)):
                 # O modelo gerou uma chamada de ferramenta mal formada (visto em

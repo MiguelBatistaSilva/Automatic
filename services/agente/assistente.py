@@ -24,7 +24,7 @@ import time
 
 from services.agente import llm
 from services.agente.ferramentas import (
-    FERRAMENTAS, Acao, _lista, _lista_curta, esquemas, requisicoes_coladas,
+    FERRAMENTAS, Acao, ChameDeNovo, _lista, _lista_curta, esquemas, requisicoes_coladas,
 )
 
 # Idas e vindas com o modelo num pedido: cada passo do plano gasta uma, e
@@ -106,7 +106,7 @@ tivesse atendido tudo.
 - Notas "[Já consultado: ...]" na conversa são resultados de consultas \
 anteriores (ex.: qual é o chamado de alguém): use-os, não consulte de novo.
 - TEXTO QUE VAI PARA O CHAMADO (procedimentos do Resolver e do Aguardando \
-Usuário, texto de Informação/Fornecedor, descrição do Desmembramento, motivo \
+Usuário, texto de Informação/Fornecedor, motivo \
 do Programar): use SÓ o que o técnico disse, apenas no formato pedido. Se ele \
 não disse, pergunte (ex.: "Qual procedimento coloco na resolução?"). Aplicar \
 uma base NÃO é procedimento: não escreva o texto a partir da base.
@@ -277,6 +277,8 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
     consultas = 0
     faltou = False
     terminou = False          # o modelo marcou ultima_acao=true
+    forcar = ""               # ferramenta que a próxima resposta tem que chamar
+    refeitas: set[str] = set()  # as que já devolveram ChameDeNovo neste turno
 
     def resposta(texto: str, com_acoes: bool = True) -> Resposta:
         a = acoes if com_acoes else []
@@ -287,7 +289,8 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
     try:
         for volta in range(_MAX_VOLTAS):
             avisar("Pensando..." if volta == 0 else "Decidindo o próximo passo...")
-            m = llm.conversar(msgs, ferramentas, modelo_id or llm.PADRAO, chave)
+            m = llm.conversar(msgs, ferramentas, modelo_id or llm.PADRAO, chave, forcar)
+            forcar = ""
             uso = m.get("_uso") or {}
             met["idas"] += 1
             met["tokens_entrada"] += uso.get("prompt_tokens") or 0
@@ -355,6 +358,8 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
                             lembrar.append(f"chamado de '{args.get('nome', '')}': "
                                            f"{_curto(saida, 300)}")
                 else:
+                    if nome in refeitas:
+                        args = {**args, "_refeita": True}
                     r = f.preparar(args)
                     ler = f.antes is not None and (f.precisa_ler(args) if f.precisa_ler
                                                    else not isinstance(r, str))
@@ -373,7 +378,13 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
                             atividade.append("Leu o chamado no Assyst")
                         except Exception as e:
                             atividade.append(f"Não conseguiu ler o chamado — {_curto(str(e), 120)}")
-                    if isinstance(r, str):
+                    if isinstance(r, ChameDeNovo):
+                        saida, faltou = r, True
+                        # Uma vez só: se insistir no erro, o modelo responde em texto.
+                        if nome not in refeitas:
+                            forcar = nome
+                        refeitas.add(nome)
+                    elif isinstance(r, str):
                         saida, faltou = r, True  # falta algo: o modelo pergunta
                         atividade.append(f"Faltou informação para {f.nome.replace('_', ' ')}"
                                          f" — {_curto(r, 120)}")

@@ -53,6 +53,13 @@ class Acao:
     assyst: bool = True
 
 
+class ChameDeNovo(str):
+    """O `preparar` precisa que a IA complete o pedido com o que a mensagem traz,
+    sem o técnico. O assistente.py FORÇA a nova chamada: só pedindo em texto, a
+    IA às vezes respondia "vou mandar ver" e o cartão não saía (04/11). Na nova
+    chamada os args chegam com `_refeita`=True."""
+
+
 @dataclasses.dataclass
 class Ferramenta:
     nome: str
@@ -219,19 +226,31 @@ def _prep_desmembrar(args: dict) -> "Acao | str":
     if not pai:
         return "Falta o número do chamado pai. Pergunte ao técnico."
     pedido = str(args.get("_pedido") or "")
+    conferido = args.get("conferido") is True
+    sem_equipamento = bool(args.get("_sem_equipamento"))
+    ctx = f' Pedido do chamado: "{pedido}"' if pedido else ""
     if not tombos:
+        if sem_equipamento:
+            return ("O chamado não cita equipamento nem tombo: não parece caso de "
+                    "desmembrar. Avise o técnico e pergunte se quer mesmo; se ele "
+                    f"insistir, peça os tombos.{ctx}")
         if args.get("_lido_do_chamado"):
             return ("A descrição do chamado não traz tombos. Pergunte ao técnico os "
-                    "tombos (um filho por tombo).")
+                    f"tombos (um filho por tombo).{ctx}")
         return "Falta a lista de tombos (um filho por tombo). Pergunte ao técnico."
+    # Gabarito do técnico (03/11): 1 tombo é questionado, e obedecido se confirmar.
+    if len(tombos) == 1 and not conferido:
+        return (f"Só 1 tombo ({tombos[0]}): desmembrar costuma ser para vários. Diga "
+                "ao técnico que é 1 tombo e pergunte se quer desmembrar mesmo; só com "
+                f"o sim dele chame de novo com conferido=true.{ctx}")
+    # A IA só escreve a descrição dos filhos depois de VER o Pedido: no turno
+    # seguinte à análise ela não o tem mais e inventava (04/11, eval_agente.py).
+    if pedido and not (descricao and args.get("_refeita")):
+        return ChameDeNovo(
+            "Preencha `descricao` dos filhos: o serviço do Pedido abaixo, curto e "
+            "formal, sem local nem nomes (se o técnico ditou a descrição, mantenha a "
+            f'dele). Tombos: {", ".join(tombos)}.{ctx}')
     if not descricao:
-        if pedido:
-            # Ficha (23/10): a IA monta a descrição dos filhos do Pedido, sem
-            # perguntar — o técnico confere no cartão.
-            return ("Chame de novo com `descricao` dos filhos montada a partir do "
-                    "Pedido do chamado: curta, formal, sem local nem nomes (ex.: "
-                    "'Instalação de monitor.'). Não pergunte ao técnico. Tombos: "
-                    f'{", ".join(tombos)}. Pedido: "{pedido}"')
         return ("Falta a descrição dos chamados filhos. Pergunte ao técnico "
                 "qual texto usar.")
     if MARCADOR_TOMBO not in descricao:
@@ -252,6 +271,15 @@ def _prep_desmembrar(args: dict) -> "Acao | str":
     if base:
         linhas.append(f"**Base:** {base}")
     linhas.append(f"**Descrição (1º filho):** {descricao.replace(MARCADOR_TOMBO, tombos[0])}")
+    avisos = []
+    if sem_equipamento:
+        avisos.append("O chamado não cita equipamento: confira se é para desmembrar mesmo.")
+    do_chamado = _lista(args.get("_tombos_do_chamado"))
+    if do_chamado and set(do_chamado) != set(tombos):
+        avisos.append("Tombos diferentes dos que estão na descrição do chamado "
+                      f"({_lista_curta(do_chamado)}).")
+    if sit.get("resumo"):
+        avisos.append(sit["resumo"])
     return Acao(
         ferramenta="desmembrar",
         args={"chamado_pai": pai, "tombos": tombos, "descricao": descricao, "base": base},
@@ -259,23 +287,28 @@ def _prep_desmembrar(args: dict) -> "Acao | str":
         linhas=linhas,
         escreve=True,
         checkpoint=sit["estado"],
-        aviso=sit.get("resumo", ""),
+        aviso=" ".join(avisos),
     )
 
 
 def _precisa_ler_desmembrar(args: dict) -> bool:
-    """Sem tombos ou sem descrição: a ficha do pai tem os dois (23/10)."""
-    return bool(str(args.get("chamado_pai") or "").strip()) and not (
-        _lista(args.get("tombos")) and str(args.get("descricao") or "").strip())
+    """Sempre que souber o pai (04/11): só a ficha diz se os tombos batem e se o
+    chamado tem equipamento. Lida uma vez por conversa (ver ficha._VALIDADE)."""
+    return bool(str(args.get("chamado_pai") or "").strip())
 
 
 def _antes_desmembrar(args: dict, s: Sessao) -> dict:
+    from services.agente import triagem
     from services.agente.ficha import ler_ficha
 
     f = ler_ficha(s.pagina, str(args.get("chamado_pai") or ""), s.log)
     if f is None:
         return args
-    out = {**args, "_lido_do_chamado": True, "_pedido": f.pedido}
+    pedido = f.pedido
+    out = {**args, "_lido_do_chamado": True, "_pedido": pedido, "_tombos_do_chamado": f.tombos,
+           "_sem_equipamento": not (f.tombos or triagem.tombo_do_item_b(f.item_b)
+                                    or triagem.equipamentos(pedido)
+                                    or triagem.tipo_do_pedido(pedido) == "desmontagem/mudança")}
     if not _lista(args.get("tombos")) and f.tombos:
         out["tombos"] = f.tombos
     return out
@@ -2307,14 +2340,19 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
     Ferramenta(
         "desmembrar",
         "Cria um chamado filho por tombo a partir do pai; com 'base', aplica a "
-        "base em cada filho.",
+        "base em cada filho. Com o número do pai, chame JÁ, sem perguntar nada: o "
+        "sistema lê os tombos do chamado e diz o que faltar.",
         {"type": "object", "properties": {
             "chamado_pai": {"type": "string"},
             "tombos": {"type": "array", "items": {"type": "string"}, "description":
                        "Os que o técnico disse; sem eles, o sistema lê do chamado."},
             "descricao": {"type": "string", "description":
-                          "Dos filhos. {{tombo}} onde entra o tombo (sem ele, vai no fim)."},
-            "base": {"type": "string", "description": "Nome ou palavras da base."},
+                          "Dos filhos. Só se o técnico ditou; senão o sistema devolve o "
+                          "Pedido para você escrever. {{tombo}} onde entra o tombo."},
+            "conferido": {"type": "boolean", "description":
+                          "true só depois que o técnico disse sim à pergunta do sistema."},
+            "base": {"type": "string", "description":
+                     "Só se o técnico pediu uma base: nome ou palavras dela."},
         }, "required": ["chamado_pai"]},
         preparar=_prep_desmembrar, executar=_exec_desmembrar,
         # Tombos e descrição que faltarem vêm da ficha do pai (23/10).

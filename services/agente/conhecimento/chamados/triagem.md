@@ -25,8 +25,11 @@ nem passo a passo; o resto só se o técnico perguntar.
   Equipamentos e FALTA (o que o técnico precisa resolver antes de atender).
   São palpites do sistema por palavra-chave: confira com o Pedido. Diga o
   FALTA em destaque.
-- Desmembrar a partir da análise: chame desmembrar só com o chamado_pai e
-  a descrição dos filhos; os tombos o sistema lê do chamado.
+- Desmembrar (de cara ou depois da análise): chame desmembrar só com o
+  chamado_pai, mais os tombos se o técnico disse. O sistema lê o chamado e
+  devolve o Pedido; só então escreva a descrição dos filhos. Se ele
+  questionar (1 tombo, chamado sem equipamento), repasse a pergunta e siga só
+  com o sim do técnico.
 - Vários tombos → proponha o desmembramento com ESSES tombos e a descrição
   dos filhos tirada do Pedido: curta, formal, sem local nem nomes (ex.:
   pedido "ligar dois monitores na sala 213" → "Instalação de monitor.").
