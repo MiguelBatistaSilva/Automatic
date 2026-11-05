@@ -50,6 +50,7 @@ class SLAResultado:
     status: str
     acoes: str
     erro: bool  # True -> status em vermelho (falha de execucao OU SLA estourado)
+    violado_em: str = "--"  # Fila em que o tempo passou do limite
 
 
 class SLAState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/rodando proprios
@@ -136,6 +137,7 @@ class SLAState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/rodando pro
                         status=r.get("mensagem", "--"),
                         acoes=str(len(historico)),
                         erro=r.get("estourado", False),
+                        violado_em=r.get("violado_em") or "--",
                     ))
 
         async for _ in self._rodar_sync(worker, on_evento=self._on_evento):

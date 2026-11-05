@@ -15,6 +15,7 @@ TIPOS_RETOMADA = {
     'Info Recebida do Fornecedor',
     'Info Recebidas do Gestor',
     'Info Recebidas do Usuário *',
+    'Iniciar Relógio *',
     # Par de 'Atribuir ao Fornecedor'. Nome distinto de 'Resolvido' (TIPOS_FIM):
     # a comparacao e por igualdade exata, entao um nao pega o outro.
     'Resolvido pelo Fornecedor',
@@ -24,6 +25,9 @@ TIPOS_FIM = {
     'Resolvido',
     'Fechamento',
 }
+# Este tipo traz em depto_atribuido a fila que recebeu o chamado. Atribuir a um
+# tecnico da mesma fila tambem gera este tipo: a fila so muda se o nome mudar.
+TIPO_ATRIBUICAO = 'Atribuição Interna'
 
 # Janela de expediente: o relogio so corre entre estas horas, todos os dias.
 # Fora dela (madrugada/noite) o relogio congela para qualquer fila.
@@ -95,7 +99,8 @@ def calcular_sla(historico: list, fila: str = None) -> dict:
       - para de vez nos tipos de fim (Resolvido/Fechamento);
       - congela aos fins de semana dependendo da fila.
     Retorna um dict com: inicio, tempo_gasto_str, tempo_restante_str,
-    estourado, mensagem, fila.
+    estourado, mensagem, fila, violado_em (a fila em que o chamado estava quando
+    o tempo passou do limite; vazio se nao estourou).
     """
     if not historico:
         return {"estourado": False, "mensagem": "Sem historico para calcular."}
@@ -109,6 +114,14 @@ def calcular_sla(historico: list, fila: str = None) -> dict:
     relogio_correndo = True
     ultimo_marcador = None
     primeira_data = None
+    fila_atual = ""
+    violado_em = ""
+
+    def correr_ate(fim: datetime) -> None:
+        nonlocal tempo_total, violado_em
+        tempo_total += _segundos_uteis(ultimo_marcador, fim, conta_fds)
+        if not violado_em and tempo_total > limite_segundos:
+            violado_em = fila_atual or "Não identificada"
 
     for acao in acoes:
         data_acao = _parse_data(acao.get('data', ''))
@@ -120,13 +133,18 @@ def calcular_sla(historico: list, fila: str = None) -> dict:
         if primeira_data is None:
             primeira_data = data_acao
             ultimo_marcador = data_acao
+            fila_atual = acao.get('depto_atribuido', '').strip()
             # Avalia o tipo ja na primeira acao para iniciar pausado se necessario
             if tipo in TIPOS_PAUSA or tipo in TIPOS_FIM:
                 relogio_correndo = False
             continue
 
+        # Antes de trocar de fila: o intervalo que termina aqui e da fila anterior.
         if relogio_correndo:
-            tempo_total += _segundos_uteis(ultimo_marcador, data_acao, conta_fds)
+            correr_ate(data_acao)
+
+        if tipo == TIPO_ATRIBUICAO:
+            fila_atual = acao.get('depto_atribuido', '').strip() or fila_atual
 
         if tipo in TIPOS_PAUSA or tipo in TIPOS_FIM:
             relogio_correndo = False
@@ -137,7 +155,7 @@ def calcular_sla(historico: list, fila: str = None) -> dict:
 
     # Chamado ainda em andamento: conta do ultimo marcador ate agora.
     if relogio_correndo and ultimo_marcador:
-        tempo_total += _segundos_uteis(ultimo_marcador, datetime.now(), conta_fds)
+        correr_ate(datetime.now())
 
     restante = limite_segundos - tempo_total
     estourado = tempo_total > limite_segundos
@@ -148,6 +166,7 @@ def calcular_sla(historico: list, fila: str = None) -> dict:
         "tempo_restante_str": _formatar_segundos(restante),
         "estourado": estourado,
         "fila": fila or FILA_PADRAO,
+        "violado_em": violado_em,
         "mensagem": (
             f"ESTOURADO há {_formatar_segundos(tempo_total - limite_segundos)}"
             if estourado

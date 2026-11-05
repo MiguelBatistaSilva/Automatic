@@ -91,6 +91,7 @@ def _linha_resultado(r: rx.Var) -> rx.Component:
             color=rx.cond(r.erro, "#DC2626", "#16A34A"),
             font_weight="bold",
         ),
+        rx.table.cell(r.violado_em),
         rx.table.cell(r.acoes),
     )
 
@@ -104,6 +105,7 @@ def _tabela() -> rx.Component:
                 rx.table.column_header_cell("Início"),
                 rx.table.column_header_cell("Tempo de SLA"),
                 rx.table.column_header_cell("Status"),
+                rx.table.column_header_cell("Violado em"),
                 rx.table.column_header_cell("Ações"),
             ),
         ),
