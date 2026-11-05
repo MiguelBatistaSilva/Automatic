@@ -2,8 +2,8 @@
 
 Lido SÓ pelo código (services/dados/referencia.py) — não vai para a IA.
 Valores aceitos nos campos da Requisição de Serviço que não têm tabela
-própria: item, item_b, categoria e resumo. O /requisicao do bot oferece
-estes valores como botão, e o Assistente confere o Item por aqui. Os
+própria: item, item_b, categoria e resumo. O Assistente confere o Item
+por aqui. Os
 técnicos, as filas e os edifícios vêm das outras tabelas desta pasta.
 Escreva exatamente como no Assyst.
 

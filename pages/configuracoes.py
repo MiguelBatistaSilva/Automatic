@@ -61,7 +61,7 @@ def _campo_novo(coluna: rx.Var, i: rx.Var) -> rx.Component:
 def _aba_referencia() -> rx.Component:
     return rx.vstack(
         rx.text(
-            "O que o Assistente e o /requisicao do bot usam para completar e "
+            "O que o Assistente usa para completar e "
             "conferir a Requisição: itens, técnicos, filas e edifícios. Fica "
             "em services/agente/conhecimento/referencia/ e vai a todos pela "
             "atualização.",
@@ -244,7 +244,7 @@ def _aba_base_conhecimento() -> rx.Component:
         rx.hstack(
             rx.text(
                 "Bases usadas pelos modos Criar + Base e Só Base do "
-                "Desmembramento — na tela e no /base e /desmembrar do bot.",
+                "Desmembramento — na tela e no Assistente.",
                 color="#6B7280",
             ),
             rx.spacer(),

@@ -1195,7 +1195,7 @@ def _prep_lote(nome: str, titulo: str, com_texto: bool):
 
 
 def _exec_lote(funcao: Callable, titulo: str, com_texto: bool, devolve_info: bool):
-    """Mesmo laço dos bot/services/*_service.py, mas na página da sessão."""
+    """Roda a ação em cada chamado, na página da sessão."""
     def executar(a: dict, s: Sessao) -> Resultado:
         page = s.pagina()
         r = {}
@@ -1632,7 +1632,7 @@ def _prep_sla(args: dict) -> "Acao | str":
 
 
 def _exec_sla(a, s: Sessao) -> Resultado:
-    """Mesmo laço do bot/services/sla_service.py, na página da sessão."""
+    """Analisa o SLA de cada chamado, na página da sessão."""
     from services.assyst.browser_pw import _usuario_afetado_pw
     from services.fluxos.flow_sla_pw import extrair_historico_chamado
     from services.regras.sla_engine import calcular_sla

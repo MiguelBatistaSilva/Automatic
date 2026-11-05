@@ -6,23 +6,10 @@ so para compartilhar a autorizacao, o logger e o estado das conversas. Aqui nao
 mora regra de fluxo nenhuma — so o que e comum a todos.
 """
 import logging
-import os
 
 from telegram import Update
 
 from bot import usuarios
-
-# --------------------------------------------------------------------- flags
-
-# SLA com dados falsos, sem abrir o Chrome nem tocar no Assyst.
-SIMULADO = os.getenv("BOT_SIMULADO") == "1"
-
-# Atendimento em modo teste: o fluxo vai ate preencher a descricao e PARA antes
-# de clicar em "Salvar acao". Exercita o caminho inteiro sem alterar o chamado.
-ATENDIMENTO_TESTE = os.getenv("BOT_ATENDIMENTO_TESTE") == "1"
-
-MAX_CHAMADOS = 15   # o Assyst leva alguns segundos por chamado; acima disso o
-                    # usuario fica sem resposta tempo demais e acha que travou
 
 # --------------------------------------------------------------------- log
 
@@ -41,9 +28,6 @@ log_bot = logging.getLogger("bot")
 # Perguntas em andamento, por chat. Em memoria de proposito: uma conversa pela
 # metade nao deve sobreviver a um restart. Cada entrada tem ao menos "fluxo"
 # (qual comando esta perguntando) e "passo" (em que pergunta esta).
-#
-# Nao confundir com a AGENDA (bot/agenda.py), que vai para disco: aquilo e
-# compromisso assumido, isto e conversa inacabada.
 WIZARD: dict[int, dict] = {}
 
 
@@ -74,22 +58,3 @@ def quem(update: Update) -> str:
     """Nome de quem falou, para o log e para os avisos."""
     u = update.effective_user
     return (u.first_name or str(u.id)) if u else "?"
-
-
-# ------------------------------------------------------------- resultado
-
-
-def descrever_info_chamado(info: dict | None) -> str:
-    """" — Nome (Setor)" pronto para colar apos o numero do chamado na
-    resposta de /informacao, /fornecedor e /infousuario. "" se nao leu nada
-    (info vazio ou os dois campos em branco) — nunca inventa um traco solto.
-    """
-    nome = (info or {}).get("usuario") or ""
-    setor = (info or {}).get("setor") or ""
-    if nome and setor:
-        return f" — {nome} ({setor})"
-    if nome:
-        return f" — {nome}"
-    if setor:
-        return f" — ({setor})"
-    return ""

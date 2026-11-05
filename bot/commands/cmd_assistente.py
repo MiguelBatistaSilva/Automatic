@@ -2,7 +2,7 @@
 bot/commands/cmd_assistente.py — O Assistente (IA) no Telegram (10/10).
 
 Mesmo agente do chat do app (services/agente): o texto solto que não é
-resposta de um comando (/sla, /requisicao...) vai para a IA, que monta o
+resposta de um comando (/credencial, /chave) vai para a IA, que monta o
 plano; plano que ESCREVE vira cartão com botões (Confirmar / Simular /
 Cancelar), o que só lê roda direto. As regras do cartão são as mesmas do app
 (services/agente/cartao.py) — aqui só se traduz para mensagem e botões.

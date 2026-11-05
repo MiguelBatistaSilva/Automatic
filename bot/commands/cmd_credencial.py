@@ -2,9 +2,8 @@
 bot/cmd_credencial.py — /credencial: cada pessoa cadastra a PRÓPRIA matrícula
 e senha do Assyst, usada pelo bot quando ELA pede uma ação.
 
-Cadastro único: depois de mandar /credencial uma vez, /informacao,
-/fornecedor, /atendimento etc. já usam essa credencial sozinhos — não precisa
-repetir a cada fluxo. Só precisa mandar de novo se a senha mudar.
+Cadastro único: depois de mandar /credencial uma vez, o Assistente já usa essa
+credencial sozinho — não precisa repetir a cada pedido. Só precisa mandar de novo se a senha mudar.
 
 A senha é apagada da conversa assim que lida (ver `_apagar_com_cuidado`): fica
 só um instante no histórico do Telegram, não para sempre.

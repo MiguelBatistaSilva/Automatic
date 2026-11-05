@@ -10,7 +10,7 @@ Filtra pela matrícula das Credenciais (app_config) — na máquina do bot, as
 rodadas que OUTROS técnicos disparam pelo bot ficam de fora (decisão do
 usuário, 2026-09-29). Rodadas de antes da v5 não têm matrícula e não aparecem.
 
-Os fluxos sem checkpoint (/informacao, /fornecedor, /infousuario, Atendimento)
+Os fluxos sem checkpoint (Informação, Fornecedor, Usuário, Atendimento)
 não entram por enquanto.
 """
 
