@@ -33,12 +33,13 @@ class Resultado:
 
 class Sessao:
     def __init__(self, matricula: str, senha: str, log,
-                 modo_teste: bool = False, iniciar_do_zero: bool = False):
+                 modo_teste: bool = False, iniciar_do_zero: bool = False, chat_id=None):
         self.matricula = matricula
         self.senha = senha
         self.log = log
         self.modo_teste = modo_teste
         self.iniciar_do_zero = iniciar_do_zero
+        self.chat_id = chat_id   # Telegram: de quem é o início agendado
         self._nav = None
         self._page = None
 

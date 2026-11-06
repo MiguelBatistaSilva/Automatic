@@ -300,7 +300,7 @@ async def _executar(context, chat_id, pid: int, botao: str) -> None:
         from services.agente.sessao import Sessao, executar_plano
         try:
             sessao = Sessao(matricula, senha, st.avisar, modo_teste=simular,
-                            iniciar_do_zero=(botao == "do_zero"))
+                            iniciar_do_zero=(botao == "do_zero"), chat_id=chat_id)
             executar_plano(acoes, sessao, executar, emitir)
         except Exception as e:  # executar_plano sempre emite "fim"; isto é antes dele
             emitir("erro", str(e))

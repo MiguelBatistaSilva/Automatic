@@ -40,6 +40,7 @@ from telegram.ext import (  # noqa: E402
 from bot.commands import cmd_assistente, cmd_credencial  # noqa: E402
 from bot.services import credencial_servico  # noqa: E402
 from bot.comum import WIZARD, liberado, log_bot  # noqa: E402
+from services.agente import agendados  # noqa: E402
 
 
 # ---------------------------------------------------------------- /start
@@ -119,6 +120,12 @@ async def comando_desconhecido(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # ---------------------------------------------------------------- entrada
 
+async def _ao_subir(app: Application) -> None:
+    """Inícios agendados, do bot e do app. No --teste nada é salvo, então não roda."""
+    if not cmd_assistente.TESTE:
+        agendados.iniciar_vigia()
+
+
 def main() -> None:
     token = credencial_servico.carregar_token()
     if not token:
@@ -127,7 +134,7 @@ def main() -> None:
             "Configure pelo app: menu Opcoes -> Telegram."
         )
 
-    app = Application.builder().token(token).build()
+    app = Application.builder().token(token).post_init(_ao_subir).build()
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("cancelar", cmd_cancelar))

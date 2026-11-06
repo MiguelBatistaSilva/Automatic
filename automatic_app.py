@@ -24,6 +24,7 @@ from pages.meus_fluxos import meus_fluxos_page
 from pages.assistente import assistente_page
 from pages.api_keys import api_keys_page
 from state.api_keys_state import ApiKeysState, ROTA as ROTA_API_KEYS
+from state.atendimento_state import AtendimentoState
 from state.desmembramento_state import DesmembramentoState
 from state.kb_state import KBState
 from state.meus_fluxos_state import MeusFluxosState
@@ -40,6 +41,17 @@ app = rx.App(
         rx.el.link(rel="icon", type="image/x-icon", href="/favicon.ico"),
     ],
 )
+
+
+def _vigiar_agendados():
+    """Inícios agendados, do app e do bot (services/agente/agendados.py). No
+    backend, não na tela: roda mesmo sem aba aberta."""
+    from services.agente.agendados import iniciar_vigia
+    iniciar_vigia()
+
+
+app.register_lifespan_task(_vigiar_agendados)
+
 app.add_page(
     desmembramento_page,
     route="/desmembramento",
@@ -50,6 +62,7 @@ app.add_page(
     atendimento_page,
     route="/atendimento",
     title="Automatic — Iniciar Atendimento",
+    on_load=AtendimentoState.carregar,
 )
 app.add_page(
     requisicao_page,

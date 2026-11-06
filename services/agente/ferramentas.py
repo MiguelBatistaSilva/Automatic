@@ -31,6 +31,7 @@ from typing import Callable
 
 from services.regras.requisicao_campos import ORDEM_COLUNAS, POR_CHAVE, SEPARADOR
 from services.regras.sla_engine import FILAS, FILA_PADRAO
+from services.agente import agendados
 from services.agente.sessao import ErroSessao, Resultado, Sessao
 
 
@@ -1562,15 +1563,18 @@ def _prep_programar(args: dict) -> "Acao | str":
         return "Falta o motivo da programação. Pergunte ao técnico."
     try:
         dia, hora = normalizar_dia(args["dia"]), normalizar_hora(args["hora"])
+        inicio = agendados.data_do_inicio(dia, hora)
     except ValueError as e:
         return str(e)
     return Acao(
         ferramenta="programar_atendimento",
-        args={"chamados": chamados, "dia": dia, "hora": hora, "motivo": motivo},
+        args={"chamados": chamados, "dia": dia, "hora": hora, "motivo": motivo,
+              "inicio": inicio.isoformat()},
         titulo="Atendimento Programado",
         linhas=[f"**Chamados:** {len(chamados)} ({_lista_curta(chamados)})",
                 f"**Quando:** {dia} às {hora}",
                 f"**Motivo:** {motivo}",
+                f"**Início automático:** {inicio:%d/%m/%Y às %H:%M}",
                 "*O nome do usuário afetado é lido de cada chamado.*"],
         escreve=True,
         pode_simular=True,
@@ -1590,12 +1594,71 @@ def _exec_programar(a, s: Sessao) -> Resultado:
         except Exception as e:
             ok, info, erro = False, {}, f" ({e})"
         feitos += ok
+        if ok and not s.modo_teste:
+            try:
+                agendados.agendar(numero, datetime.datetime.fromisoformat(a["inicio"]),
+                                  s.matricula, s.chat_id)
+            except Exception as e:
+                ok = False
+                feitos -= 1
+                erro = f" (programado no Assyst, mas o início automático NÃO foi agendado: {e})"
         quem = f" — {info['usuario']}" if info.get("usuario") else ""
         linhas.append(f"- {_ok_falha(ok)} {numero}{quem}{erro}")
     sufixo = " (simulação, nada salvo)" if s.modo_teste else ""
     cab = (f"**Atendimento Programado{sufixo}** — {feitos} de {len(a['chamados'])}, "
            f"para {a['dia']} às {a['hora']}.")
-    return Resultado("\n".join([cab] + linhas), ok=feitos == len(a["chamados"]))
+    rodape = [] if s.modo_teste or not feitos else [
+        f"Inicia sozinho na hora marcada, com o app ou o bot aberto. Passados {agendados._TOLERANCIA_MIN} "
+        "min sem nenhum deles aberto, não inicia mais."]
+    return Resultado("\n".join([cab] + linhas + rodape), ok=feitos == len(a["chamados"]))
+
+
+def _prep_consultar_agendados(args: dict) -> "Acao | str":
+    return Acao(ferramenta="consultar_agendados", args={}, titulo="Inícios agendados",
+                linhas=[], escreve=False, assyst=False)
+
+
+_NOME_STATUS = {agendados.CONCLUIDO: "✅", agendados.ERRO: "❌", agendados.CANCELADO: "🚫"}
+
+
+def _exec_consultar_agendados(a, s: Sessao) -> Resultado:
+    pendentes, encerrados = agendados.listar(s.matricula)
+    if not pendentes and not encerrados:
+        return Resultado("Nenhum início agendado.")
+    linhas = ["**Inícios agendados**"]
+    linhas += [f"- {t['chamado']} — {t['quando']}"
+               + (" (iniciando agora)" if t["status"] == agendados.EXECUTANDO else "")
+               for t in pendentes] or ["- nenhum pendente"]
+    if encerrados:
+        linhas.append("**Últimos encerrados**")
+        linhas += [f"- {_NOME_STATUS.get(t['status'], '')} {t['chamado']} ({t['quando']}): {t['detalhe']}"
+                   for t in encerrados]
+    return Resultado("\n".join(linhas))
+
+
+def _prep_cancelar_agendado(args: dict) -> "Acao | str":
+    chamados = _lista(args.get("chamados"))
+    if not chamados:
+        return "Falta o número do chamado."
+    return Acao(
+        ferramenta="cancelar_agendado",
+        args={"chamados": chamados},
+        titulo="Cancelar início agendado",
+        linhas=[f"**Chamados:** {len(chamados)} ({_lista_curta(chamados)})",
+                "*No Assyst, o chamado continua em Atendimento Programado.*"],
+        escreve=True,
+        assyst=False,
+    )
+
+
+def _exec_cancelar_agendado(a, s: Sessao) -> Resultado:
+    if s.modo_teste:
+        return Resultado("**Cancelar início agendado (simulação, nada salvo)**")
+    feitos = agendados.cancelar(a["chamados"], s.matricula)
+    faltam = [n for n in a["chamados"] if n.strip().upper() not in feitos]
+    linhas = [f"- {_ok_falha(True)} {n}" for n in feitos]
+    linhas += [f"- {_ok_falha(False)} {n} (não está agendado)" for n in faltam]
+    return Resultado("\n".join(["**Início agendado cancelado**"] + linhas), ok=not faltam)
 
 
 # --------------------------------------------------------------------------- #
@@ -2469,14 +2532,31 @@ FERRAMENTAS: dict[str, Ferramenta] = {f.nome: f for f in [
     Ferramenta(
         "programar_atendimento",
         "Agenda o atendimento para dia/hora combinados (ação 'Atendimento "
-        "Programado'); não é iniciar_atendimento.",
+        "Programado') e o sistema inicia sozinho na hora marcada; não é "
+        "iniciar_atendimento, que inicia agora.",
         {"type": "object", "properties": {
             "chamados": _CHAMADOS,
-            "dia": {"type": "string", "description": "dd/mm"},
-            "hora": {"type": "string", "description": "hh:mm"},
-            "motivo": {"type": "string"},
-        }, "required": ["chamados", "dia", "hora", "motivo"]},
+            # Fora de `required`: obrigatórios, a IA inventava a hora (05/11). O
+            # _prep_programar é quem pede o que faltar.
+            "dia": {"type": "string", "description": "dd/mm. Só se o técnico disser: nunca deduza."},
+            "hora": {"type": "string", "description": "hh:mm. Só se o técnico disser: nunca deduza."},
+            "motivo": {"type": "string", "description": "Só se o técnico disser: nunca deduza."},
+        }, "required": ["chamados"]},
         preparar=_prep_programar, executar=_exec_programar,
+        dominio="chamados",
+    ),
+    Ferramenta(
+        "consultar_agendados",
+        "Mostra os inícios automáticos agendados e como terminaram os últimos.",
+        {"type": "object", "properties": {}},
+        preparar=_prep_consultar_agendados, executar=_exec_consultar_agendados,
+        dominio="chamados",
+    ),
+    Ferramenta(
+        "cancelar_agendado",
+        "Cancela o início automático. Não muda o chamado no Assyst.",
+        {"type": "object", "properties": {"chamados": _CHAMADOS}, "required": ["chamados"]},
+        preparar=_prep_cancelar_agendado, executar=_exec_cancelar_agendado,
         dominio="chamados",
     ),
     Ferramenta(

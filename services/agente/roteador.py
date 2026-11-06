@@ -27,7 +27,7 @@ import re
 DOMINIOS: dict[str, re.Pattern] = {
     "chamados": re.compile(
         r"\b[rs]\d{6,}\b|chamad|resolv|desmembr|\bbases?\b|\bsla\b|atendiment"
-        r"|fornecedor|aguard|retom|pausa|informac|program|procediment"
+        r"|fornecedor|aguard|retom|pausa|informac|program|agendad|agendament|procediment"
         r"|minha fila|\bfila do\b|estourad|prazo"
         # Despacho ao Serviço de Operações (20/10): despachar_operacao.
         r"|despach|condena|\boperac"

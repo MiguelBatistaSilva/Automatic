@@ -24,6 +24,7 @@ Sai com código 1 se algum caso falhar.
 
 import argparse
 import dataclasses
+import datetime
 import os
 import re
 import sys
@@ -46,6 +47,9 @@ VELHA = Maquina("666666", hostname="FCB13TESTE666666", serial="SERIE666",
                 marca_modelo="POSITIVO C6200")
 NOVA = Maquina("777777", hostname="FCB13TESTE777777", serial="SERIE777",
                marca_modelo="LENOVO 13E0S00400")
+
+AMANHA = datetime.date.today() + datetime.timedelta(days=1)
+ONTEM = datetime.date.today() - datetime.timedelta(days=1)
 
 _descricoes: dict[str, str] = {}   # número do chamado -> descrição da ficha falsa
 _no_itom: "list[Maquina] | None" = [VELHA, NOVA]   # None = Itom fora do ar
@@ -118,6 +122,13 @@ def _maquinas_do_termo(r, saiu: tuple, entrou: tuple, no_aviso: str = "") -> str
     if no_aviso and no_aviso not in r.aviso:
         return f"o aviso não traz '{no_aviso}': {r.aviso!r}"
     return "" if "?" not in "".join(r.linhas) else f"'?' no cartão: {r.linhas}"
+
+
+def _programar(dia: str, espera: str) -> str:
+    r = FERRAMENTAS["programar_atendimento"].preparar(
+        {"chamados": ["R1234567"], "dia": dia, "hora": "10:00", "motivo": "teste"})
+    texto = r if isinstance(r, str) else " ".join(r.linhas)
+    return "" if espera in texto.lower() else f"esperava '{espera}': {texto!r}"
 
 
 def _regras() -> list[tuple[str, str]]:
@@ -197,6 +208,10 @@ def _regras() -> list[tuple[str, str]]:
         ("termo: nome solto no pedido vale para os dois",
          _maquinas_do_termo(_termo([VELHA, NOVA], nome="FCB13SOLTO"),
                             ("SERIE666", "FCB13SOLTO"), ("SERIE777", "FCB13SOLTO"))),
+        ("programar: o cartão avisa do início automático",
+         _programar(AMANHA.strftime("%d/%m"), "início automático")),
+        ("programar: hora que já passou volta como pergunta",
+         _programar(ONTEM.strftime("%d/%m"), "já passou")),
     ]
 
 
@@ -250,6 +265,13 @@ def _sem_cartao_e_cita(padrao: str) -> Callable[[assistente.Resposta], str]:
     return conferir
 
 
+def _ferramenta(nome: str) -> Callable[[assistente.Resposta], str]:
+    def conferir(r):
+        feitas = [a.ferramenta for a in r.acoes]
+        return "" if feitas == [nome] else f"esperava {nome}, veio {feitas}: {r.texto!r}"
+    return conferir
+
+
 @dataclasses.dataclass
 class Caso:
     nome: str
@@ -286,6 +308,18 @@ CASOS = [
          _pede_sem_ficha_tecnica("backup")),
     Caso("termo_sem_tombos", TROCA, ["termo sem backup do {n}"],
          _pede_sem_ficha_tecnica("tombo")),
+    # Início agendado (05/11).
+    Caso("programar", TROCA,
+         [f"programa o {{n}} para {AMANHA:%d/%m} às 14:00, motivo: usuário em audiência"],
+         _ferramenta("programar_atendimento")),
+    Caso("programar_sem_hora", TROCA, ["programa o {n}, motivo: usuário em audiência"],
+         _sem_cartao),
+    Caso("iniciar_agora", TROCA, ["inicia o atendimento do {n} agora"],
+         _ferramenta("iniciar_atendimento")),
+    Caso("ver_agendados", TROCA, ["quais chamados estão agendados para iniciar?"],
+         _ferramenta("consultar_agendados")),
+    Caso("cancelar_agendado", TROCA, ["cancela o início agendado do {n}"],
+         _ferramenta("cancelar_agendado")),
 ]
 
 

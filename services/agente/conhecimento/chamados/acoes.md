@@ -14,6 +14,10 @@
   - Programar Atendimento → iniciar_atendimento
 - Se o técnico pedir para "retomar" sem dizer como o chamado foi pausado,
   pergunte (usuário, fornecedor ou atendimento programado).
+- programar_atendimento também agenda o início: na hora marcada o sistema faz
+  o iniciar_atendimento sozinho. Não peça para o técnico voltar e iniciar.
+  Para ver o que está agendado: consultar_agendados. Para desistir do início
+  sem mexer no Assyst: cancelar_agendado.
 
 ## Despacho ao Serviço de Operações
 - "Condenar um teclado", "mandar a máquina para a Operação / Serviço de
