@@ -12,7 +12,7 @@ quais comandos existem e encaminha o texto solto.
 Desde 2026-08-26 a credencial do Assyst NAO e mais unica: cada chat_id loga
 com a PROPRIA matricula/senha (ver bot/services/credencial_servico.py).
 
-Rodar:
+Quem liga normalmente é a tela do Assistente (services/bot_processo.py). Rodar à mão:
     python -m bot.main             producao — tudo vale
     python -m bot.main --teste     o Assistente nao salva nada no Assyst
 """
@@ -41,6 +41,7 @@ from bot.commands import cmd_assistente, cmd_credencial  # noqa: E402
 from bot.services import credencial_servico  # noqa: E402
 from bot.comum import WIZARD, liberado, log_bot  # noqa: E402
 from services.agente import agendados  # noqa: E402
+from services.bot_processo import morrer_com_o_pai  # noqa: E402
 
 
 # ---------------------------------------------------------------- /start
@@ -127,6 +128,9 @@ async def _ao_subir(app: Application) -> None:
 
 
 def main() -> None:
+    if "--filho-do-app" in sys.argv:
+        morrer_com_o_pai()
+
     token = credencial_servico.carregar_token()
     if not token:
         raise SystemExit(

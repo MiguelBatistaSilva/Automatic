@@ -8,10 +8,12 @@ O back-end está em `state/assistente_state.py`.
 
 import reflex as rx
 
+from state.agente_bot_state import AgenteBotState
 from state.assistente_state import AssistenteState
 from state.api_keys_state import ROTA as ROTA_API_KEYS
 from components.layout import page_layout
 from components.botoes import botao_primario
+from components.log_console import log_console
 
 _SUGESTOES = [
     "Desmembre o 1234567 com os tombos 333284 e 333288, descrição \"Troca de peça\", aplicando a base do Kaspersky",
@@ -496,13 +498,70 @@ def _sem_chave() -> rx.Component:
     )
 
 
-def assistente_page() -> rx.Component:
-    conteudo = rx.vstack(
-        # Sem título (decisão do usuário): só o atalho de nova conversa, no canto.
+def _painel_agente() -> rx.Component:
+    """O bot do Telegram: liga, desliga e mostra o terminal dele (06/11)."""
+    return rx.vstack(
+        rx.cond(
+            ~AgenteBotState.tem_token,
+            rx.callout("Cadastre o token do bot em Opções → API Keys para poder ligar.",
+                       icon="key-square", size="1", color_scheme="amber"),
+        ),
         rx.hstack(
+            rx.heading("Agente no Telegram", size="4"),
+            rx.cond(AgenteBotState.ligado,
+                    rx.badge("Ligado", color_scheme="green"),
+                    rx.badge("Desligado", color_scheme="gray")),
             rx.spacer(),
             rx.cond(
+                AgenteBotState.ligado,
+                botao_primario("Desligar", on_click=AgenteBotState.desligar, color_scheme="amber"),
+                botao_primario("Ligar", on_click=AgenteBotState.ligar,
+                               disabled=~AgenteBotState.tem_token),
+            ),
+            align="center",
+            width="100%",
+        ),
+        rx.text("Ligue em uma máquina só. Em manutenção, desligue: ele só volta quando você ligar.",
+                size="2", color=rx.color("gray", 10)),
+        log_console(AgenteBotState.logs),
+        spacing="3",
+        width="100%",
+        max_width=_LARGURA,
+        margin_x="auto",
+    )
+
+
+def _chat() -> rx.Component:
+    return rx.cond(
+        ~AssistenteState.chave_verificada,
+        rx.fragment(),  # ainda consultando o Cofre: nao mostra nada
+        rx.cond(
+            AssistenteState.tem_chave,
+            rx.cond(
                 AssistenteState.mensagens.length() > 0,
+                _em_conversa(),
+                _inicio(),
+            ),
+            _sem_chave(),
+        ),
+    )
+
+
+def assistente_page() -> rx.Component:
+    conteudo = rx.vstack(
+        # Sem título (decisão do usuário): as abas e, no canto, a nova conversa.
+        rx.hstack(
+            rx.spacer(),
+            rx.segmented_control.root(
+                rx.segmented_control.item(rx.icon("message-circle", size=18), value="chat", title="Chat"),
+                rx.segmented_control.item(rx.icon("bot", size=18), value="agente", title="Agente"),
+                value=AgenteBotState.aba,
+                on_change=AgenteBotState.set_aba,
+                size="2",
+            ),
+            rx.spacer(),
+            rx.cond(
+                (AssistenteState.mensagens.length() > 0) & (AgenteBotState.aba == "chat"),
                 rx.icon_button(
                     rx.icon("square-pen", size=18),
                     variant="ghost",
@@ -515,20 +574,9 @@ def assistente_page() -> rx.Component:
             ),
             width="100%",
             min_height="32px",
+            align="center",
         ),
-        rx.cond(
-            ~AssistenteState.chave_verificada,
-            rx.fragment(),  # ainda consultando o Cofre: nao mostra nada
-            rx.cond(
-                AssistenteState.tem_chave,
-                rx.cond(
-                    AssistenteState.mensagens.length() > 0,
-                    _em_conversa(),
-                    _inicio(),
-                ),
-                _sem_chave(),
-            ),
-        ),
+        rx.cond(AgenteBotState.aba == "agente", _painel_agente(), _chat()),
         spacing="2",
         width="100%",
         # Altura da área de conteúdo (100vh - topbar 52px - padding 32+32 do

@@ -28,6 +28,7 @@ from state.atendimento_state import AtendimentoState
 from state.desmembramento_state import DesmembramentoState
 from state.kb_state import KBState
 from state.meus_fluxos_state import MeusFluxosState
+from state.agente_bot_state import AgenteBotState
 from state.assistente_state import AssistenteState
 from state.referencia_state import ReferenciaState
 from bot.state import TelegramState
@@ -50,7 +51,14 @@ def _vigiar_agendados():
     iniciar_vigia()
 
 
+def _retomar_bot():
+    """Quem ligou o bot pela tela do Assistente: volta a ligar ao abrir o app."""
+    from services import bot_processo
+    bot_processo.retomar()
+
+
 app.register_lifespan_task(_vigiar_agendados)
+app.register_lifespan_task(_retomar_bot)
 
 app.add_page(
     desmembramento_page,
@@ -75,7 +83,7 @@ app.add_page(
     assistente_page,
     route="/",
     title="Automatic — Assistente",
-    on_load=AssistenteState.on_load,
+    on_load=[AssistenteState.on_load, AgenteBotState.ao_abrir],
 )
 app.add_page(
     meus_fluxos_page,

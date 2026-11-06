@@ -7,7 +7,7 @@
 
 # Exceção: os .bat SÓ funcionam com CRLF — com LF o cmd.exe engasga nos
 # comentários e o único ponto de entrada do app não sobe (ver
-# iniciar_automatic.bat / iniciar_bot.bat).
+# iniciar_automatic.bat).
 *.bat text eol=crlf
 
 # Binários: nunca normalizar.

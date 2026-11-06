@@ -16,6 +16,7 @@ silêncio — agora o erro sobe para quem chamou mostrar.
 import json
 import shutil
 import tempfile
+import time
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -41,6 +42,26 @@ def versao_remota() -> tuple[str, str]:
     with urllib.request.urlopen(req, timeout=20) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     return data.get("version", ""), data.get("download_url", "")
+
+
+_VERIFICAR_S = 30 * 60
+_ultima_verificacao = (0.0, "")   # (quando, versão nova)
+
+
+def versao_nova(local: str) -> str:
+    """A versão publicada, se for maior que a local; senão "". Para o aviso da tela:
+    sem rede, só não avisa. O topo monta a cada página, por isso a consulta é guardada."""
+    global _ultima_verificacao
+    quando, nova = _ultima_verificacao
+    if time.time() - quando < _VERIFICAR_S:
+        return nova
+    try:
+        remota, _ = versao_remota()
+        nova = remota if versao_maior(remota, local) else ""
+    except Exception:
+        nova = ""
+    _ultima_verificacao = (time.time(), nova)
+    return nova
 
 
 def baixar_e_preparar(download_url: str, versao_alvo: str, log) -> bool:

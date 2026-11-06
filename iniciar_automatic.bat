@@ -20,11 +20,8 @@ echo [LOG] Configuracao inicial concluida!
 echo [LOG] Verificando atualizacoes pendentes...
 .venv\Scripts\python.exe atualizar.py
 
-rem O bot do Telegram NAO sobe daqui: ele usa uma credencial UNICA pra todo
-rem mundo, e o Telegram so aceita UM processo escutando por token — se cada
-rem pessoa que baixar este .bat tambem subisse o bot, eles brigariam entre si
-rem (erro 409, conflito). Quem hospeda o bot usa iniciar_bot.bat, so naquela
-rem maquina.
+rem O bot do Telegram se liga pela tela do Assistente, aba Agente. O Telegram so
+rem aceita UM processo por token: ligue em uma maquina so (erro 409, conflito).
 
 echo [LOG] Ambiente pronto. Iniciando Reflex...
 call .venv\Scripts\activate.bat

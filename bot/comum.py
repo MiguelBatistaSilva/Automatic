@@ -42,13 +42,13 @@ def liberado(update: Update) -> bool:
     # Quem nao esta na whitelist nao recebe resposta nenhuma — nem para
     # descobrir que o bot existe. Mas o terminal registra quem tentou: e assim
     # que se cadastra um colega novo. A pessoa manda qualquer mensagem, voce le
-    # a linha abaixo e libera pelo pop-up Telegram (menu de opcoes do app).
+    # a linha abaixo e libera em Configuracoes -> Usuarios Autorizados.
     u = update.effective_user
     nome = " ".join(filter(None, [u.first_name, u.last_name])) if u else "?"
     arroba = f"@{u.username}" if u and u.username else "sem @"
     log_bot.warning(
-        "NAO AUTORIZADO: %s (%s) | chat_id=%s | para liberar: menu Opcoes "
-        "-> Telegram, no app.",
+        "NAO AUTORIZADO: %s (%s) | chat_id=%s | para liberar: Configuracoes "
+        "-> Usuarios Autorizados, no app.",
         nome, arroba, chat_id,
     )
     return False

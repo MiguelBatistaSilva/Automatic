@@ -40,9 +40,8 @@ LOG_FILE = BASE_DIR / "_update.log"
 # Pastas que NUNCA são copiadas (nem no update, nem no backup): pesadas ou de runtime.
 EXCLUIR_DIRS = [".venv", ".web", ".states", "_backup", ".git", "__pycache__"]
 # Arquivos protegidos de sobrescrita:
-#   iniciar_automatic.bat / iniciar_bot.bat -> sobrescrever um .bat EM EXECUÇÃO
-#     corrompe o Windows; o bot roda pelo iniciar_bot.bat numa máquina à parte,
-#     que pode estar de pé na hora em que uma atualização é aplicada pela tela.
+#   iniciar_automatic.bat -> sobrescrever um .bat EM EXECUÇÃO corrompe o Windows.
+#   iniciar_bot.bat -> saiu em 06/11, mas a cópia é aditiva e o de quem já tinha fica.
 #   _update.log -> nosso próprio log
 #   atualizar_automatic.bat -> é ELE que está rodando durante a atualização.
 EXCLUIR_FILES = ["iniciar_automatic.bat", "iniciar_bot.bat", "atualizar_automatic.bat",
@@ -154,7 +153,7 @@ def baixar_e_aplicar() -> int:
     abertos = _app_aberto()
     if abertos:
         log(f"O Automatic parece estar ABERTO ({', '.join(abertos)}). "
-            "Feche a janela do Automatic (e a do bot, se houver) e rode de novo.")
+            "Feche a janela do Automatic (o bot fecha junto) e rode de novo.")
         return 1
 
     local = _versao_local()
