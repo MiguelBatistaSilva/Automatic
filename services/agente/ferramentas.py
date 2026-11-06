@@ -25,8 +25,10 @@ import copy
 import dataclasses
 import datetime
 import difflib
+import logging
 import re
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 from services.regras.requisicao_campos import ORDEM_COLUNAS, POR_CHAVE, SEPARADOR
@@ -1865,11 +1867,16 @@ def _hostname_fora_do_nome(args: dict) -> dict:
 
 
 def _itom(tombos: list[str], s: Sessao) -> dict:
-    """{tombo: Maquina|None} pelo Itom (30/10); {} se não deu para entrar."""
+    """{tombo: Maquina|None} pelo Itom (30/10); {} se não deu para entrar.
+    Em outra thread (06/11): o Assyst pode já estar aberto nesta, e o Playwright
+    sync não abre um segundo navegador na mesma thread. Esta fica esperando."""
     from services.fluxos.flow_itom_pw import consultar
     try:
-        return consultar(tombos, s.matricula, s.senha, s.log)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(consultar, tombos, s.matricula, s.senha, s.log).result()
     except Exception as e:
+        # O log da conversa não aparece em lugar nenhum: vai também para o terminal.
+        logging.getLogger("agente").error("Itom: %s", e)
         s.log(f"Não consegui consultar o Itom: {e}", "error")
         return {}
 
