@@ -127,6 +127,10 @@ def _local_bases(args: dict) -> str:
 # --------------------------------------------------------------------------- #
 
 MARCADOR_TOMBO = "{{tombo}}"
+# O marcador como a IA escreve: {tombo} (o formato da Requisição), {{tombo}},
+# { tombo }... Tudo vira o MARCADOR_TOMBO do fluxo (09/11: a IA escreveu
+# {tombo} e ele iria literal para os 7 filhos no Assyst).
+_MARCADOR_SOLTO = re.compile(r"\{+\s*tombo\s*\}+", re.I)
 
 
 def _prep_desmembrar(args: dict) -> "Acao | str":
@@ -158,13 +162,23 @@ def _prep_desmembrar(args: dict) -> "Acao | str":
     # A IA só escreve a descrição dos filhos depois de VER o Pedido: no turno
     # seguinte à análise ela não o tem mais e inventava (04/11, eval_agente.py).
     if pedido and not (descricao and args.get("_refeita")):
+        # Com base, a IA tirava a descrição do NOME da base ("Instalação de
+        # computador.") em vez do Pedido (09/11, S2510350).
+        da_base = (f' A base ("{args["base"]}") é aplicada à parte: NÃO use o nome '
+                   "dela na descrição." if args.get("base") else "")
         return ChameDeNovo(
             "Preencha `descricao` dos filhos: o serviço do Pedido abaixo, curto e "
             "formal, sem local nem nomes (se o técnico ditou a descrição, mantenha a "
-            f'dele). Tombos: {", ".join(tombos)}.{ctx}')
+            f'dele).{da_base} Tombos: {", ".join(tombos)}.{ctx}')
     if not descricao:
         return ("Falta a descrição dos chamados filhos. Pergunte ao técnico "
                 "qual texto usar.")
+    descricao = _MARCADOR_SOLTO.sub(MARCADOR_TOMBO, descricao)
+    if re.search(r"[{}]", descricao.replace(MARCADOR_TOMBO, "")):
+        # Chave que sobrou iria literal para todos os filhos no Assyst.
+        return ("A descrição tem chaves que não são o marcador do tombo: "
+                f'"{descricao}". Reescreva sem chaves, com {MARCADOR_TOMBO} '
+                "onde entra o tombo (ou sem ele, e o sistema põe no fim).")
     if MARCADOR_TOMBO not in descricao:
         descricao = f"{descricao} Tombo: {MARCADOR_TOMBO}"
 

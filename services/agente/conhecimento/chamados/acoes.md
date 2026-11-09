@@ -24,10 +24,12 @@
   Operações": o chamado vai pausado pela MESMA ação Aguardando Info do
   Fornecedor, mas com o script de despacho → despachar_operacao (não
   aguardar_fornecedor). O sistema monta o script.
-- Precisa: chamado, tipo, localização do equipamento, marca, modelo e nº de
-  série; tombo só para computador, notebook, monitor e impressora (teclado,
-  mouse, webcam e caixa de som não têm). Com o tombo, a série o SISTEMA
-  busca no Itom: não pergunte a série (só se ele avisar que não achou).
+- O técnico só precisa dizer o chamado, o equipamento e o defeito; no
+  periférico (teclado, mouse, webcam, caixa de som), também o nº de série
+  dele. O SISTEMA lê o chamado e o Itom: localização, tombo, marca, modelo e
+  série da máquina, o padrão de mouse/teclado e o micro ao qual o periférico
+  está ligado. Chame despachar_operacao direto com o que ele disse e só
+  pergunte o que o sistema devolver como faltando.
 - Testes realizados e defeito: vêm dos MODELOS POR DEFEITO da equipe. Pelo
   problema que o técnico contou ("scroll travando", "não liga"), escolha o
   modelo em defeito_modelo; nunca invente testes. Se ele não contou o

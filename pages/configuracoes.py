@@ -24,6 +24,11 @@ o banco SQLite via `services/dados/kb_store.py`). CRUD continua em
 `state/kb_state.py` (KBState) — não duplicado aqui, só a view mudou de
 lugar, igual às outras duas abas.
 
+Aba "Modelos de Despacho" (09/11): os testes e o defeito que o Assistente põe
+no script de despacho ao Serviço de Operações, por defeito. Grava em
+services/agente/conhecimento/chamados/despachos.md (`state/despachos_state.py`);
+mesma regra da Referência: edita só onde há .git.
+
 A aba ativa (`ReferenciaState.aba`) é estado de UI puro, sem
 persistência — mesmo padrão do `modo` em `state/desmembramento_state.py`
 para o segmented_control daquela página.
@@ -33,9 +38,11 @@ import reflex as rx
 
 from state.referencia_state import ReferenciaState, TABELAS
 from state.kb_state import KBState
+from state.despachos_state import DespachosState
 from bot.state import TelegramState
 from components.layout import page_layout
-from components.botoes import botao_primario, botao_secundario, botao_tabela
+from components.botoes import (botao_perigo, botao_primario, botao_secundario,
+                               botao_tabela)
 
 
 def _celula(valor: rx.Var) -> rx.Component:
@@ -114,6 +121,192 @@ def _aba_referencia() -> rx.Component:
             width="100%",
             variant="surface",
             size="1",
+        ),
+        spacing="3",
+        width="100%",
+        align_items="start",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Modelos de Despacho
+# --------------------------------------------------------------------------- #
+
+def _item_despacho(m: rx.Var) -> rx.Component:
+    ativo = DespachosState.sel.to_string() == m["i"]
+    return rx.box(
+        rx.text(m["nome"], size="2", weight="medium"),
+        rx.hstack(
+            rx.badge(m["tipo"], size="1", variant="soft"),
+            rx.text(m["n"], size="1", color="#6B7280"),
+            spacing="2",
+            align="center",
+        ),
+        on_click=DespachosState.abrir(m["i"]),
+        padding="8px 10px",
+        border_radius="6px",
+        cursor="pointer",
+        width="100%",
+        background=rx.cond(ativo, rx.color("accent", 3), "transparent"),
+        border=rx.cond(ativo, f"1px solid {rx.color('accent', 7)}",
+                       f"1px solid {rx.color('gray', 4)}"),
+        _hover={"background": rx.color("accent", 2)},
+    )
+
+
+def _rotulo(texto: str) -> rx.Component:
+    return rx.text(texto, weight="bold", size="2")
+
+
+def _dica(texto: str) -> rx.Component:
+    return rx.text(texto, size="1", color="#6B7280")
+
+
+def _previa_despacho() -> rx.Component:
+    # Mesmas cores do Assyst: rótulo azul-marinho em negrito, resposta vermelha.
+    azul, vermelho = "#1E3A8A", "#DC2626"
+    return rx.box(
+        rx.text("Testes realizado:", weight="bold", color=azul, size="2"),
+        rx.foreach(DespachosState.prev_testes,
+                   lambda t: rx.text(t, color=vermelho, size="2")),
+        rx.text("Defeito apresentado:", weight="bold", color=azul, size="2",
+                margin_top="0.75em"),
+        rx.text(DespachosState.prev_defeito, color=vermelho, size="2"),
+        padding="12px",
+        border=f"1px solid {rx.color('gray', 5)}",
+        border_radius="8px",
+        background="white",
+        width="100%",
+    )
+
+
+def _form_despacho() -> rx.Component:
+    so_leitura = ~DespachosState.editavel
+    return rx.vstack(
+        rx.hstack(
+            rx.vstack(
+                _rotulo("Nome"),
+                rx.input(value=DespachosState.f_nome, on_change=DespachosState.set_f_nome,
+                         placeholder="Mouse — scroll", read_only=so_leitura, width="100%"),
+                spacing="1", flex="2",
+            ),
+            rx.vstack(
+                _rotulo("Tipo"),
+                rx.select(DespachosState.tipos, value=DespachosState.f_tipo,
+                          on_change=DespachosState.set_f_tipo, placeholder="Tipo",
+                          disabled=so_leitura, width="100%"),
+                spacing="1", flex="1",
+            ),
+            width="100%",
+            spacing="3",
+        ),
+        _rotulo("Pedidos"),
+        _dica("Palavras que o técnico usa para esse defeito, separadas por "
+              "vírgula. É por elas que o Assistente escolhe o modelo."),
+        rx.input(value=DespachosState.f_pedidos, on_change=DespachosState.set_f_pedidos,
+                 placeholder="scroll, rolagem, rodinha", read_only=so_leitura, width="100%"),
+        rx.foreach(DespachosState.avisos,
+                   lambda a: rx.callout(a, icon="triangle_alert", size="1",
+                                        color_scheme="orange", width="100%")),
+        _rotulo("Testes realizados"),
+        _dica("Um por linha, sem ';' no fim (o script põe). Ex.: \"Realizado "
+              "teste em outra porta USB, sem sucesso\"."),
+        rx.text_area(value=DespachosState.f_testes, on_change=DespachosState.set_f_testes,
+                     read_only=so_leitura, rows="9", width="100%"),
+        _rotulo("Defeito apresentado"),
+        rx.input(value=DespachosState.f_defeito, on_change=DespachosState.set_f_defeito,
+                 placeholder="Falha no sensor de rolagem (scroll)", read_only=so_leitura,
+                 width="100%"),
+        _rotulo("Prévia no script"),
+        _previa_despacho(),
+        rx.cond(
+            DespachosState.editavel,
+            rx.hstack(
+                botao_primario("Salvar", on_click=DespachosState.salvar,
+                               color_scheme="green", disabled=~DespachosState.alterado),
+                botao_secundario("Descartar", on_click=DespachosState.descartar,
+                                 disabled=~DespachosState.alterado),
+                rx.spacer(),
+                rx.cond(
+                    ~DespachosState.novo,
+                    botao_perigo(
+                        rx.cond(DespachosState.confirmar_exclusao,
+                                "Confirmar exclusão", "Excluir"),
+                        on_click=DespachosState.excluir),
+                ),
+                width="100%",
+                spacing="2",
+                margin_top="0.5em",
+            ),
+        ),
+        spacing="2",
+        width="100%",
+        align_items="start",
+    )
+
+
+def _aba_despachos() -> rx.Component:
+    return rx.vstack(
+        rx.text(
+            "Testes e defeito que o Assistente põe no script de despacho ao "
+            "Serviço de Operações, por defeito. A IA só escolhe o modelo; o "
+            "texto sai exatamente como escrito aqui. Fica em "
+            "services/agente/conhecimento/chamados/despachos.md.",
+            color="#6B7280",
+        ),
+        rx.cond(
+            DespachosState.editavel,
+            rx.callout("Salvar já vale para o Assistente desta máquina; commite "
+                       "para levar às outras.", icon="info", size="1"),
+            rx.callout("Só consulta: a edição é feita na máquina de publicação "
+                       "(a deste computador seria sobrescrita no próximo update).",
+                       icon="lock", size="1", color_scheme="gray"),
+        ),
+        rx.text(DespachosState.status, color=DespachosState.status_cor, size="2"),
+        rx.flex(
+            rx.vstack(
+                rx.select(DespachosState.filtros, value=DespachosState.filtro,
+                          on_change=DespachosState.set_filtro, width="100%"),
+                rx.input(placeholder="Buscar...", value=DespachosState.busca,
+                         on_change=DespachosState.set_busca, width="100%"),
+                rx.hstack(
+                    _dica(DespachosState.lista.length().to_string() + " de "
+                          + DespachosState.total.to_string()),
+                    rx.spacer(),
+                    rx.cond(DespachosState.editavel,
+                            botao_secundario("+ Novo modelo",
+                                             on_click=DespachosState.criar)),
+                    width="100%",
+                    align="center",
+                ),
+                rx.vstack(
+                    rx.foreach(DespachosState.lista, _item_despacho),
+                    spacing="1",
+                    width="100%",
+                    max_height="65vh",
+                    overflow_y="auto",
+                    padding_right="4px",
+                ),
+                spacing="2",
+                width=rx.breakpoints(initial="100%", md="320px"),
+                flex_shrink="0",
+            ),
+            rx.box(
+                rx.cond(
+                    (DespachosState.sel >= 0) | DespachosState.novo,
+                    _form_despacho(),
+                    _dica("Escolha um modelo na lista."),
+                ),
+                flex="1",
+                width="100%",
+                padding="12px",
+                border=f"1px solid {rx.color('gray', 6)}",
+                border_radius="8px",
+            ),
+            direction=rx.breakpoints(initial="column", md="row"),
+            spacing="4",
+            width="100%",
+            align="start",
         ),
         spacing="3",
         width="100%",
@@ -282,6 +475,7 @@ def configuracoes_page() -> rx.Component:
         rx.segmented_control.root(
             rx.segmented_control.item("Bases de Conhecimento", value="kb"),
             rx.segmented_control.item("Referência", value="referencia"),
+            rx.segmented_control.item("Modelos de Despacho", value="despachos"),
             rx.segmented_control.item("Usuários Autorizados", value="usuarios"),
             value=ReferenciaState.aba,
             on_change=ReferenciaState.set_aba,
@@ -290,6 +484,7 @@ def configuracoes_page() -> rx.Component:
             ReferenciaState.aba,
             ("kb", _aba_base_conhecimento()),
             ("referencia", _aba_referencia()),
+            ("despachos", _aba_despachos()),
             ("usuarios", _aba_usuarios_autorizados()),
             _aba_base_conhecimento(),
         ),

@@ -14,6 +14,7 @@ a IA só escolhe o modelo. Tipo ainda sem modelo cai no script genérico
 Teclado, mouse, webcam e caixa de som não têm tombo: a linha nem sai.
 """
 
+import re
 import unicodedata
 
 from services.agente import conhecimento
@@ -46,6 +47,16 @@ SCRIPTS: dict[str, tuple[list[str], list[str]]] = {
                      ["Caixa de som sem áudio"]),
 }
 
+# Marca e modelo PADRÃO dos periféricos (09/11, regra da equipe): o técnico
+# só diz o serial. Webcam e caixa de som não têm padrão: ele diz.
+PADRAO_PERIFERICO: dict[str, tuple[str, str]] = {
+    "Mouse": ("Positivo", "SM-6620"),
+    "Teclado": ("Positivo", "SK-6620"),
+}
+
+# Tipos cujo tombo é de uma máquina no Itom (marca, modelo e série vêm de lá).
+NO_ITOM = ["Computador", "Notebook"]
+
 # Outros nomes que o técnico usa -> tipo do script.
 _APELIDOS = {
     "maquina": "Computador", "micro": "Computador", "cpu": "Computador",
@@ -73,6 +84,84 @@ def tipo_de(valor: str) -> str:
 
 def tem_tombo(tipo: str) -> bool:
     return tipo in PRINCIPAIS
+
+
+def periferico(tipo: str) -> bool:
+    """Teclado, mouse, webcam, caixa de som: sem tombo, ligados a um micro."""
+    return tipo in OUTROS
+
+
+# --------------------------------------------------------------------------- #
+# Dados que saem do chamado e do Itom (09/11): o técnico só diz o defeito e,
+# no periférico, o serial.
+# --------------------------------------------------------------------------- #
+
+# A seção vem do Assyst em maiúsculas e sem acento.
+_ACENTOS = {
+    "familia": "Família", "civel": "Cível", "civeis": "Cíveis", "publica": "Pública",
+    "sucessoes": "Sucessões", "camara": "Câmara", "orfaos": "Órfãos",
+    "execucao": "Execução", "execucoes": "Execuções", "penais": "Penais",
+    "infancia": "Infância", "juventude": "Juventude", "transito": "Trânsito",
+    "violencia": "Violência", "domestica": "Doméstica", "fazenda": "Fazenda",
+    "secretaria": "Secretaria", "judiciaria": "Judiciária", "tecnologia": "Tecnologia",
+    "informacao": "Informação", "comunicacao": "Comunicação", "gestao": "Gestão",
+    "coordenadoria": "Coordenadoria", "diretoria": "Diretoria", "orgao": "Órgão",
+    "especial": "Especial", "especiais": "Especiais", "unica": "Única",
+}
+_MINUSCULAS = {"da", "de", "do", "das", "dos", "e", "em", "na", "no", "a", "o"}
+_SIGLAS = {"JECC", "JEC", "JECRIM", "CEJUSC", "CATI", "TJCE", "TI", "NUPEMEC", "ESMEC"}
+
+
+def secao_legivel(secao: str) -> str:
+    """'15ª VARA DE FAMILIA DA COMARCA DE FORTALEZA' -> '15ª Vara de Família'.
+    Fortaleza é a comarca da maioria: some. As outras ficam ('da Comarca de Sobral')."""
+    s = " ".join((secao or "").split())
+    s = re.sub(r"\s+DA COMARCA DE FORTALEZA$", "", s, flags=re.I)
+    palavras = []
+    for i, p in enumerate(s.split(" ")):
+        k = _chave(p)
+        if p[:1].isdigit():
+            palavras.append(p.lower())                     # 15ª, 1º
+        elif k in _ACENTOS:
+            palavras.append(_ACENTOS[k])
+        elif i and k in _MINUSCULAS:
+            palavras.append(k)
+        elif k.upper() in _SIGLAS:
+            palavras.append(k.upper())
+        else:
+            palavras.append(p[:1].upper() + p[1:].lower())
+    return " ".join(palavras)
+
+
+def localizacao(secao: str, sala: str = "", local_descrito: str = "",
+                edificio: str = "") -> str:
+    """'15ª Vara de Família, Nível 2, Setor Verde, Sala 314' (formato da equipe,
+    09/11). Onde é: o 'Local:' da descrição, senão o campo Sala; sem nenhum
+    dos dois, o edifício. '' = nada no chamado (o técnico diz)."""
+    onde = (local_descrito or "").strip()
+    if not onde:
+        s = (sala or "").strip()
+        if s and "definir" not in s.lower():
+            onde = s if re.search(r"[a-zA-Z]", s) else f"Sala {s}"
+    if not onde and edificio and "definir" not in edificio.lower():
+        onde = edificio.strip()
+    partes = [x for x in (secao_legivel(secao), onde) if x]
+    return ", ".join(partes) if onde else ""
+
+
+def separar_marca_modelo(marca_modelo: str) -> tuple[str, str]:
+    """'POSITIVO C6200' (Itom, aba Hardware) -> ('POSITIVO', 'C6200')."""
+    partes = (marca_modelo or "").split(maxsplit=1)
+    return (partes[0], partes[1]) if len(partes) == 2 else ((partes[0], "") if partes else ("", ""))
+
+
+def vinculo_do_periferico(tombo_micro: str, marca_modelo: str = "") -> str:
+    """A OBS do periférico: 'O periférico está vinculado ao micro Positivo
+    C6200 de tombo 654321.' (texto da equipe, 09/11)."""
+    marca, modelo = separar_marca_modelo(marca_modelo)
+    micro = " ".join(x for x in (marca[:1].upper() + marca[1:].lower(), modelo) if x)
+    return (f"O periférico está vinculado ao micro {micro} de tombo {tombo_micro}."
+            if micro else f"O periférico está vinculado ao micro de tombo {tombo_micro}.")
 
 
 def modelos_de(tipo: str) -> list[conhecimento.ModeloDespacho]:

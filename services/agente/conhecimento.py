@@ -13,7 +13,9 @@ roteador (services/agente/roteador.py). Arquivo na raiz vale para todos.
   indice()        -> a lista de TODOS os assuntos (vai nas instruções, curta);
   ler(assunto)    -> um assunto inteiro (ferramenta consultar_conhecimento);
   tipos()         -> os tipos de solicitação, lidos pelo CÓDIGO.
-  despachos()     -> os modelos de despacho, lidos SÓ pelo código (26/10).
+  despachos()     -> os modelos de despacho, lidos SÓ pelo código (26/10);
+  gravar_despachos(modelos) -> regrava o despachos.md (aba "Modelos de
+                     Despacho" de Configurações, 09/11).
 
 A subpasta referencia/ (técnicos, filas, edifícios) também é SÓ do código:
 quem lê é services/dados/referencia.py.
@@ -23,6 +25,7 @@ reiniciar o app.
 """
 
 import dataclasses
+import os
 import re
 from pathlib import Path
 
@@ -168,3 +171,41 @@ def despachos() -> list[ModeloDespacho]:
                 pedidos=campos.get("pedidos", ""),
                 defeito=campos["defeito"].rstrip(";.").strip(), testes=testes))
     return saida
+
+
+def _uma_linha(s: str) -> str:
+    return " ".join(str(s or "").split())
+
+
+def gravar_despachos(modelos: list[ModeloDespacho]) -> Path:
+    """Regrava chamados/despachos.md com `modelos`, na ordem dada, mantendo o
+    texto explicativo de antes do primeiro `##`. Escrita atômica (.tmp +
+    replace): o agente lê o arquivo a cada pedido e nunca pega ele pela metade.
+    Modelo incompleto (sem tipo, defeito ou testes) é recusado aqui, porque
+    despachos() o ignoraria calado."""
+    for m in modelos:
+        if not (_uma_linha(m.nome) and _uma_linha(m.tipo)
+                and _uma_linha(m.defeito) and any(map(_uma_linha, m.testes))):
+            raise ValueError(f"Modelo incompleto: '{m.nome}'.")
+    try:
+        antes = _ARQ_DESPACHOS.read_text(encoding="utf-8")
+        intro = re.split(r"^##\s+", antes, maxsplit=1, flags=re.M)[0].rstrip()
+    except OSError:
+        intro = "# Modelos de despacho ao Serviço de Operações"
+    blocos = []
+    for m in modelos:
+        linhas = [f"## {_uma_linha(m.nome)}",
+                  f"- tipo: {_uma_linha(m.tipo)}",
+                  f"- pedidos: {_uma_linha(m.pedidos)}",
+                  f"- defeito: {_uma_linha(m.defeito).rstrip(';.').strip()}",
+                  "- testes:"]
+        linhas += [f"  - {_uma_linha(t).rstrip(';.').strip()}"
+                   for t in m.testes if _uma_linha(t)]
+        blocos.append("\n".join(linhas))
+    tmp = _ARQ_DESPACHOS.with_suffix(".tmp")
+    # newline="\n": o repositório é LF (.gitattributes); sem isso o Windows
+    # grava CRLF e o arquivo aparece modificado sem mudança real.
+    tmp.write_text(intro + "\n\n" + "\n\n".join(blocos) + "\n", encoding="utf-8",
+                   newline="\n")
+    os.replace(tmp, _ARQ_DESPACHOS)
+    return _ARQ_DESPACHOS

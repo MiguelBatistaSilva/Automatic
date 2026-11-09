@@ -155,7 +155,33 @@ def _regras() -> list[tuple[str, str]]:
 
     # Como chega a 2ª chamada, depois do ChameDeNovo, com o técnico de acordo.
     d = {"descricao": "Desmontagem de computador.", "conferido": True, "_refeita": True}
+    refeita = {"conferido": True, "_refeita": True}
+
+    def descricao_final(r, esperada):
+        """A descrição do 1º filho no cartão (o marcador já trocado pelo tombo)."""
+        if isinstance(r, str):
+            return f"não montou o cartão: {r}"
+        linha = next((l for l in r.linhas if l.startswith("**Descrição")), "")
+        viu = linha.split("** ", 1)[-1]
+        return "" if viu == esperada else f"descrição {viu!r}"
+
+    # Gabarito do técnico (09/11, S2510350).
+    ditada = "Religação e organização de computadores e periféricos. Segue o tombo: {}."
     return [
+        ("descrição com {tombo} (chave simples): vira o tombo, sem 'Tombo:' a mais",
+         descricao_final(_preparar(DOIS_TOMBOS, descricao=ditada.format("{tombo}"), **refeita),
+                         ditada.format("111111"))),
+        ("descrição com {{tombo}}: vira o tombo",
+         descricao_final(_preparar(DOIS_TOMBOS, descricao=ditada.format("{{ tombo }}"),
+                                   **refeita), ditada.format("111111"))),
+        ("descrição sem marcador: o tombo vai no fim",
+         descricao_final(_preparar(DOIS_TOMBOS, **d),
+                         "Desmontagem de computador. Tombo: 111111")),
+        ("descrição com outra chave: devolve para reescrever",
+         pede(_preparar(DOIS_TOMBOS, descricao="Instalação na {sala}.", **refeita), "chaves")),
+        ("com base: o pedido da descrição avisa para não usar o nome da base",
+         forca(_preparar(DOIS_TOMBOS, base="instalação de microcomputador"),
+               "desmontagem", "NÃO use o nome")),
         ("só o número: devolve o Pedido e força a nova chamada",
          forca(_preparar(DOIS_TOMBOS), "desmontagem")),
         ("descrição sem ter visto o Pedido: devolve o Pedido",
