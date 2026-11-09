@@ -389,7 +389,7 @@ def main() -> int:
     # A troca que mantém o Assyst de fora: nada aqui abre navegador.
     sessao.Sessao = SessaoFalsa
     ficha.ler_ficha = _ficha_falsa
-    ferramentas._itom = _itom_falso
+    ferramentas.base._itom = _itom_falso
 
     falhas = 0
     if not a.so_ia:

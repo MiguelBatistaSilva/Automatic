@@ -148,7 +148,7 @@ def _registrar(m, tipo="info") -> None:
 
 
 def _iniciar_um(s: Sessao, numero: str) -> tuple[str, str]:
-    from services.agente.ferramentas import _pausa_atual
+    from services.agente.ferramentas.verificacoes import _pausa_atual
     from services.agente.ficha import esquecer
     from services.fluxos.flow_atendimento_pw import iniciar_atendimento
     from services.fluxos.flow_sla_pw import extrair_historico_chamado

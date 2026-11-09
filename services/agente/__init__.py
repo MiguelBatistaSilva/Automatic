@@ -7,7 +7,7 @@ usa (bot/services/*), sem nenhum arquivo de fluxo alterado. Toda ação que
 ESCREVE no Assyst passa por um cartão de confirmação na tela antes de rodar.
 
   llm.py          cliente HTTP da Groq (API compatível com a da OpenAI)
-  ferramentas.py  catálogo: esquema para o modelo, validação, cartão, execução
+  ferramentas/    catálogo: esquema para o modelo, validação, cartão, execução
   assistente.py   a conversa: histórico -> texto OU ação a confirmar
   ficha.py        a FICHA do chamado, lida uma vez para todas as ferramentas
   triagem.py      regras de triagem (Edifício, Item B) sobre a ficha
