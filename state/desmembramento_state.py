@@ -5,6 +5,13 @@ Modos (mesma semântica do antigo aba_execucao.py do Qt):
   - completo : Criar + Base   -> FluxoCompletoPW
   - criar    : Só Criar (3N)  -> FluxoCriarPW
   - bc       : Só Base        -> FluxoBCPW
+  - itom     : Adicionar Itom -> flow_anexo_itom_pw (10/11): anexa ao chamado o
+               PDF da tela do Itom da máquina. Sem checkpoint (o fluxo vê na
+               lista de anexos se o PDF já está lá). Sem "Simular" na tela
+               (ele tirou, 10/11): anexa de verdade.
+  - doc      : Importar documento -> flow_anexo_itom_pw.anexar_documento (10/11):
+               o PDF enviado pela tela é anexado a todos os chamados da lista.
+               Sem checkpoint (pula o chamado que já tem o arquivo).
 
 Ponto delicado: o **diálogo de checkpoint**. Um evento background async não pode
 parar no meio esperando o clique do usuário; então `iniciar` (evento SYNC) valida e
@@ -51,6 +58,10 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
     filhos_texto: str = ""
     kb_selecionado: str = ""
     kbs: list[str] = []
+    itom_texto: str = ""      # 'Chamado,tombo' por linha
+    doc_chamados: str = ""    # Importar documento: chamados, um por linha
+    doc_nome: str = ""        # nome do PDF recebido
+    doc_caminho: str = ""     # onde ele foi gravado
 
     # Diálogo de checkpoint
     cp_aberto: bool = False
@@ -91,6 +102,34 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
     def set_kb(self, v: str):
         self.kb_selecionado = v
 
+    @rx.event
+    def set_itom_texto(self, v: str):
+        self.itom_texto = v
+
+    @rx.event
+    def set_doc_chamados(self, v: str):
+        self.doc_chamados = v
+
+    @rx.event
+    async def receber_doc(self, files: list[rx.UploadFile]):
+        """Grava o PDF enviado em %LOCALAPPDATA%\\Automatic\\documentos_importados
+        (fora do projeto: não dispara o hot-reload), com o nome original."""
+        import os
+        import re
+        from services.paths import APP_LOCAL_DIR
+        if not files:
+            return
+        f = files[0]
+        nome = re.sub(r'[\\/:*?"<>|]', "_", os.path.basename(f.name or "documento.pdf"))
+        if not nome.lower().endswith(".pdf"):
+            self.logs = self.logs + [self._linha("Envie um arquivo PDF.", "error")]
+            return
+        pasta = APP_LOCAL_DIR / "documentos_importados"
+        pasta.mkdir(parents=True, exist_ok=True)
+        destino = pasta / nome
+        destino.write_bytes(await f.read())
+        self.doc_nome, self.doc_caminho = nome, str(destino)
+
     # ---------------------------------------------------------------- helpers
     def _filhos(self) -> list[str]:
         return [l.strip() for l in self.filhos_texto.splitlines() if l.strip()]
@@ -107,6 +146,20 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
                 erros.append("Selecione uma Base de Conhecimento.")
         if self.modo == "bc" and not self._filhos():
             erros.append("Cole a lista de chamados filhos.")
+        if self.modo == "itom":
+            from services.fluxos.flow_anexo_itom_pw import ler_pares
+            linhas, problemas = ler_pares(self.itom_texto)
+            erros += problemas
+            if not linhas and not problemas:
+                erros.append("Cole as linhas 'Chamado,tombo'.")
+        if self.modo == "doc":
+            from services.fluxos.flow_anexo_itom_pw import ler_chamados
+            chamados, problemas = ler_chamados(self.doc_chamados)
+            erros += problemas
+            if not chamados and not problemas:
+                erros.append("Cole os chamados (um por linha).")
+            if not self.doc_caminho:
+                erros.append("Escolha o documento (PDF).")
         return erros
 
     def _chave(self) -> str:
@@ -127,6 +180,8 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
         if erros:
             self.logs = self.logs + [self._linha(e, "error") for e in erros]
             return
+        if self.modo in ("itom", "doc"):
+            return DesmembramentoState.executar(False)
 
         chave = self._chave()
         if foi_concluido(chave):
@@ -169,6 +224,9 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
             csv_texto = self.csv_texto
             filhos = self._filhos()
             kb_nome = self.kb_selecionado
+            itom_texto = self.itom_texto
+            doc_chamados = self.doc_chamados
+            doc_caminho = self.doc_caminho
             self.logs = []
             self.rodando = True
 
@@ -179,6 +237,34 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
                 self.logs = self.logs + [self._linha(
                     "Credenciais nao cadastradas (configure no app).", "error")]
                 self.rodando = False
+            return
+
+        if modo == "itom":
+            from services.fluxos import flow_anexo_itom_pw as anexo
+            linhas, _ = anexo.ler_pares(itom_texto)
+
+            def worker_itom(log, emit):
+                anexo.executar(linhas, matricula, senha, log)
+
+            async for _ in self._rodar_sync(worker_itom):
+                yield
+            async with self:
+                self.rodando = False
+            yield
+            return
+
+        if modo == "doc":
+            from services.fluxos import flow_anexo_itom_pw as anexo
+            chamados, _ = anexo.ler_chamados(doc_chamados)
+
+            def worker_doc(log, emit):
+                anexo.anexar_documento(chamados, doc_caminho, matricula, senha, log)
+
+            async for _ in self._rodar_sync(worker_doc):
+                yield
+            async with self:
+                self.rodando = False
+            yield
             return
 
         # Monta o kb_config a partir do nome selecionado (lê o kb_store fresco).

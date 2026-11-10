@@ -202,6 +202,84 @@ def _painel_bc() -> rx.Component:
     )
 
 
+def _painel_itom() -> rx.Component:
+    return rx.vstack(
+        rx.text(
+            "Anexa ao chamado o PDF da tela do Itom da máquina (o mesmo do Ctrl+P "
+            "em paisagem), com o nome da máquina. Se o PDF já estiver anexado, o "
+            "chamado é pulado.",
+            color="#6B7280", size="2",
+        ),
+        duas_colunas(
+            coluna(
+                rx.text("Chamado,tombo (um por linha)", weight="bold"),
+                rx.text_area(
+                    placeholder="S2510351,311026\nS2510352,265539",
+                    value=DesmembramentoState.itom_texto,
+                    on_change=DesmembramentoState.set_itom_texto,
+                    height=ALTURA_TEXTAREA,
+                    width="100%",
+                    font_family="monospace",
+                ),
+            ),
+            rx.box(flex="1"),
+        ),
+        spacing="4", width="100%",
+    )
+
+
+def _painel_doc() -> rx.Component:
+    return rx.vstack(
+        rx.text(
+            "Anexa o mesmo PDF a todos os chamados da lista. Se o chamado já tiver "
+            "um anexo com o mesmo nome de arquivo, ele é pulado.",
+            color="#6B7280", size="2",
+        ),
+        duas_colunas(
+            coluna(
+                rx.text("Documento (PDF)", weight="bold"),
+                rx.upload(
+                    rx.vstack(
+                        rx.icon("file-up", size=28, color="#6B7280"),
+                        rx.cond(
+                            DesmembramentoState.doc_nome != "",
+                            rx.text(DesmembramentoState.doc_nome, weight="bold"),
+                            rx.text("Arraste o PDF aqui ou clique para escolher",
+                                    color="#6B7280", size="2"),
+                        ),
+                        align="center", justify="center", spacing="2",
+                        height="100%",
+                    ),
+                    id="doc_pdf",
+                    accept={"application/pdf": [".pdf"]},
+                    max_files=1,
+                    multiple=False,
+                    on_drop=DesmembramentoState.receber_doc(
+                        rx.upload_files(upload_id="doc_pdf")),
+                    border=f"2px dashed {rx.color('gray', 7)}",
+                    border_radius="8px",
+                    padding="1em",
+                    width="100%",
+                    height=ALTURA_TEXTAREA,
+                    cursor="pointer",
+                ),
+            ),
+            coluna(
+                rx.text("Chamados (um por linha)", weight="bold"),
+                rx.text_area(
+                    placeholder="R2512134\nR2512135\nR2512141",
+                    value=DesmembramentoState.doc_chamados,
+                    on_change=DesmembramentoState.set_doc_chamados,
+                    height=ALTURA_TEXTAREA,
+                    width="100%",
+                    font_family="monospace",
+                ),
+            ),
+        ),
+        spacing="4", width="100%",
+    )
+
+
 def _dialog_checkpoint() -> rx.Component:
     return rx.dialog.root(
         rx.dialog.content(
@@ -255,6 +333,8 @@ def desmembramento_page() -> rx.Component:
                     rx.segmented_control.item("Criar + Base", value="completo"),
                     rx.segmented_control.item("Só Criar", value="criar"),
                     rx.segmented_control.item("Só Base", value="bc"),
+                    rx.segmented_control.item("Adicionar Itom", value="itom"),
+                    rx.segmented_control.item("Importar documento", value="doc"),
                     value=DesmembramentoState.modo,
                     on_change=DesmembramentoState.set_modo,
                 ),
@@ -263,6 +343,8 @@ def desmembramento_page() -> rx.Component:
                     ("completo", _painel_completo()),
                     ("criar", _painel_criar()),
                     ("bc", _painel_bc()),
+                    ("itom", _painel_itom()),
+                    ("doc", _painel_doc()),
                     _painel_completo(),
                 ),
                 botao_primario(
