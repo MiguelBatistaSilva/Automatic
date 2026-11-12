@@ -51,6 +51,10 @@ CASOS = [
     ("o chamado da Carla, coloca aguardando fornecedor", {C}),
     ("qual o SLA do S2477461?", {C}),
     ("mostra minha fila", {C}),
+    # análise/busca por fila (12/11)
+    ("analisa apenas a minha fila", {C}),
+    ("analisa a fila do 2N CATI FCB", {C}),
+    ("analisa o chamado do Marcos na fila do 2N CATI Demais Capital", {C}),
     ("inicia o atendimento do R2479463", {C}),
     ("programa o R2479463 pra amanhã às 14h, o usuário está em reunião", {C}),
     ("aplica a base de impressora no R2479463", {C}),

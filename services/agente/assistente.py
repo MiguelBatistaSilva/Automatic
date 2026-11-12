@@ -199,11 +199,13 @@ def _status(nome: str, args: dict) -> tuple[str, str]:
     ("Verificando o SLA do S2477461..."), a atividade no passado."""
     alvo = _alvo(args)
     if nome == "buscar_chamado_por_usuario":
-        return f"Procurando o chamado{alvo} na sua fila...", f"Procurou o chamado{alvo} na fila"
+        fila = f" na fila {args['fila']}" if args.get("fila") else " nas filas"
+        return f"Procurando o chamado{alvo}{fila}...", f"Procurou o chamado{alvo}{fila}"
     if nome == "verificar_sla":
         return f"Verificando o SLA{alvo}...", f"Verificou o SLA{alvo}"
-    if nome == "analisar_chamado" and args.get("minha_fila") and not args.get("chamados"):
-        return "Analisando os chamados da sua fila...", "Analisou os chamados da fila"
+    if nome == "analisar_chamado" and args.get("fila") and not args.get("chamados"):
+        return (f"Analisando os chamados da fila {args['fila']}...",
+                f"Analisou os chamados da fila {args['fila']}")
     if nome == "analisar_chamado":
         return f"Analisando o chamado{alvo}...", f"Analisou o chamado{alvo}"
     if nome == "consultar_maquina":

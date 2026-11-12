@@ -9,7 +9,7 @@ navegador é o chamador (state/, bot/services/ ou o Assistente).
   kb_manager_pw.py           aplica Base de Conhecimento num chamado
   flow_atribuicao_pw.py      Atribuição Interna
   flow_config_fila_pw.py     configura fila (consulta salva do monitor)
-  flow_minhafila_pw.py       lê a grade "Minha Fila"
+  flow_minhafila_pw.py       lê uma fila (Minha Fila, 2N CATI FCB...)
   flow_sla_pw.py             lê o histórico de ações (SLA)
   ações de relógio e texto (menu Ações -> pop-up):
     flow_atendimento_pw.py, flow_programar_pw.py, flow_informacao_pw.py,

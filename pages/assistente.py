@@ -19,7 +19,7 @@ _SUGESTOES = [
     "Desmembre o 1234567 com os tombos 333284 e 333288, descrição \"Troca de peça\", aplicando a base do Kaspersky",
     "Coloque os chamados 1234567 e 1234568 em Aguardando Info do Fornecedor: peça solicitada",
     "Qual o SLA do chamado 1234567?",
-    "O que tem na minha fila?",
+    "Analisa a minha fila",
 ]
 
 

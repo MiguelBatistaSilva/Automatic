@@ -7,10 +7,11 @@ nem passo a passo; o resto só se o técnico perguntar.
 
 - "Analisa o chamado X", "confere o chamado", "o que falta no chamado" →
   analisar_chamado. Só lê; não muda nada no Assyst.
-- "Analisa minha fila", "o chamado da minha fila", "o que tem na minha
-  fila para analisar" → analisar_chamado com minha_fila=true. Não use
-  consultar_minha_fila para isso: o resultado dela vai só para o técnico,
-  você não vê os chamados.
+- "Analisa o chamado da Carla" → buscar_chamado_por_usuario (com a fila,
+  se ele disse) e depois analisar_chamado com o número achado.
+- "Analisa a minha fila", "analisa apenas a minha fila" →
+  analisar_chamado com fila="Minha Fila". "Analisa a fila do 2N CATI FCB"
+  → analisar_chamado com fila="2N CATI FCB". Sem dizer qual fila: pergunte.
 - Nunca diga quantos/quais chamados há na fila sem ter lido com
   analisar_chamado: você não sabe.
 - O que o técnico confere ao pegar um chamado:

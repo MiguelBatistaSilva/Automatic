@@ -6,7 +6,7 @@ as funções E as entradas `Ferramenta(...)` do seu assunto:
 
   base.py          Acao, Ferramenta, ChameDeNovo e os ajudantes comuns (+ _itom)
   verificacoes.py  o que se confere antes de gravar: Edifício/Item B, relógio
-  investigacao.py  só leitura: achar chamado, SLA, triagem, máquina, Minha Fila
+  investigacao.py  só leitura: achar chamado, SLA, triagem, máquina
   bases.py         Bases de Conhecimento, desmembrar, aplicar base
   requisicao.py    Requisição de Serviço, por tombo, plantões
   acoes.py         resolver, corrigir, ações em lote, atribuir, programar, filas
@@ -90,7 +90,6 @@ _ORDEM = (
     "info_recebida_usuario",
     "info_recebida_fornecedor",
     "configurar_filas",
-    "consultar_minha_fila",
     "analisar_sla",
     "gerar_termo",
     "gerar_termo_demanda",

@@ -1,9 +1,14 @@
 """
-services/fluxos/flow_minhafila_pw.py — leitura da grade "Minha Fila" em Playwright.
+services/fluxos/flow_minhafila_pw.py — leitura de uma fila do Assyst em Playwright.
 
-Portado do link fornecido pelo usuario: uma pesquisa salva no proprio Assyst
-(queryProfileId=4 / columnProfileId=2) que lista os chamados da fila do
-tecnico logado. So LEITURA, mesmo espirito do flow_sla_pw.py.
+Cada fila é uma pesquisa salva no Assyst (queryProfileId / columnProfileId).
+12/11: além da "Minha Fila" (chamados atribuídos ao técnico logado), lê as
+filas de FILAS_ASSYST (links dele). O técnico escolhe a fila ("analisa a
+fila do 2N CATI FCB", "o chamado do Marcos na fila Demais Capital"). Fila
+nova = uma linha em FILAS_ASSYST (o título é conferido para saber que a
+consulta certa carregou). A grade traz também o técnico atribuído
+(`tecnico`), quando a fila tem essa coluna. So LEITURA, mesmo espirito do
+flow_sla_pw.py.
 
 POR QUE POR CLASSE CSS E NAO POR IDX: no flow_sla_pw a grade de HISTORICO nao
 e reordenavel pelo usuario, entao ler por indice de coluna (`celulas[2]`) e
@@ -24,19 +29,59 @@ import time
 
 from services.assyst.browser_pw import _aguardar_pagina_assentar
 
-_URL_MINHA_FILA = (
+_URL_FILA = (
     "https://cati.tjce.jus.br/assystweb/application.do"
     "#eventsearch%2FEventSearchDelegatingDispatchAction.do%3Fdispatch%3DloadQuery"
-    "%26showInMonitor%3Dtrue%26context%3Dselect%26queryProfileForm.queryProfileId%3D4"
-    "%26queryProfileForm.columnProfileId%3D2"
+    "%26showInMonitor%3Dtrue%26context%3Dselect%26queryProfileForm.queryProfileId%3D{q}"
+    "%26queryProfileForm.columnProfileId%3D{c}"
 )
+
+MINHA_FILA = "Minha Fila"
+# nome (o mesmo da Análise de SLA) -> (queryProfileId, columnProfileId, trecho
+# do título do painel). Títulos conferidos em tela real em 12/11. A Sala de
+# Imagem - FCB (columnProfileId 0) não tem as colunas de seção e técnico.
+FILAS_ASSYST: dict[str, tuple[int, int, str]] = {
+    MINHA_FILA: (4, 2, "Chamados Atribuídos a mim"),
+    "2N CATI FCB": (5913, 1267, "CATI FCB Geral"),
+    "2N CATI TJ": (6310, 1267, "CATI TJ Geral"),
+    "2N CATI Demais Capital": (6600, 1397, "Demais Capital"),
+    "2N CATI Sala de Imagem - FCB": (5732, 0, "Sala de Imagem - FCB"),
+    "2N CATI Sala de Imagem - Galpão BR": (6651, 1397, "Galpão BR"),
+}
+
+
+def _chave_fila(texto: str) -> str:
+    import re
+    import unicodedata
+    t = "".join(c for c in unicodedata.normalize("NFD", (texto or "").lower())
+                if unicodedata.category(c) != "Mn")
+    t = re.sub(r"[^a-z0-9 ]", " ", t)
+    t = re.sub(r"\b(2n|cati|fila|filas|da|do|de|a|o|na|no|geral)\b", " ", t)
+    return " ".join(t.split())
+
+
+def resolver_fila(texto: str) -> str | None:
+    """Nome da fila em FILAS_ASSYST a partir do que o técnico disse
+    ("minha", "FCB", "fila do 2N CATI TJ", "galpão"...). None se não achar
+    uma só."""
+    k = _chave_fila(texto)
+    if not k:
+        return None
+    if "minha" in k.split():
+        return MINHA_FILA
+    chaves = {nome: _chave_fila(nome) for nome in FILAS_ASSYST if nome != MINHA_FILA}
+    exatas = [n for n, c in chaves.items() if c == k]
+    if exatas:
+        return exatas[0]
+    palavras = set(k.split())
+    parciais = [n for n, c in chaves.items() if palavras <= set(c.split())]
+    return parciais[0] if len(parciais) == 1 else None
 
 # Titulo do painel quando a consulta CERTA esta carregada (confirmado em tela
 # real: "Chamados Atribuídos a mim | Pesquisa de evento"). E o sinal que
 # faltava para distinguir "Minha Fila" da "Fila Geral" -- ambas produzem uma
 # grade valida, so o titulo denuncia qual das duas realmente carregou.
 _SEL_TITULO = "#eventPaneTitleValue"
-_TITULO_MINHA_FILA = "Chamados Atribuídos a mim"
 
 # Quantas vezes tenta trocar o hash antes de desistir. Existe porque a troca
 # de hash por cima da SPA ja logada nem sempre "pega" na primeira -- rever a
@@ -66,6 +111,7 @@ _JS_LER_PAGINA = """
         referencia: texto(linha.querySelector('td.eventReferenceCell')),
         afetado:    texto(linha.querySelector('td.affectedUserNameCell')),
         secao:      texto(linha.querySelector('td.department_section_nameCell')),
+        tecnico:    texto(linha.querySelector('td.assignedUser_nameCell')),
     }));
     return {
         dados,
@@ -88,8 +134,10 @@ def _titulo_atual(page) -> str:
         return ""  # painel ainda nao montado / DOM em transicao
 
 
-def ler_fila(page, log) -> list[dict] | None:
-    """Navega para 'Minha Fila' e devolve [{referencia, afetado, secao}, ...].
+def ler_fila(page, log, fila: str = MINHA_FILA) -> list[dict] | None:
+    """Navega para a `fila` (nome de FILAS_ASSYST) e devolve
+    [{referencia, afetado, secao, tecnico}, ...] (tecnico = atribuído; vazio
+    se ninguém pegou ou se a fila não tem a coluna).
 
     Assume que o login ja foi feito (sessao ativa) — quem orquestra
     (bot/services/minhafila_service.py) cuida disso, mesmo desenho do
@@ -100,7 +148,10 @@ def ler_fila(page, log) -> list[dict] | None:
     distinguidos pelo chamador para nao reportar "fila vazia" quando a
     automacao quebrou.
     """
-    log("Abrindo Minha Fila...", "status")
+    q, c, trecho = FILAS_ASSYST[fila]
+    url = _URL_FILA.format(q=q, c=c)
+    trecho = trecho.lower()
+    log(f"Abrindo a fila {fila}...", "status")
 
     # NAO fazer navegacao cheia (about:blank + goto direto pro hash): tentado
     # e devolveu tela em branco do Assyst -- a aplicacao nao inicializa direito
@@ -119,23 +170,23 @@ def ler_fila(page, log) -> list[dict] | None:
 
     titulo = ""
     for tentativa in range(1, _MAX_TENTATIVAS_NAVEGACAO + 1):
-        page.evaluate("destino => window.location.href = destino", _URL_MINHA_FILA)
+        page.evaluate("destino => window.location.href = destino", url)
         _aguardar_pagina_assentar(page)
 
         fim = time.monotonic() + 15
         while time.monotonic() < fim:
             titulo = _titulo_atual(page)
-            if _TITULO_MINHA_FILA in titulo:
+            if trecho in titulo.lower():
                 break
             time.sleep(0.3)
 
-        if _TITULO_MINHA_FILA in titulo:
+        if trecho in titulo.lower():
             break
-        log(f"A tela carregou '{titulo or '(vazio)'}' em vez de Minha Fila; "
+        log(f"A tela carregou '{titulo or '(vazio)'}' em vez da fila {fila}; "
             f"tentando de novo... ({tentativa}/{_MAX_TENTATIVAS_NAVEGACAO})", "info")
 
-    if _TITULO_MINHA_FILA not in titulo:
-        log(f"Nao consegui abrir Minha Fila -- a tela ficou em "
+    if trecho not in titulo.lower():
+        log(f"Nao consegui abrir a fila {fila} -- a tela ficou em "
             f"'{titulo or '(vazio)'}' apos {_MAX_TENTATIVAS_NAVEGACAO} tentativas.",
             "error")
         return None
