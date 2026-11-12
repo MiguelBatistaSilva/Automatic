@@ -70,9 +70,16 @@ def _limpar_produto_b(page, log, prefixo) -> None:
     log("Produto B limpo (senão o *tombo não é encontrado).", "info")
 
 
-def _preencher(page, log, prefixo, edificio: str, item_b: str) -> dict:
+def _e_item_de_verdade(valor: str) -> bool:
+    v = (valor or "").strip()
+    return bool(v) and v.upper() != _ITEM_B_NAO_LOCALIZADO
+
+
+def _preencher(page, log, prefixo, edificio: str, item_b: str,
+               avisos: list | None = None) -> dict:
     """Preenche o que precisa. Devolve {campo: (antes, depois)} do que mudou;
-    levanta RuntimeError se um campo não aceitar o valor."""
+    levanta RuntimeError se um campo não aceitar o valor. `avisos` recebe o
+    que não é erro mas o técnico precisa saber."""
     mudou = {}
     if item_b:
         campo = POR_CHAVE["item_b"]
@@ -82,9 +89,35 @@ def _preencher(page, log, prefixo, edificio: str, item_b: str) -> dict:
         else:
             if item_b.startswith("*"):
                 _limpar_produto_b(page, log, prefixo)
-            if not _preencher_item_b(page, log, prefixo, campo, item_b):
+            varios: list[str] = []
+            if not _preencher_item_b(page, log, prefixo, campo, item_b, varios):
                 raise RuntimeError(f"o Item B não aceitou {item_b!r}")
             depois = _valor_de(page, prefixo, campo)
+            tombo = item_b.lstrip("*")
+            atual = antes or "vazio"
+            # 12/11 (decisões dele): o tombo NÃO achado não troca um item de
+            # verdade por IC NÃO LOCALIZADO, e o tombo com VÁRIOS itens no
+            # Assyst não troca nada: mantém o atual e avisa (com os itens, para
+            # escolher na mão). Os campos já foram mexidos na tela: quem chama
+            # recarrega sem salvar.
+            if item_b.startswith("*") and not _e_item_de_verdade(depois) and (
+                    varios or _e_item_de_verdade(antes)):
+                if varios:
+                    msg = (f"tombo {tombo} tem {len(varios)} itens no Assyst "
+                           f"({', '.join(varios)}): escolha na mão; mantive o "
+                           f"Item B atual ({atual})")
+                else:
+                    msg = (f"tombo {tombo} não localizado no Assyst; mantive o "
+                           f"Item B atual ({atual})")
+                if avisos is not None:
+                    avisos.append(msg)
+                if edificio and _e_item_de_verdade(antes):
+                    raise RuntimeError(msg + " e não corrigi o Edifício")
+                if not edificio:
+                    log(msg[0].upper() + msg[1:] + ".", "info")
+                    return {}
+                # Com Edifício a corrigir e o Item B vazio/IC (caminho do
+                # Assistente): segue com IC NÃO LOCALIZADO, como antes, e avisa.
             # Tombo não localizado e já estava IC NÃO LOCALIZADO: o valor é
             # válido, não há o que salvar.
             if depois != antes:
@@ -123,15 +156,19 @@ def corrigir_chamado(page, log, numero: str, edificio: str = "", item_b: str = "
     if not prefixo:
         return False, {**info, "erro": "a tela do chamado não carregou os campos"}
 
+    avisos: list[str] = []
     try:
-        info["mudou"] = _preencher(page, log, prefixo, edificio, item_b)
+        info["mudou"] = _preencher(page, log, prefixo, edificio, item_b, avisos)
     except RuntimeError as e:
         page.reload()  # descarta o que ficou pela metade
         _aguardar_pagina_assentar(page)
         return False, {**info, "erro": str(e)}
+    if avisos:
+        info["aviso"] = "; ".join(avisos)
 
     if not info["mudou"]:
-        log(f"{numero}: nada a corrigir.", "success")
+        if not avisos:
+            log(f"{numero}: nada a corrigir.", "success")
         page.reload()  # o Produto B pode ter sido limpo na tentativa do tombo
         _aguardar_pagina_assentar(page)
         return True, info
@@ -165,3 +202,42 @@ def corrigir_chamado(page, log, numero: str, edificio: str = "", item_b: str = "
         return False, {**info, "erro": f"depois de salvar, {' e '.join(faltou)} não ficou gravado"}
     log(f"{numero}: correção salva e conferida.", "success")
     return True, info
+
+
+def corrigir_itens_b(pares: list[tuple[str, str]], matricula: str, senha: str,
+                     log) -> list[dict]:
+    """'Corrigir Item B' do Desmembramento (12/11): para cada (chamado, tombo),
+    confere o Item B e corrige para o tombo ('*tombo'). Já certo = pula, então
+    rodar de novo é seguro. Devolve [{chamado, tombo, situacao, detalhe}]."""
+    from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw
+
+    res = []
+    with NavegadorPW(log) as page:
+        if not _fazer_login_pw(page, matricula, senha, log):
+            log("Falha no login do Assyst.", "error")
+            return [{"chamado": c, "tombo": t, "situacao": "erro",
+                     "detalhe": "falha no login"} for c, t in pares]
+        for n, (chamado, tombo) in enumerate(pares, 1):
+            log(f"--- {n}/{len(pares)}: {chamado} · tombo {tombo} ---", "status")
+            try:
+                ok, info = corrigir_chamado(page, log, chamado, item_b=f"*{tombo}")
+            except Exception as e:
+                ok, info = False, {"erro": str(e)}
+            if not ok:
+                situacao, detalhe = "erro", info.get("erro", "")
+            elif info.get("mudou"):
+                antes, depois = info["mudou"]["Item B"]
+                situacao, detalhe = "corrigido", f"{antes or '(vazio)'} → {depois}"
+            elif info.get("aviso"):
+                situacao, detalhe = "não corrigido", info["aviso"]
+            else:
+                situacao, detalhe = "já estava certo", ""
+            res.append({"chamado": chamado, "tombo": tombo,
+                        "situacao": situacao, "detalhe": detalhe})
+
+    ok = sum(r["situacao"] in ("corrigido", "já estava certo") for r in res)
+    log(f"Fim: {ok} de {len(res)} ok.", "success" if ok == len(res) else "error")
+    for r in res:
+        log(f"  {r['chamado']} · {r['tombo']} → {r['situacao']}"
+            + (f" ({r['detalhe']})" if r["detalhe"] else ""), "info")
+    return res

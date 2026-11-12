@@ -12,6 +12,9 @@ Modos (mesma semântica do antigo aba_execucao.py do Qt):
   - doc      : Importar documento -> flow_anexo_itom_pw.anexar_documento (10/11):
                o PDF enviado pela tela é anexado a todos os chamados da lista.
                Sem checkpoint (pula o chamado que já tem o arquivo).
+  - itemb    : Corrigir Item B -> flow_corrigir_chamado_pw.corrigir_itens_b
+               (12/11): 'Chamado,tombo'; o Item B vira o tombo. Sem checkpoint
+               (o que já está certo é pulado). Tombo não achado mantém o item.
 
 Ponto delicado: o **diálogo de checkpoint**. Um evento background async não pode
 parar no meio esperando o clique do usuário; então `iniciar` (evento SYNC) valida e
@@ -62,6 +65,7 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
     doc_chamados: str = ""    # Importar documento: chamados, um por linha
     doc_nome: str = ""        # nome do PDF recebido
     doc_caminho: str = ""     # onde ele foi gravado
+    itemb_texto: str = ""     # Corrigir Item B: 'Chamado,tombo' por linha
 
     # Diálogo de checkpoint
     cp_aberto: bool = False
@@ -107,6 +111,10 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
         self.itom_texto = v
 
     @rx.event
+    def set_itemb_texto(self, v: str):
+        self.itemb_texto = v
+
+    @rx.event
     def set_doc_chamados(self, v: str):
         self.doc_chamados = v
 
@@ -146,9 +154,10 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
                 erros.append("Selecione uma Base de Conhecimento.")
         if self.modo == "bc" and not self._filhos():
             erros.append("Cole a lista de chamados filhos.")
-        if self.modo == "itom":
+        if self.modo in ("itom", "itemb"):
             from services.fluxos.flow_anexo_itom_pw import ler_pares
-            linhas, problemas = ler_pares(self.itom_texto)
+            texto = self.itom_texto if self.modo == "itom" else self.itemb_texto
+            linhas, problemas = ler_pares(texto)
             erros += problemas
             if not linhas and not problemas:
                 erros.append("Cole as linhas 'Chamado,tombo'.")
@@ -180,7 +189,7 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
         if erros:
             self.logs = self.logs + [self._linha(e, "error") for e in erros]
             return
-        if self.modo in ("itom", "doc"):
+        if self.modo in ("itom", "doc", "itemb"):
             return DesmembramentoState.executar(False)
 
         chave = self._chave()
@@ -227,6 +236,7 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
             itom_texto = self.itom_texto
             doc_chamados = self.doc_chamados
             doc_caminho = self.doc_caminho
+            itemb_texto = self.itemb_texto
             self.logs = []
             self.rodando = True
 
@@ -247,6 +257,22 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
                 anexo.executar(linhas, matricula, senha, log)
 
             async for _ in self._rodar_sync(worker_itom):
+                yield
+            async with self:
+                self.rodando = False
+            yield
+            return
+
+        if modo == "itemb":
+            from services.fluxos.flow_anexo_itom_pw import ler_pares
+            from services.fluxos.flow_corrigir_chamado_pw import corrigir_itens_b
+            linhas, _ = ler_pares(itemb_texto)
+            pares = [(l.chamado, l.tombo) for l in linhas]
+
+            def worker_itemb(log, emit):
+                corrigir_itens_b(pares, matricula, senha, log)
+
+            async for _ in self._rodar_sync(worker_itemb):
                 yield
             async with self:
                 self.rodando = False

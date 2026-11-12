@@ -549,9 +549,31 @@ def selecionar_lookup(page, log, prefixo, campo, valor: str) -> bool:
     return True
 
 
-def _preencher_item_b(page, log, prefixo, campo, valor: str) -> bool:
+# Nomes (1a coluna) das linhas da grade do dialogo de busca do lookup, achado
+# pelo botao Cancelar dele (12/11, capturado no R2512134 com *302533).
+_JS_NOMES_DO_DIALOGO = """sel => {
+    const b = document.querySelector(sel);
+    const d = b && b.closest('.dijitDialog');
+    if (!d) return [];
+    let linhas = [...d.querySelectorAll('.dojoxGridRow')];
+    if (!linhas.length) linhas = [...d.querySelectorAll('tr')];
+    return linhas.map(r => {
+        const td = r.querySelector('td');
+        return td ? td.textContent.trim() : '';
+    }).filter(Boolean);
+}"""
+
+
+def _preencher_item_b(page, log, prefixo, campo, valor: str,
+                      varios: list | None = None) -> bool:
     """Preenche 'Item B' — igual ao lookup comum, mas com uma rede de segurança
     especifica deste campo.
+
+    `varios` (12/11): quando o tombo tem MAIS DE UM item no Assyst (ex.: 302533
+    = FCBTELJUS302533 e FJE17JECC302533), o widget nao resolve e abre o
+    dialogo de busca com os candidatos; o desfecho continua o mesmo (IC NAO
+    LOCALIZADO), mas os nomes dos itens com esse tombo vao para `varios`, para
+    quem chamou decidir (a correcao do Item B mantem o atual e lista).
 
     NEM TODO VALOR DE ITEM B E UM TOMBO. Muitas vezes e so uma palavra normal, e
     o esperado e ela SER encontrada pelo caminho comum (dropdown de sugestoes,
@@ -651,9 +673,24 @@ def _preencher_item_b(page, log, prefixo, campo, valor: str) -> bool:
             log(f"{campo.rotulo}: {gravado}", "success")
             return True
 
-        log(f"'{campo.rotulo}': {valor!r} nao foi localizado (dialogo com "
-            f"resultsCount={contagem!r}); fechando e usando "
-            f"'{_ITEM_B_NAO_LOCALIZADO}'.", "info")
+        candidatos = []
+        if valor.startswith("*"):
+            try:
+                nomes = page.evaluate(_JS_NOMES_DO_DIALOGO, sel_cancelar) or []
+            except Exception:
+                nomes = []
+            tombo = valor.lstrip("*")
+            candidatos = sorted({n for n in nomes if n.endswith(tombo)})
+        if len(candidatos) > 1:
+            if varios is not None:
+                varios.extend(candidatos)
+            log(f"'{campo.rotulo}': o tombo {valor.lstrip('*')} tem {len(candidatos)} "
+                f"itens no Assyst ({', '.join(candidatos)}); fechando e usando "
+                f"'{_ITEM_B_NAO_LOCALIZADO}'.", "info")
+        else:
+            log(f"'{campo.rotulo}': {valor!r} nao foi localizado (dialogo com "
+                f"resultsCount={contagem!r}); fechando e usando "
+                f"'{_ITEM_B_NAO_LOCALIZADO}'.", "info")
         try:
             page.locator(sel_cancelar).click(timeout=5000)
         except Exception as e:

@@ -228,6 +228,33 @@ def _painel_itom() -> rx.Component:
     )
 
 
+def _painel_itemb() -> rx.Component:
+    return rx.vstack(
+        rx.text(
+            "Confere o Item B de cada chamado e corrige para o tombo informado. "
+            "O que já está certo é pulado. Se o tombo não for achado no Assyst, "
+            "ou tiver mais de um item, o Item B atual é mantido e o chamado aparece "
+            "no resultado.",
+            color="#6B7280", size="2",
+        ),
+        duas_colunas(
+            coluna(
+                rx.text("Chamado,tombo (um por linha)", weight="bold"),
+                rx.text_area(
+                    placeholder="R2512134,311026\nR2512135,265539",
+                    value=DesmembramentoState.itemb_texto,
+                    on_change=DesmembramentoState.set_itemb_texto,
+                    height=ALTURA_TEXTAREA,
+                    width="100%",
+                    font_family="monospace",
+                ),
+            ),
+            rx.box(flex="1"),
+        ),
+        spacing="4", width="100%",
+    )
+
+
 def _painel_doc() -> rx.Component:
     return rx.vstack(
         rx.text(
@@ -335,6 +362,7 @@ def desmembramento_page() -> rx.Component:
                     rx.segmented_control.item("Só Base", value="bc"),
                     rx.segmented_control.item("Adicionar Itom", value="itom"),
                     rx.segmented_control.item("Importar documento", value="doc"),
+                    rx.segmented_control.item("Corrigir Item B", value="itemb"),
                     value=DesmembramentoState.modo,
                     on_change=DesmembramentoState.set_modo,
                 ),
@@ -345,6 +373,7 @@ def desmembramento_page() -> rx.Component:
                     ("bc", _painel_bc()),
                     ("itom", _painel_itom()),
                     ("doc", _painel_doc()),
+                    ("itemb", _painel_itemb()),
                     _painel_completo(),
                 ),
                 botao_primario(
