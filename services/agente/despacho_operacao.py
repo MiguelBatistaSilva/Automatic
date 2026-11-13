@@ -133,6 +133,48 @@ def secao_legivel(secao: str) -> str:
     return " ".join(palavras)
 
 
+# "Secretaria da 3ª Vara..., setor verde, nível 1, sala 103." (13/11): a
+# localidade escrita solta na descrição, sem "Local:". Só os pedaços de onde é
+# (nível, setor, sala, andar) entram; o resto da frase repetiria a seção.
+_PEDACOS_LOCAL = (
+    ("Nível", r"n[ií]vel\s*[:\-]?\s*([^,.;\n]{1,20})"),
+    ("Setor", r"setor\s*[:\-]?\s*([^,.;\n]{1,25})"),
+    ("Sala", r"sala\s*(?:n[º°o.]*\s*)?[:\-]?\s*([^,.;\n]{1,25})"),
+    ("Andar", r"(\d+)\s*[º°o]?\s*andar\b"),
+)
+
+
+def _palavras_local(valor: str) -> str:
+    # Corta no próximo pedaço ("azul - Sala 214") e no "da 2ª vara" do fim.
+    valor = re.split(r"\s+[-–]\s*|\s(?=(?:n[ií]vel|setor|sala)\b)", valor, flags=re.I)[0]
+    valor = re.sub(r"\s+d[aoe]s?\s+\d.*$", "", valor)
+    out = []
+    for i, p in enumerate(valor.split()[:4]):
+        k = _chave(p)
+        out.append(k if k in _MINUSCULAS else
+                   p if p[:1].isdigit() else p[:1].upper() + p[1:].lower())
+    return " ".join(out)
+
+
+def local_na_descricao(texto: str) -> str:
+    """'..., setor verde, nível 1, sala 103.' -> 'Nível 1, Setor Verde, Sala 103'.
+    Lê a 1ª linha que tenha sala/nível/setor/andar. '' = nenhuma."""
+    for linha in (texto or "").splitlines():
+        achados = {}
+        for rotulo, rx in _PEDACOS_LOCAL:
+            m = re.search(r"\b" + rx, linha, re.I)
+            if m and m[1].strip():
+                achados[rotulo] = m[1].strip()
+        if not achados:
+            continue
+        partes = [f"{r} {_palavras_local(achados[r])}"
+                  for r in ("Nível", "Setor", "Sala") if r in achados]
+        if "Andar" in achados:
+            partes.insert(0, f"{achados['Andar']}º Andar")
+        return ", ".join(partes)
+    return ""
+
+
 def localizacao(secao: str, sala: str = "", local_descrito: str = "",
                 edificio: str = "") -> str:
     """'15ª Vara de Família, Nível 2, Setor Verde, Sala 314' (formato da equipe,

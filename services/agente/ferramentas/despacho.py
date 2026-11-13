@@ -57,7 +57,10 @@ def _antes_despacho(args: dict, s: Sessao) -> dict:
     f = ler_ficha(s.pagina, chamados[0], s.log) if len(chamados) == 1 else None
     if f is not None:
         out["_lido_do_chamado"] = True
-        local = dop.localizacao(f.secao, f.sala, f.local_descrito, f.edificio)
+        # "Local:" da descrição; senão nível/setor/sala escritos soltos nela
+        # (13/11); senão Sala e Edifício dos campos.
+        onde = f.local_descrito or dop.local_na_descricao(f.pedido_com_linhas)
+        local = dop.localizacao(f.secao, f.sala, onde, f.edificio)
         if local:
             out["_local"] = local
         tombos = list(f.tombos)
