@@ -21,6 +21,7 @@ from services.agente import agendados
 
 @dataclasses.dataclass
 class AgendaItem:
+    id: str
     chamado: str
     quando_label: str
     status: str
@@ -31,6 +32,9 @@ class AtendimentoState(rx.State):
     agenda: list[AgendaItem] = []
     novo_chamado: str = ""
     data_hora: str = ""     # input datetime-local -> "2026-07-25T14:30"
+    # Modo Sentinela (13/11): services/agente/sentinela.py
+    sentinela_ligado: bool = False
+    sentinela_info: str = ""
 
     # setters
     @rx.event
@@ -44,12 +48,45 @@ class AtendimentoState(rx.State):
     def _ler_agenda(self) -> None:
         from services.dados import credenciais
         pendentes, encerrados = agendados.listar(credenciais._ler_matricula())
-        self.agenda = [AgendaItem(t["chamado"], t["quando"], t["status"], t["detalhe"])
+        self.agenda = [AgendaItem(t["id"], t["chamado"], t["quando"], t["status"], t["detalhe"])
                        for t in pendentes + encerrados]
+
+    def _ler_sentinela(self) -> None:
+        from datetime import datetime as _dt
+        from services.agente import sentinela
+        e = sentinela.estado()
+        self.sentinela_ligado = bool(e.get("ligado"))
+        r = e.get("resumo") or {}
+        if not self.sentinela_ligado:
+            self.sentinela_info = "Varre a fila 2N CATI FCB a cada 5 h e agenda os Programados."
+        elif e.get("rodando"):
+            self.sentinela_info = f"Varrendo a fila {sentinela.FILA} agora..."
+        else:
+            proxima = _dt.fromtimestamp(e.get("proxima", 0)).strftime("%d/%m %H:%M")
+            ultima = f"Última varredura {r['quando']}" if r else "Ainda não varreu"
+            self.sentinela_info = f"{ultima}; próxima {proxima}."
 
     @rx.event
     def carregar(self):
         self._ler_agenda()
+        self._ler_sentinela()
+
+    @rx.event
+    def alternar_sentinela(self):
+        from services.agente import sentinela
+        from services.dados import credenciais
+        if self.sentinela_ligado:
+            sentinela.desligar()
+            self._ler_sentinela()
+            return rx.toast.info("Sentinela desligado.")
+        matricula, senha = credenciais.carregar()
+        if not matricula or not senha:
+            return rx.toast.error("Credenciais não cadastradas (configure no app).")
+        sentinela.ligar(matricula)
+        self._ler_sentinela()
+        return rx.toast.success(
+            f"Sentinela ligado: a 1ª varredura começa em até 1 min e se repete "
+            f"a cada {sentinela.INTERVALO_H} h. Clique em Atualizar para ver.")
 
     @rx.event
     def adicionar(self):
@@ -73,9 +110,9 @@ class AtendimentoState(rx.State):
         self._ler_agenda()
 
     @rx.event
-    def remover(self, chamado: str):
+    def remover(self, id_tarefa: str):
         from services.dados import credenciais
-        feitos = agendados.cancelar([chamado], credenciais._ler_matricula())
+        feito = agendados.excluir(id_tarefa, credenciais._ler_matricula())
         self._ler_agenda()
-        if not feitos:
-            return rx.toast.error("Esse início não está mais pendente.")
+        if not feito:
+            return rx.toast.error("Esse início está em execução agora: não dá para excluir.")

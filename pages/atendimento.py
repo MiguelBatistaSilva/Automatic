@@ -7,7 +7,7 @@ Só a view: formulário de agendamento e tabela da agenda. O back-end está em
 
 import reflex as rx
 
-from services.agente.agendados import CANCELADO, CONCLUIDO, ERRO, EXECUTANDO, PENDENTE, _TOLERANCIA_MIN
+from services.agente.agendados import AGUARDANDO, CANCELADO, CONCLUIDO, ERRO, EXECUTANDO, PENDENTE, _TOLERANCIA_MIN
 from state.atendimento_state import AtendimentoState
 from components.layout import page_layout
 from components.botoes import botao_primario, botao_secundario, botao_icone
@@ -22,6 +22,7 @@ def _badge_status(status: rx.Var) -> rx.Component:
         (CONCLUIDO, rx.badge("Concluído", color_scheme="green")),
         (ERRO, rx.badge("Erro", color_scheme="red")),
         (CANCELADO, rx.badge("Cancelado", color_scheme="amber")),
+        (AGUARDANDO, rx.badge("Aguardando", color_scheme="orange")),
         rx.badge("Pendente", color_scheme="gray"),  # PENDENTE = caso padrão
     )
 
@@ -29,16 +30,16 @@ def _badge_status(status: rx.Var) -> rx.Component:
 def _linha_agenda(item: rx.Var) -> rx.Component:
     return rx.table.row(
         rx.table.cell(item.chamado),
-        rx.table.cell(item.quando_label),
+        rx.table.cell(rx.cond(item.quando_label != "", item.quando_label, "—")),
         rx.table.cell(_badge_status(item.status)),
         rx.table.cell(item.detalhe),
         rx.table.cell(
             rx.cond(
-                item.status == PENDENTE,
+                item.status != EXECUTANDO,
                 botao_icone(
                     "x",
-                    on_click=AtendimentoState.remover(item.chamado),
-                    title="Cancelar o início",
+                    on_click=AtendimentoState.remover(item.id),
+                    title="Excluir da agenda",
                 ),
             ),
         ),
@@ -94,7 +95,20 @@ def atendimento_page() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.text("Agenda", weight="bold"),
-                    botao_secundario("Atualizar", on_click=AtendimentoState.carregar),
+                    rx.hstack(
+                        rx.button(
+                            rx.icon("shield", size=16),
+                            rx.cond(AtendimentoState.sentinela_ligado,
+                                    "Sentry Mode: ligado", "Sentry Mode"),
+                            on_click=AtendimentoState.alternar_sentinela,
+                            variant=rx.cond(AtendimentoState.sentinela_ligado, "solid", "soft"),
+                            color_scheme=rx.cond(AtendimentoState.sentinela_ligado, "green", "gray"),
+                            cursor="pointer",
+                            title=AtendimentoState.sentinela_info,
+                        ),
+                        botao_secundario("Atualizar", on_click=AtendimentoState.carregar),
+                        spacing="2",
+                    ),
                     justify="between",
                     align="center",
                     width="100%",

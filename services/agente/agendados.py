@@ -39,6 +39,9 @@ from services.dados import db
 TIPO = "iniciar_programado"
 PENDENTE, EXECUTANDO = "pendente", "executando"
 CONCLUIDO, ERRO, CANCELADO = "concluido", "erro", "cancelado"
+# 13/11: Programado que o sentinela achou sem dia/hora no texto. Fica na tabela
+# para o técnico ver; o vigia nunca roda (sem executar_em).
+AGUARDANDO = "aguardando"
 
 _INTERVALO_S = 20
 _ATRASO_MIN = 5   # acima disto, o aviso diz a hora que estava marcada
@@ -69,6 +72,9 @@ def agendar(numero: str, quando: datetime.datetime, matricula: str, chat_id=None
     numero = numero.strip().upper()
     with db.transacao() as con:
         con.execute(
+            "DELETE FROM tarefas WHERE tipo = ? AND status = ? "
+            "AND json_extract(dados, '$.chamado') = ?", (TIPO, AGUARDANDO, numero))
+        con.execute(
             "UPDATE tarefas SET status = ?, detalhe = 'Programado de novo.', "
             "atualizado_em = datetime('now', 'localtime') "
             "WHERE tipo = ? AND status = ? AND json_extract(dados, '$.chamado') = ?",
@@ -81,6 +87,41 @@ def agendar(numero: str, quando: datetime.datetime, matricula: str, chat_id=None
              quando.timestamp(), quando.strftime("%d/%m/%Y %H:%M"), PENDENTE))
 
 
+def aguardar(numero: str, matricula: str, detalhe: str) -> bool:
+    """Põe na tabela como Aguardando (não há hora para iniciar: sem data ou
+    horário já passado). Já estando lá, só atualiza o detalhe; pendente não é
+    mexido. True = entrou agora."""
+    numero = numero.strip().upper()
+    with db.transacao() as con:
+        if con.execute(
+                "SELECT 1 FROM tarefas WHERE tipo = ? AND status = ? "
+                "AND json_extract(dados, '$.chamado') = ?",
+                (TIPO, PENDENTE, numero)).fetchone():
+            return False
+        if con.execute(
+                "UPDATE tarefas SET detalhe = ?, atualizado_em = datetime('now', 'localtime') "
+                "WHERE tipo = ? AND status = ? AND json_extract(dados, '$.chamado') = ?",
+                (detalhe, TIPO, AGUARDANDO, numero)).rowcount:
+            return False
+        con.execute(
+            "INSERT INTO tarefas (id, tipo, quem, dados, executar_em_label, status, detalhe) "
+            "VALUES (?, ?, ?, ?, '', ?, ?)",
+            (uuid.uuid4().hex, TIPO, matricula,
+             json.dumps({"chamado": numero}, ensure_ascii=False), AGUARDANDO, detalhe))
+    return True
+
+
+def limpar_aguardando(matricula: str, manter: set[str]) -> None:
+    """Tira os Aguardando que não estão mais em `manter` (o chamado foi
+    iniciado, saiu da fila ou ganhou dia/hora)."""
+    with db.transacao() as con:
+        for r in con.execute(
+                "SELECT id, dados FROM tarefas WHERE tipo = ? AND quem = ? AND status = ?",
+                (TIPO, matricula, AGUARDANDO)).fetchall():
+            if json.loads(r["dados"])["chamado"] not in manter:
+                con.execute("DELETE FROM tarefas WHERE id = ?", (r["id"],))
+
+
 def _dict(r) -> dict:
     return {"id": r["id"], "chamado": json.loads(r["dados"])["chamado"], "chat_id": r["chat_id"],
             "quem": r["quem"], "quando": r["executar_em_label"], "executar_em": r["executar_em"],
@@ -90,12 +131,13 @@ def _dict(r) -> dict:
 def listar(matricula: str) -> tuple[list[dict], list[dict]]:
     """(pendentes, os 10 últimos já encerrados) desta matrícula."""
     pendentes = db.consultar(
-        "SELECT * FROM tarefas WHERE tipo = ? AND quem = ? AND status IN (?, ?) ORDER BY executar_em",
-        (TIPO, matricula, PENDENTE, EXECUTANDO))
+        "SELECT * FROM tarefas WHERE tipo = ? AND quem = ? AND status IN (?, ?, ?) "
+        "ORDER BY executar_em IS NULL, executar_em",
+        (TIPO, matricula, PENDENTE, EXECUTANDO, AGUARDANDO))
     encerrados = db.consultar(
-        "SELECT * FROM tarefas WHERE tipo = ? AND quem = ? AND status NOT IN (?, ?) "
+        "SELECT * FROM tarefas WHERE tipo = ? AND quem = ? AND status NOT IN (?, ?, ?) "
         "ORDER BY atualizado_em DESC LIMIT 10",
-        (TIPO, matricula, PENDENTE, EXECUTANDO))
+        (TIPO, matricula, PENDENTE, EXECUTANDO, AGUARDANDO))
     return [_dict(r) for r in pendentes], [_dict(r) for r in encerrados]
 
 
@@ -112,6 +154,15 @@ def cancelar(numeros: list[str], matricula: str) -> list[str]:
             if feitos:
                 cancelados.append(numero)
     return cancelados
+
+
+def excluir(id_tarefa: str, matricula: str) -> bool:
+    """O X da tela (13/11): apaga a linha da agenda. Só isso: agendar de novo
+    (técnico, Assistente ou sentinela) cria outra. Em execução não apaga."""
+    with db.transacao() as con:
+        return bool(con.execute(
+            "DELETE FROM tarefas WHERE id = ? AND quem = ? AND status != ?",
+            (id_tarefa, matricula, EXECUTANDO)).rowcount)
 
 
 def _pegar_vencidas(agora: float) -> list[dict]:

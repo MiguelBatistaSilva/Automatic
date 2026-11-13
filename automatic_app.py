@@ -52,6 +52,13 @@ def _vigiar_agendados():
     iniciar_vigia()
 
 
+def _vigiar_sentinela():
+    """Modo Sentinela da página Iniciar Atendimento (services/agente/sentinela.py).
+    Só o app roda (é ligado nesta máquina, com o login do app)."""
+    from services.agente.sentinela import iniciar_vigia
+    iniciar_vigia()
+
+
 def _retomar_bot():
     """Quem ligou o bot pela tela do Assistente: volta a ligar ao abrir o app."""
     from services import bot_processo
@@ -59,6 +66,7 @@ def _retomar_bot():
 
 
 app.register_lifespan_task(_vigiar_agendados)
+app.register_lifespan_task(_vigiar_sentinela)
 app.register_lifespan_task(_retomar_bot)
 
 app.add_page(

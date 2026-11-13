@@ -412,7 +412,9 @@ def _exec_consultar_agendados(a, s: Sessao) -> Resultado:
     if not pendentes and not encerrados:
         return Resultado("Nenhum início agendado.")
     linhas = ["**Inícios agendados**"]
-    linhas += [f"- {t['chamado']} — {t['quando']}"
+    linhas += [f"- {t['chamado']} — "
+               + (f"aguardando: {t['detalhe']}" if t["status"] == agendados.AGUARDANDO
+                  else t["quando"])
                + (" (iniciando agora)" if t["status"] == agendados.EXECUTANDO else "")
                for t in pendentes] or ["- nenhum pendente"]
     if encerrados:
