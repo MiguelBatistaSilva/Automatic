@@ -245,6 +245,18 @@ _ESQUEMA: list[str] = [
     """
     DROP TABLE IF EXISTS requisicao_presets
     """,
+    # v10 — 2026-11-16: o que é preciso para RODAR DE NOVO um lote do
+    # Desmembramento (modo, base, descrição, CSV, chamados/tombos, PDF), pela
+    # chave do checkpoint. É o "Retomar" da página "Meus fluxos"
+    # (services/dados/memoria_lote.py). Um por chave: o último lote rodado
+    # com aquela chave, que é o da rodada vigente.
+    """
+    CREATE TABLE lotes (
+        chave          TEXT PRIMARY KEY,
+        parametros     TEXT NOT NULL DEFAULT '{}',
+        atualizado_em  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    )
+    """,
 ]
 
 _init_lock = threading.Lock()

@@ -19,13 +19,6 @@ from services.agente.ferramentas.base import (
     _ok_falha,
     _sem_acento,
 )
-from services.agente.ferramentas.verificacoes import (
-    _EDIFICIO_DITO,
-    _antes_corrigir,
-    _com_correcoes,
-    _executar_correcoes,
-    marca_correcao,
-)
 from services.agente.sessao import Resultado, Sessao
 
 
@@ -241,6 +234,16 @@ def _antes_desmembrar(args: dict, s: Sessao) -> dict:
     return out
 
 
+def _guardar_lote(chave: str, parametros: dict) -> None:
+    """Os campos da tela do Desmembramento para este lote: o "Retomar" da
+    página "Meus fluxos" abre a tela com eles (16/11). Nunca atrapalha o fluxo."""
+    try:
+        from services.dados import memoria_lote
+        memoria_lote.guardar_parametros(chave, parametros)
+    except Exception:
+        pass
+
+
 def _kb_config(nome_base: str) -> dict:
     from services.dados import kb_store
     e = next(e for e in kb_store.carregar() if e["nome_artigo"] == nome_base)
@@ -257,6 +260,10 @@ def _exec_desmembrar(a: dict, s: Sessao) -> Resultado:
 
     pai, tombos = a["chamado_pai"], a["tombos"]
     df = pd.DataFrame([[t] for t in tombos], columns=["tombo"])
+    # O lote pode ser retomado pela página "Meus fluxos" (16/11).
+    _guardar_lote(pai, {"modo": "completo" if a["base"] else "criar", "chamado_pai": pai,
+                        "descricao": a["descricao"], "csv_texto": "tombo\n" + "\n".join(tombos),
+                        **({"kb": a["base"]} if a["base"] else {})})
     page = s.pagina()
     if a["base"]:
         kb = _kb_config(a["base"])
@@ -299,7 +306,7 @@ def _prep_aplicar_base(args: dict) -> "Acao | str":
     if erro:
         return erro
     sit = ds.situacao(ds.chave_bc(chamados))
-    return _com_correcoes(Acao(
+    return Acao(
         ferramenta="aplicar_base",
         args={"chamados": chamados, "base": base},
         titulo="Aplicar Base (Só Base)",
@@ -308,7 +315,7 @@ def _prep_aplicar_base(args: dict) -> "Acao | str":
         escreve=True,
         checkpoint=sit["estado"],
         aviso=sit.get("resumo", ""),
-    ), args, "aplicar a base")
+    )
 
 
 def _exec_aplicar_base(a: dict, s: Sessao) -> Resultado:
@@ -316,10 +323,10 @@ def _exec_aplicar_base(a: dict, s: Sessao) -> Resultado:
     from services.fluxos.flow_desmembramento_pw import FluxoBCPW, _chave_checkpoint
     from services.fluxos.kb_manager_pw import executar_kb_unica_pw
 
-    # Corrige antes (30/10). Aqui a falha não segura a base (ela não fecha o
-    # chamado): só vai para o resultado.
-    correcoes = _executar_correcoes(a, s)
-    kb = _kb_config(a["base"])
+    # Até 16/11 corrigia Edifício/Item B antes; ele separou (uma coisa por vez).
+    _guardar_lote(_chave_checkpoint(a["chamados"]),
+                  {"modo": "bc", "filhos_texto": "\n".join(a["chamados"]), "kb": a["base"]})
+    kb =_kb_config(a["base"])
     FluxoBCPW(s.pagina(), s.matricula, s.senha, s.log, origem="ui").executar(
         filhos=a["chamados"],
         kb_function=lambda p, l: executar_kb_unica_pw(p, l, kb, voltar_ao_evento=False),
@@ -332,7 +339,6 @@ def _exec_aplicar_base(a: dict, s: Sessao) -> Resultado:
         st = por_indice.get(i, "pendente")
         feitos += st == "concluido"
         linhas.append(f"- {_ok_falha(st == 'concluido')} {c}" + ("" if st == "concluido" else f" ({st})"))
-    linhas += [f"- {marca_correcao(ok, txt)} Correção {n} — {txt}" for n, (ok, txt) in correcoes.items()]
     cab = f"**Base {a['base']}** — {feitos} de {len(a['chamados'])} chamado(s)."
     return Resultado("\n".join([cab] + linhas), ok=feitos == len(a["chamados"]))
 
@@ -386,9 +392,8 @@ FERRAMENTAS: list[Ferramenta] = [
             "base": {"type": "string", "description":
                      "As palavras que o técnico disse (ex.: 'memória'); o sistema acha "
                      "a base ou devolve as opções. Não peça o nome completo antes."},
-            "edificio": _EDIFICIO_DITO,
         }, "required": ["chamados", "base"]},
-        preparar=_prep_aplicar_base, executar=_exec_aplicar_base, antes=_antes_corrigir,
+        preparar=_prep_aplicar_base, executar=_exec_aplicar_base,
         dominio="chamados",
     ),
 ]

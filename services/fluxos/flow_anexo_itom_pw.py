@@ -27,8 +27,9 @@ comum de um form multipart: o arquivo só sobe no Salvar), Nome
 botões Novo, Salvar, Excluir e Encerrar (`#dialogCancel`); embaixo a lista
 "Anexos" com os já anexados.
 
-Sem checkpoint: antes de anexar, o fluxo olha a lista do pop-up; se o PDF
-daquela máquina já está lá, pula. Rodar de novo é seguro.
+Antes de anexar, o fluxo olha a lista do pop-up; se o PDF daquela máquina
+já está lá, pula. Rodar de novo é seguro. A memória do lote (checkpoint) é
+de quem chama (services/dados/memoria_lote.py), avisado por `ao_terminar`.
 
 `modo_teste`: escolhe o arquivo e PARA antes do Salvar (Encerrar sem salvar).
 """
@@ -235,10 +236,22 @@ def ler_chamados(texto: str) -> tuple[list[str], list[str]]:
     return chamados, erros
 
 
+def _avisar(ao_terminar, i: int, l: Linha, log) -> None:
+    """Avisa quem chamou que a linha i terminou (memória chamado a chamado,
+    16/11). Erro no aviso não para o fluxo."""
+    if ao_terminar is None:
+        return
+    try:
+        ao_terminar(i, l.situacao)
+    except Exception as e:
+        log(f"Não consegui anotar {l.chamado} na memória do lote: {e}", "error")
+
+
 def anexar_documento(chamados: list[str], pdf: str, matricula: str, senha: str,
-                     log, modo_teste: bool = False) -> list[Linha]:
+                     log, modo_teste: bool = False, ao_terminar=None) -> list[Linha]:
     """'Importar documento' (10/11): o mesmo PDF anexado a vários chamados.
-    Pula o chamado que já tem um anexo com o mesmo nome de arquivo."""
+    Pula o chamado que já tem um anexo com o mesmo nome de arquivo.
+    `ao_terminar(indice, situacao)`: chamado a cada chamado terminado (16/11)."""
     from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw
 
     linhas = [Linha(c, "", pdf=pdf) for c in chamados]
@@ -248,12 +261,13 @@ def anexar_documento(chamados: list[str], pdf: str, matricula: str, senha: str,
             for l in linhas:
                 l.situacao, l.detalhe = "erro", "falha no login do Assyst"
         else:
-            for l in linhas:
+            for i, l in enumerate(linhas):
                 try:
                     anexar(page, log, l, modo_teste)
                 except Exception as e:
                     l.situacao, l.detalhe = "erro", str(e)
                     log(f"{l.chamado}: erro ao anexar ({e}).", "error")
+                _avisar(ao_terminar, i, l, log)
 
     ok = sum(l.situacao in ("anexado", "já anexado", "simulado") for l in linhas)
     log(f"Fim: {ok} de {len(linhas)} ok.", "success" if ok == len(linhas) else "error")
@@ -264,12 +278,15 @@ def anexar_documento(chamados: list[str], pdf: str, matricula: str, senha: str,
 
 
 def executar(linhas: list[Linha], matricula: str, senha: str, log,
-             modo_teste: bool = False) -> list[Linha]:
+             modo_teste: bool = False, ao_terminar=None) -> list[Linha]:
+    """`ao_terminar(indice, situacao)`: chamado a cada chamado anexado (ou com
+    erro no anexo) — a memória do lote anota na hora (16/11)."""
     from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw
 
     log(f"{len(linhas)} chamado(s). 1/2: gerando os PDFs no Itom...", "status")
     gerar_pdfs(linhas, matricula, senha, log)
     pendentes = [l for l in linhas if l.pdf and not l.situacao]
+    pos = {id(l): i for i, l in enumerate(linhas)}  # linha repetida tem índice próprio
     if pendentes:
         log("2/2: anexando no Assyst...", "status")
         with NavegadorPW(log) as page:
@@ -283,6 +300,7 @@ def executar(linhas: list[Linha], matricula: str, senha: str, log,
                     except Exception as e:
                         l.situacao, l.detalhe = "erro", str(e)
                         log(f"{l.chamado}: erro ao anexar ({e}).", "error")
+                    _avisar(ao_terminar, pos[id(l)], l, log)
 
     ok = sum(l.situacao in ("anexado", "já anexado", "simulado") for l in linhas)
     log(f"Fim: {ok} de {len(linhas)} ok.", "success" if ok == len(linhas) else "error")

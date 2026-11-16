@@ -29,7 +29,9 @@ from services.agente.ferramentas.verificacoes import (
     _com_correcoes,
     _executar_correcoes,
     _executar_retomadas,
+    chave_correcoes,
     marca_correcao,
+    memoria_no_cartao,
     _pergunta_edificio,
     _retomada,
 )
@@ -52,14 +54,14 @@ def _prep_corrigir(args: dict) -> "Acao | str":
     if not args.get("_correcoes"):
         return ("Nada a corrigir: Edifício e Item B estão certos em "
                 f"{_lista_curta(chamados)}. Diga isso ao técnico.")
-    return Acao(
+    return memoria_no_cartao(Acao(
         ferramenta="corrigir_chamado",
         args={"chamados": list(args["_correcoes"]), "correcoes": args["_correcoes"]},
         titulo="Corrigir chamado",
         linhas=["**Corrigir:**\n" + "\n".join(f"- {l}" for l in args["_linhas_correcao"])],
         escreve=True,
         pode_simular=True,
-    )
+    ), chave_correcoes(args["_correcoes"]))
 
 
 def _exec_corrigir(a: dict, s: Sessao) -> Resultado:
@@ -486,7 +488,9 @@ def _prep_resolver(args: dict) -> "Acao | str":
 
 def _exec_resolver(a, s: Sessao) -> Resultado:
     from services.fluxos.flow_resolver_pw import resolver_chamado
-    # Retoma e corrige antes (30/10): se um dos dois falhar, não resolve.
+    # Retoma e corrige antes (30/10). Só resolve com TUDO certo (16/11): falha
+    # na retomada ou na correção, ou correção não feita (⚠️, ex.: tombo com
+    # vários itens), e o chamado fica sem resolver.
     retomadas = _executar_retomadas(a, s)
     correcoes = _executar_correcoes(a, s)
     page = s.pagina()
@@ -504,12 +508,10 @@ def _exec_resolver(a, s: Sessao) -> Resultado:
                 linhas.append(f"- {numero} — Resolver não simulado: depende da retomada salva")
                 continue
         corr = correcoes.get(numero.strip().upper())
-        if corr and not corr[0]:
+        if corr and marca_correcao(*corr) != "✅":
             linhas.append(f"- {_ok_falha(False)} {numero} — NÃO resolvido: {corr[1]}")
             continue
-        if corr and marca_correcao(*corr) == "⚠️":
-            linhas.append(f"- ⚠️ {numero} — {corr[1]}")
-        elif corr:
+        if corr:
             linhas.append(f"- Corrigido {numero} — {corr[1]}")
         s.log(f"Resolvendo o chamado {numero}...", "status")
         try:
@@ -545,14 +547,15 @@ FERRAMENTAS: list[Ferramenta] = [
                         "Só quando o sistema avisar que está pausado e o técnico "
                         "autorizar retomar antes."},
         }, "required": ["chamados", "procedimentos"]},
-        # Confere relógio, Edifício e Item B antes de resolver (30/10).
+        # Confere relógio, Edifício e Item B antes de resolver (30/10); só
+        # resolve o chamado que ficou certo (16/11).
         preparar=_prep_resolver, executar=_exec_resolver, antes=_antes_resolver,
         dominio="chamados",
     ),
     Ferramenta(
         "corrigir_chamado",
         "Corrige Edifício e Item B do chamado pela triagem (o sistema lê e decide "
-        "o valor). Resolver e aplicar base já corrigem sozinhos.",
+        "o valor). O resolver já corrige sozinho; aplicar base não.",
         {"type": "object", "properties": {
             "chamados": _CHAMADOS,
             "edificio": _EDIFICIO_DITO,

@@ -59,6 +59,9 @@ CASOS = [
     ("Adiciona o itom nos chamados do Aureliano na fila do 2N CATI Sala de Imagem", {C}),
     ("Corrigi o Item B de todos os chamados do Adriano na fila do 2N CATI FCB", {C}),
     ("coloca o itom nos meus chamados da fila FCB", {C}),
+    # retomar_lote (16/11).
+    ("retoma o fluxo de base", {C}),
+    ("continua aquele desmembramento que parou", {C}),
     ("inicia o atendimento do R2479463", {C}),
     ("programa o R2479463 pra amanhã às 14h, o usuário está em reunião", {C}),
     ("aplica a base de impressora no R2479463", {C}),

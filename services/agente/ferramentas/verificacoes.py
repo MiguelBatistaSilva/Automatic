@@ -1,9 +1,10 @@
 """
-services/agente/ferramentas/verificacoes.py — O que o código confere no
-chamado ANTES de resolver, aplicar base ou desmembrar (30/10).
+services/agente/ferramentas/verificacoes.py — Correção de Edifício/Item B
+pela triagem (corrigir_chamado, corrigir_item_b) e relógio pausado antes de
+resolver (pares de retomada). Usado por várias ferramentas e pelo agendados.py.
 
-Correção de Edifício/Item B pela triagem e relógio pausado (pares de
-retomada). Usado por várias ferramentas e pelo agendados.py.
+16/11: aplicar base NÃO corrige mais antes (pedido dele: uma coisa por vez).
+O resolver continua corrigindo antes e só resolve o chamado que ficou certo.
 """
 
 import datetime
@@ -12,14 +13,14 @@ from services.agente.ferramentas.base import _lista
 from services.agente.sessao import Sessao
 
 # --------------------------------------------------------------------------- #
-# Correção do chamado (30/10) — Edifício e Item B antes de resolver/aplicar base
+# Correção do chamado (30/10) — Edifício e Item B
 # --------------------------------------------------------------------------- #
 #
-# O técnico pede "aplica a base e resolve" sem olhar o chamado: o `antes`
-# lê a ficha, roda a triagem (services/agente/triagem.py) e o cartão já sai
-# com o que corrigir. Correção certa entra no cartão; dúvida (seção ambígua,
-# palpite pela cidade) volta à IA como pergunta, e a resposta vem em
-# `edificio`. O fluxo é o flow_corrigir_chamado_pw.
+# O `antes` lê a ficha, roda a triagem (services/agente/triagem.py) e o
+# cartão já sai com o que corrigir. Correção certa entra no cartão; dúvida
+# (seção ambígua, palpite pela cidade) volta à IA como pergunta, e a resposta
+# vem em `edificio`. O fluxo é o flow_corrigir_chamado_pw. O resolver também
+# corrige antes; o aplicar base corrigia até 16/11.
 
 _EDIFICIO_DITO = {"type": "string", "description":
                   "Só quando o sistema perguntar o Edifício: o que o técnico escolheu."}
@@ -85,7 +86,8 @@ def _pergunta_edificio(args: dict, verbo: str) -> str:
 
 
 def _com_correcoes(r: "Acao | str", args: dict, verbo: str) -> "Acao | str":
-    """Junta ao cartão o que o `antes` achou. Dúvida no Edifício = pergunta."""
+    """Junta ao cartão o que o `antes` achou. Dúvida no Edifício = pergunta.
+    Só o resolver usa (16/11: aplicar base não corrige mais)."""
     if isinstance(r, str) or not args.get("_lido_do_chamado"):
         return r
     if args.get("_pendencias"):
@@ -106,15 +108,52 @@ def marca_correcao(ok: bool, texto: str) -> str:
     return "✅" if ok else "❌"
 
 
+def _itens_correcao(correcoes: dict) -> list[str]:
+    return [f"{n}:{c.get('edificio', '')}|{c.get('item_b', '')}" for n, c in correcoes.items()]
+
+
+def chave_correcoes(correcoes: dict) -> str:
+    """Memória do lote de correções (16/11): o mesmo cartão = o mesmo lote."""
+    from services.dados.memoria_lote import chave
+    return chave("corr", _itens_correcao(correcoes))
+
+
+def memoria_no_cartao(r: "Acao | str", k: str) -> "Acao | str":
+    """Põe no cartão a situação da memória do lote (Retomar / Refazer do zero)."""
+    from services.dados import memoria_lote
+    if isinstance(r, str):
+        return r
+    r.checkpoint = memoria_lote.situacao(k)
+    if r.checkpoint != memoria_lote.NOVO:
+        r.aviso = " ".join(x for x in (memoria_lote.resumo(k), r.aviso) if x)
+    return r
+
+
 def _executar_correcoes(a: dict, s: Sessao) -> dict[str, tuple[bool, str]]:
     """Corrige os chamados do cartão. {numero: (ok, texto para o resultado)}.
     ok=True com texto 'não corrigido: ...' = não falhou, mas o técnico escolhe
-    na mão (o resolver/aplicar base seguem)."""
+    na mão.
+
+    Memória por lote (16/11, services/dados/memoria_lote.py): o que já foi
+    corrigido numa rodada pela metade não é refeito no Retomar. A simulação
+    não grava nem lê a memória."""
     from services.agente.ficha import esquecer
+    from services.dados import memoria_lote
     from services.fluxos.flow_corrigir_chamado_pw import corrigir_chamado
 
+    correcoes = a.get("correcoes") or {}
+    k, feitos = "", set()
+    if correcoes and not s.modo_teste:
+        k = chave_correcoes(correcoes)
+        feitos = memoria_lote.abrir(k, _itens_correcao(correcoes), list(correcoes),
+                                    fluxo="correcao_chamado",
+                                    origem="bot" if s.chat_id else "ui",
+                                    matricula=s.matricula, do_zero=s.iniciar_do_zero)
     saida = {}
-    for numero, c in (a.get("correcoes") or {}).items():
+    for i, (numero, c) in enumerate(correcoes.items()):
+        if i in feitos:
+            saida[numero] = (True, "já feito na rodada anterior")
+            continue
         s.log(f"Corrigindo o chamado {numero}...", "status")
         try:
             ok, info = corrigir_chamado(s.pagina(), s.log, numero, c.get("edificio", ""),
@@ -134,6 +173,8 @@ def _executar_correcoes(a: dict, s: Sessao) -> dict[str, tuple[bool, str]]:
         else:
             texto = f"correção falhou: {info.get('erro')}"
         saida[numero] = (ok, texto)
+        if k and ok:
+            memoria_lote.marcar(k, i, texto=texto)
     return saida
 
 
@@ -178,6 +219,8 @@ def _pausa_atual(historico: list[dict]) -> "tuple[str, str] | None":
 def _antes_resolver(args: dict, s: Sessao) -> dict:
     from services.fluxos.flow_sla_pw import extrair_historico_chamado
 
+    # Corrige Edifício/Item B antes de resolver (30/10; mantido em 16/11: só
+    # resolve com tudo certo).
     args = _antes_corrigir(args, s)
     pausados = {}
     for numero in (c.strip().upper() for c in _lista(args.get("chamados"))):

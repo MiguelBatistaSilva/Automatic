@@ -4,7 +4,9 @@ state/meus_fluxos_state.py — Back-end da página "Meus fluxos".
 Histórico dos fluxos que a matrícula logada rodou — lido direto dos checkpoints
 (`checkpoint.historico`), que desde a v5 do banco (2026-09-29) guardam cada
 rodada com fluxo/origem/matrícula e não apagam mais a anterior no "Do zero".
-Só leitura: nada aqui retoma ou altera fluxo.
+Só leitura, com uma exceção (16/11): o botão "Retomar" das rodadas de
+Desmembramento pela metade abre o lote na tela do Desmembramento, que é quem
+roda (com o diálogo de checkpoint de sempre).
 
 Filtra pela matrícula das Credenciais (app_config) — na máquina do bot, as
 rodadas que OUTROS técnicos disparam pelo bot ficam de fora (decisão do
@@ -23,6 +25,11 @@ FLUXOS: dict[str, str] = {
     "desmembramento_criar":    "Desmembramento · Só Criar",
     "desmembramento_bc":       "Desmembramento · Só Base",
     "desmembramento":          "Desmembramento",
+    # Memória por lote (services/dados/memoria_lote.py), 16/11.
+    "desmembramento_itom":     "Desmembramento · Adicionar Itom",
+    "desmembramento_doc":      "Desmembramento · Importar documento",
+    "desmembramento_itemb":    "Desmembramento · Corrigir Item B",
+    "correcao_chamado":        "Correção (Edifício/Item B)",
     "requisicao":              "Requisição de Serviço",
 }
 
@@ -57,6 +64,10 @@ class Rodada:
     cor: str
     progresso: str
     linhas: list[LinhaFluxo]
+    chave: str = ""
+    # "Retomar" (16/11): rodada vigente pela metade, de Desmembramento, com os
+    # dados do lote guardados (services/dados/memoria_lote.py).
+    retomavel: bool = False
 
 
 def _titulo(h: dict) -> str:
@@ -75,7 +86,7 @@ def _status(h: dict) -> tuple[str, str]:
     return "Em andamento", "amber"
 
 
-def _rodada(h: dict) -> Rodada:
+def _rodada(h: dict, com_dados: set[str] = frozenset()) -> Rodada:
     status, cor = _status(h)
     feitas = sum(1 for l in h["linhas"] if l["status"] == "concluido")
     linhas = []
@@ -99,6 +110,9 @@ def _rodada(h: dict) -> Rodada:
         cor=cor,
         progresso=f"{feitas}/{h['total']}",
         linhas=linhas,
+        chave=h["chave"],
+        retomavel=(h["vigente"] and not h["concluido"] and h["chave"] in com_dados
+                   and (h["fluxo"] or "").startswith("desmembramento")),
     )
 
 
@@ -111,12 +125,23 @@ class MeusFluxosState(rx.State):
 
     @rx.event
     def on_load(self):
-        from services.dados import checkpoint, credenciais
+        from services.dados import checkpoint, credenciais, memoria_lote
         self.matricula = credenciais._ler_matricula()
-        self.rodadas = (
-            [_rodada(h) for h in checkpoint.historico(self.matricula)]
-            if self.matricula else []
-        )
+        hist = checkpoint.historico(self.matricula) if self.matricula else []
+        com_dados = memoria_lote.chaves_com_parametros(
+            list({h["chave"] for h in hist if h["vigente"] and not h["concluido"]}))
+        self.rodadas = [_rodada(h, com_dados) for h in hist]
+
+    @rx.event
+    def retomar(self, chave: str):
+        """Abre o lote na tela do Desmembramento, já preenchido, com o diálogo
+        de checkpoint (o Retomar de lá roda só os pendentes)."""
+        from services.dados import memoria_lote
+        from state.desmembramento_state import DesmembramentoState
+        p = memoria_lote.parametros(chave)
+        if not p:
+            return rx.toast.error("Os dados deste lote não foram guardados.")
+        return [DesmembramentoState.carregar_lote(p), rx.redirect("/desmembramento")]
 
     @rx.event
     def set_filtro_fluxo(self, v: str):

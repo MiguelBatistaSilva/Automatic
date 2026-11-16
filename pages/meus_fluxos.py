@@ -62,6 +62,15 @@ def _rodada(r: rx.Var) -> rx.Component:
                 min_width="0",
             ),
             rx.spacer(),
+            rx.cond(
+                r.retomavel,
+                botao_secundario(
+                    rx.icon("play", size=14), "Retomar",
+                    # Sem o stop_propagation o clique também abriria/fecharia a rodada.
+                    on_click=MeusFluxosState.retomar(r.chave).stop_propagation,
+                ),
+                rx.fragment(),
+            ),
             rx.text(r.progresso, size="2", color=rx.color("gray", 11)),
             rx.badge(r.status, color_scheme=r.cor, variant="soft"),
             align="center",

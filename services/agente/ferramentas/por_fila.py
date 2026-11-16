@@ -36,10 +36,13 @@ from services.agente.ferramentas.base import (
 from services.agente.ferramentas.investigacao import _FILA_ASSYST, _fila_pedida
 from services.agente.ferramentas.verificacoes import (
     _executar_correcoes,
+    chave_correcoes,
     item_b_a_corrigir,
     marca_correcao,
+    memoria_no_cartao,
 )
 from services.agente.sessao import Resultado, Sessao
+from services.dados import memoria_lote
 
 # ~5 s por chamado aberto: a conversa não pode ficar presa (Telegram).
 _MAX_LIDOS = 30
@@ -195,8 +198,10 @@ def _prep_item_b(args: dict) -> "Acao | str":
             fora.append(f"{n}: IC NÃO LOCALIZADO e {b.motivo or 'sem tombo novo'}")
         else:
             fora.append(f"{n}: Item B já preenchido ({atual})")
-    return _cartao("Corrigir Item B", "corrigir_item_b", args, fazer, linhas, fora,
-                   {"correcoes": fazer})
+    return memoria_no_cartao(
+        _cartao("Corrigir Item B", "corrigir_item_b", args, fazer, linhas, fora,
+                {"correcoes": fazer}),
+        chave_correcoes(fazer))
 
 
 def _exec_item_b(a: dict, s: Sessao) -> Resultado:
@@ -232,23 +237,53 @@ def _prep_itom(args: dict) -> "Acao | str":
             fora.append(f"{n}: Item B sem tombo e {len(f.tombos)} tombos na descrição")
         else:
             fora.append(f"{n}: sem tombo no Item B nem na descrição")
-    return _cartao("Adicionar Itom", "anexar_itom", args, fazer, linhas, fora,
-                   {"pares": fazer})
+    return memoria_no_cartao(
+        _cartao("Adicionar Itom", "anexar_itom", args, fazer, linhas, fora,
+                {"pares": fazer}),
+        _chave_itom(fazer))
+
+
+def _itens_itom(pares: dict) -> list[str]:
+    return [f"{c},{t}" for c, t in pares.items()]
+
+
+def _chave_itom(pares: dict) -> str:
+    """Mesma chave do modo Adicionar Itom do app (state/desmembramento_state.py):
+    o mesmo lote pedido no app ou no agente é a mesma memória."""
+    return memoria_lote.chave("itom", _itens_itom(pares))
 
 
 def _exec_itom(a: dict, s: Sessao) -> Resultado:
     from services.fluxos import flow_anexo_itom_pw as anexo
 
-    linhas = [anexo.Linha(c, t) for c, t in (a.get("pares") or {}).items()]
-    s.log(f"Itom: gerando {len(linhas)} PDF(s)...", "status")
-    try:
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            pool.submit(anexo.gerar_pdfs, linhas, s.matricula, s.senha, s.log).result()
-    except Exception as e:
-        for l in linhas:
-            if not l.situacao:
-                l.situacao, l.detalhe = "erro", f"falha no Itom: {e}"
-    pendentes = [l for l in linhas if l.pdf and not l.situacao]
+    pares = a.get("pares") or {}
+    linhas = [anexo.Linha(c, t) for c, t in pares.items()]
+    # Memória por lote (16/11): o que já foi anexado não é refeito no Retomar
+    # (nem o PDF gerado de novo). A simulação não grava nem lê a memória.
+    k, feitos = "", set()
+    if linhas and not s.modo_teste:
+        k = _chave_itom(pares)
+        # O mesmo lote abre na tela do Desmembramento pelo "Meus fluxos" (16/11).
+        memoria_lote.guardar_parametros(
+            k, {"modo": "itom", "itom_texto": "\n".join(_itens_itom(pares))})
+        feitos = memoria_lote.abrir(k, _itens_itom(pares), list(pares),
+                                    fluxo="desmembramento_itom",
+                                    origem="bot" if s.chat_id else "ui",
+                                    matricula=s.matricula, do_zero=s.iniciar_do_zero)
+        for i in feitos:
+            linhas[i].situacao = "já anexado"
+            linhas[i].detalhe = "na rodada anterior"
+    rodar = [l for l in linhas if not l.situacao]
+    if rodar:
+        s.log(f"Itom: gerando {len(rodar)} PDF(s)...", "status")
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                pool.submit(anexo.gerar_pdfs, rodar, s.matricula, s.senha, s.log).result()
+        except Exception as e:
+            for l in rodar:
+                if not l.situacao:
+                    l.situacao, l.detalhe = "erro", f"falha no Itom: {e}"
+    pendentes = [l for l in rodar if l.pdf and not l.situacao]
     if pendentes:
         page = s.pagina()
         for l in pendentes:
@@ -256,6 +291,8 @@ def _exec_itom(a: dict, s: Sessao) -> Resultado:
                 anexo.anexar(page, s.log, l, s.modo_teste)
             except Exception as e:
                 l.situacao, l.detalhe = "erro", str(e)
+            if k and l.situacao in ("anexado", "já anexado"):
+                memoria_lote.marcar(k, linhas.index(l), situacao=l.situacao)
 
     bons = ("anexado", "já anexado", "simulado")
     n_ok = sum(l.situacao in bons for l in linhas)
@@ -270,8 +307,9 @@ def _exec_itom(a: dict, s: Sessao) -> Resultado:
 FERRAMENTAS: list[Ferramenta] = [
     Ferramenta(
         "corrigir_item_b",
-        "Preenche o Item B VAZIO pelo tombo da descrição, pelos números ou por "
-        "fila + nome do usuário. O sistema acha os chamados e os tombos.",
+        "Preenche o Item B vazio ou IC NÃO LOCALIZADO pelo tombo da descrição, "
+        "pelos números ou por fila + nome do usuário. O sistema acha os chamados "
+        "e os tombos.",
         {"type": "object", "properties": _ALVO},
         preparar=_prep_item_b, executar=_exec_item_b, antes=_selecionar,
         precisa_ler=_precisa_ler, dominio="chamados",

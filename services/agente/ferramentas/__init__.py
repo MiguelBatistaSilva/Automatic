@@ -12,6 +12,7 @@ as funções E as entradas `Ferramenta(...)` do seu assunto:
   acoes.py         resolver, corrigir, ações em lote, atribuir, programar, filas
   despacho.py      despacho ao Serviço de Operações
   por_fila.py      Corrigir Item B e Adicionar Itom por fila + técnico
+  lotes.py         Retomar um lote pela metade (lista os pendentes do técnico)
   termos.py        termo de responsabilidade e termo de demanda
   __init__.py      junta o catálogo (FERRAMENTAS), esquemas para a IA, executar
 
@@ -41,7 +42,7 @@ gravar só com confirmação).
 
 from services.agente.sessao import ErroSessao, Resultado, Sessao
 from services.agente.ferramentas import (
-    acoes, base, bases, despacho, investigacao, por_fila, requisicao, termos,
+    acoes, base, bases, despacho, investigacao, lotes, por_fila, requisicao, termos,
 )
 from services.agente.ferramentas.base import Acao, ChameDeNovo, Ferramenta
 
@@ -78,6 +79,7 @@ _ORDEM = (
     "listar_bases_conhecimento",
     "desmembrar",
     "aplicar_base",
+    "retomar_lote",
     "criar_requisicoes",
     "criar_requisicoes_por_tombo",
     "criar_plantoes",
@@ -109,7 +111,7 @@ def _montar(*listas: list[Ferramenta]) -> dict[str, Ferramenta]:
 FERRAMENTAS: dict[str, Ferramenta] = _montar(
     investigacao.FERRAMENTAS, bases.FERRAMENTAS, requisicao.FERRAMENTAS,
     acoes.FERRAMENTAS, despacho.FERRAMENTAS, termos.FERRAMENTAS,
-    por_fila.FERRAMENTAS,
+    por_fila.FERRAMENTAS, lotes.FERRAMENTAS,
 )
 
 

@@ -205,10 +205,12 @@ def corrigir_chamado(page, log, numero: str, edificio: str = "", item_b: str = "
 
 
 def corrigir_itens_b(pares: list[tuple[str, str]], matricula: str, senha: str,
-                     log) -> list[dict]:
+                     log, ao_terminar=None) -> list[dict]:
     """'Corrigir Item B' do Desmembramento (12/11): para cada (chamado, tombo),
     confere o Item B e corrige para o tombo ('*tombo'). Já certo = pula, então
-    rodar de novo é seguro. Devolve [{chamado, tombo, situacao, detalhe}]."""
+    rodar de novo é seguro. Devolve [{chamado, tombo, situacao, detalhe}].
+    `ao_terminar(indice, situacao)`: chamado a cada chamado terminado — a
+    memória do lote anota na hora (16/11). Erro no aviso não para o fluxo."""
     from services.assyst.browser_pw import NavegadorPW, _fazer_login_pw
 
     res = []
@@ -234,6 +236,11 @@ def corrigir_itens_b(pares: list[tuple[str, str]], matricula: str, senha: str,
                 situacao, detalhe = "já estava certo", ""
             res.append({"chamado": chamado, "tombo": tombo,
                         "situacao": situacao, "detalhe": detalhe})
+            if ao_terminar is not None:
+                try:
+                    ao_terminar(n - 1, situacao)
+                except Exception as e:
+                    log(f"Não consegui anotar {chamado} na memória do lote: {e}", "error")
 
     ok = sum(r["situacao"] in ("corrigido", "já estava certo") for r in res)
     log(f"Fim: {ok} de {len(res)} ok.", "success" if ok == len(res) else "error")

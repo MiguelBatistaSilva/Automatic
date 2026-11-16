@@ -79,6 +79,9 @@ class Ferramenta:
     # isto: quando ela disser — a leitura pode ser justamente o que responde
     # a pergunta (ex.: em que fila o chamado está, na Atribuição Interna).
     precisa_ler: Callable[[dict], bool] | None = None
+    # O `preparar` recebe a matrícula do técnico em `_matricula` (16/11, o
+    # retomar_lote lista só os lotes dele). Posta pelo código, não pela IA.
+    com_matricula: bool = False
 
 
 # --------------------------------------------------------------------------- #

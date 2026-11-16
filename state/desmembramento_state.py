@@ -6,15 +6,20 @@ Modos (mesma semântica do antigo aba_execucao.py do Qt):
   - criar    : Só Criar (3N)  -> FluxoCriarPW
   - bc       : Só Base        -> FluxoBCPW
   - itom     : Adicionar Itom -> flow_anexo_itom_pw (10/11): anexa ao chamado o
-               PDF da tela do Itom da máquina. Sem checkpoint (o fluxo vê na
-               lista de anexos se o PDF já está lá). Sem "Simular" na tela
-               (ele tirou, 10/11): anexa de verdade.
+               PDF da tela do Itom da máquina. Sem "Simular" na tela (ele
+               tirou, 10/11): anexa de verdade.
   - doc      : Importar documento -> flow_anexo_itom_pw.anexar_documento (10/11):
                o PDF enviado pela tela é anexado a todos os chamados da lista.
-               Sem checkpoint (pula o chamado que já tem o arquivo).
   - itemb    : Corrigir Item B -> flow_corrigir_chamado_pw.corrigir_itens_b
-               (12/11): 'Chamado,tombo'; o Item B vira o tombo. Sem checkpoint
-               (o que já está certo é pulado). Tombo não achado mantém o item.
+               (12/11): 'Chamado,tombo'; o Item B vira o tombo. Tombo não
+               achado mantém o item.
+  Os três têm memória desde 16/11 (services/dados/memoria_lote.py): a mesma
+  lista de novo abre o diálogo de checkpoint e o Retomar pula o que já foi
+  feito. Cada chamado é anotado na hora (o fluxo avisa por `ao_terminar`).
+
+"Meus fluxos" → Retomar (16/11): `executar` guarda os campos da tela do lote
+(memoria_lote.guardar_parametros, pela chave do checkpoint) e
+`carregar_lote` os põe de volta e abre o diálogo de checkpoint.
 
 Ponto delicado: o **diálogo de checkpoint**. Um evento background async não pode
 parar no meio esperando o clique do usuário; então `iniciar` (evento SYNC) valida e
@@ -37,6 +42,44 @@ from services.fluxos.flow_desmembramento_pw import _chave_checkpoint
 from state.flow_runner import FlowRunnerState
 
 DESCRICAO_PADRAO = "Solicito atualização de sistema..."
+
+# Modos com memória por lote (services/dados/memoria_lote.py), 16/11.
+_MODOS_LOTE = ("itom", "doc", "itemb")
+# Campos da tela que cada modo precisa para rodar de novo ("Meus fluxos" →
+# Retomar). "kb" é o kb_selecionado.
+_CAMPOS_DO_MODO = {
+    "completo": ("chamado_pai", "descricao", "csv_texto", "kb"),
+    "criar":    ("chamado_pai", "descricao", "csv_texto"),
+    "bc":       ("filhos_texto", "kb"),
+    "itom":     ("itom_texto",),
+    "itemb":    ("itemb_texto",),
+    "doc":      ("doc_chamados", "doc_nome", "doc_caminho"),
+}
+# O que conta como feito (não refaz no Retomar). Erro fica pendente.
+_FEITO_ANEXO = ("anexado", "já anexado")
+_FEITO_ITEMB = ("corrigido", "já estava certo", "não corrigido")
+
+
+def _com_memoria(log, k, itens, refs, fluxo, matricula, do_zero, rodar, feito) -> None:
+    """Pula o que o lote já fez, roda o resto e anota cada chamado que deu
+    certo NA HORA (o fluxo avisa por `ao_terminar`, 16/11).
+    `rodar(indices, ao_terminar)` roda só esses; o fluxo chama
+    ao_terminar(posição na lista recebida, situação)."""
+    from services.dados import memoria_lote
+    feitos = memoria_lote.abrir(k, itens, refs, fluxo=fluxo, origem="ui",
+                                matricula=matricula, do_zero=do_zero)
+    faltam = [i for i in range(len(itens)) if i not in feitos]
+    if feitos:
+        log(f"Retomando: {len(feitos)} de {len(itens)} já feitos antes; pulei.", "info")
+    if not faltam:
+        log("Nada a fazer: o lote inteiro já foi feito.", "success")
+        return
+
+    def ao_terminar(j: int, situacao: str) -> None:
+        if situacao in feito:
+            memoria_lote.marcar(k, faltam[j], situacao=situacao)
+
+    rodar(faltam, ao_terminar)
 
 
 def _parse_csv(texto: str):
@@ -171,16 +214,69 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
                 erros.append("Escolha o documento (PDF).")
         return erros
 
+    def _lote(self) -> tuple[str, list[str], list[str]]:
+        """Itom, Importar documento e Corrigir Item B: (chave, itens, chamados)."""
+        from services.dados.memoria_lote import chave
+        from services.fluxos.flow_anexo_itom_pw import ler_chamados, ler_pares
+        if self.modo == "doc":
+            refs, _ = ler_chamados(self.doc_chamados)
+            itens = [f"{c},{self.doc_nome}" for c in refs]
+        else:
+            texto = self.itom_texto if self.modo == "itom" else self.itemb_texto
+            linhas, _ = ler_pares(texto)
+            refs = [l.chamado for l in linhas]
+            itens = [f"{l.chamado},{l.tombo}" for l in linhas]
+        return chave(self.modo, itens), itens, refs
+
     def _chave(self) -> str:
         if self.modo == "bc":
             return _chave_checkpoint(self._filhos())
+        if self.modo in _MODOS_LOTE:
+            return self._lote()[0]
         return self.chamado_pai.strip()
 
     def _label(self) -> str:
+        if self.modo in _MODOS_LOTE:
+            refs = self._lote()[2]
+            return (refs[0] + (f" (+{len(refs) - 1})" if len(refs) > 1 else "")) if refs else ""
         if self.modo == "bc":
             filhos = self._filhos()
             return filhos[0] if filhos else ""
         return self.chamado_pai.strip()
+
+    def _parametros(self) -> dict:
+        """O que a tela tem deste lote, para o Retomar do "Meus fluxos"."""
+        p = {"modo": self.modo}
+        for campo in _CAMPOS_DO_MODO.get(self.modo, ()):
+            p[campo] = self.kb_selecionado if campo == "kb" else getattr(self, campo)
+        return p
+
+    @rx.event
+    def carregar_lote(self, p: dict):
+        """"Meus fluxos" → Retomar: põe o lote de volta na tela e abre o
+        diálogo de checkpoint (Retomar / Começar do zero), como se o técnico
+        tivesse colado tudo de novo e clicado em Iniciar."""
+        import os
+        if self.rodando:
+            self.logs = self.logs + [self._linha(
+                "Já tem um fluxo rodando nesta tela; espere terminar para retomar outro.", "error")]
+            return
+        modo = p.get("modo", "")
+        if modo not in _CAMPOS_DO_MODO:
+            return
+        self.modo = modo
+        for campo in _CAMPOS_DO_MODO[modo]:
+            if campo == "kb":
+                self.kb_selecionado = p.get("kb", "")
+            else:
+                setattr(self, campo, p.get(campo, ""))
+        self.logs = [self._linha("Lote carregado do \"Meus fluxos\".", "info")]
+        if modo == "doc" and not os.path.exists(self.doc_caminho):
+            self.logs = self.logs + [self._linha(
+                f"O documento {self.doc_nome} não está mais na pasta; envie-o de novo.", "error")]
+            self.doc_caminho = ""
+            return
+        return DesmembramentoState.iniciar
 
     # ---------------------------------------------------------------- iniciar
     @rx.event
@@ -189,8 +285,6 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
         if erros:
             self.logs = self.logs + [self._linha(e, "error") for e in erros]
             return
-        if self.modo in ("itom", "doc", "itemb"):
-            return DesmembramentoState.executar(False)
 
         chave = self._chave()
         if foi_concluido(chave):
@@ -237,6 +331,8 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
             doc_chamados = self.doc_chamados
             doc_caminho = self.doc_caminho
             itemb_texto = self.itemb_texto
+            lote = self._lote() if modo in _MODOS_LOTE else None
+            chave_lote, parametros_lote = self._chave(), self._parametros()
             self.logs = []
             self.rodando = True
 
@@ -249,12 +345,23 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
                 self.rodando = False
             return
 
+        # Para o "Retomar" do "Meus fluxos" (16/11). Falhar aqui não impede o fluxo.
+        try:
+            from services.dados import memoria_lote
+            memoria_lote.guardar_parametros(chave_lote, parametros_lote)
+        except Exception:
+            pass
+
         if modo == "itom":
             from services.fluxos import flow_anexo_itom_pw as anexo
             linhas, _ = anexo.ler_pares(itom_texto)
 
             def worker_itom(log, emit):
-                anexo.executar(linhas, matricula, senha, log)
+                def rodar(indices, ao_terminar):
+                    anexo.executar([linhas[i] for i in indices], matricula, senha, log,
+                                   ao_terminar=ao_terminar)
+                _com_memoria(log, *lote, "desmembramento_itom", matricula,
+                             iniciar_do_zero, rodar, _FEITO_ANEXO)
 
             async for _ in self._rodar_sync(worker_itom):
                 yield
@@ -270,7 +377,11 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
             pares = [(l.chamado, l.tombo) for l in linhas]
 
             def worker_itemb(log, emit):
-                corrigir_itens_b(pares, matricula, senha, log)
+                def rodar(indices, ao_terminar):
+                    corrigir_itens_b([pares[i] for i in indices], matricula, senha, log,
+                                     ao_terminar=ao_terminar)
+                _com_memoria(log, *lote, "desmembramento_itemb", matricula,
+                             iniciar_do_zero, rodar, _FEITO_ITEMB)
 
             async for _ in self._rodar_sync(worker_itemb):
                 yield
@@ -284,7 +395,11 @@ class DesmembramentoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/
             chamados, _ = anexo.ler_chamados(doc_chamados)
 
             def worker_doc(log, emit):
-                anexo.anexar_documento(chamados, doc_caminho, matricula, senha, log)
+                def rodar(indices, ao_terminar):
+                    anexo.anexar_documento([chamados[i] for i in indices], doc_caminho,
+                                           matricula, senha, log, ao_terminar=ao_terminar)
+                _com_memoria(log, *lote, "desmembramento_doc", matricula,
+                             iniciar_do_zero, rodar, _FEITO_ANEXO)
 
             async for _ in self._rodar_sync(worker_doc):
                 yield

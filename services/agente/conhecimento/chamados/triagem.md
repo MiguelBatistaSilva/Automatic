@@ -57,9 +57,17 @@ nem passo a passo; o resto só se o técnico perguntar.
   chamados e o tombo de cada um, sem precisar de buscar_chamado_por_usuario).
   "Adiciona o Itom nos chamados do Fulano na fila X" → anexar_itom, igual.
   A fila toda → nome='todos'. Com números de chamado, mande só chamados.
-  corrigir_item_b segue a mesma regra da correção automática.
-- resolver_chamado e aplicar_base JÁ conferem e corrigem Edifício e Item B
-  antes (o cartão mostra "Corrigir antes"). Não chame analisar_chamado nem
-  corrigir_chamado antes deles.
+  corrigir_item_b segue a mesma regra do corrigir_chamado.
+- resolver_chamado JÁ confere e corrige Edifício e Item B antes (o cartão
+  mostra "Corrigir antes") e só resolve o chamado que ficou certo. Não
+  chame analisar_chamado nem corrigir_chamado antes dele.
+- aplicar_base NÃO corrige (uma coisa por vez). Pedido de corrigir E
+  aplicar base: faça só a correção e diga que a base ele pede depois que a
+  correção terminar.
 - Se o sistema perguntar o Edifício, pergunte ao técnico e chame a MESMA
   ferramenta de novo com edificio = o que ele escolheu.
+- "Retoma o fluxo de base", "continua o desmembramento que parou", "retoma
+  o Itom/Item B/documento" SEM dizer chamados nem base → retomar_lote (tipo='base',
+  'desmembrar', 'itom', 'item b' ou 'documento' se ele disse). Com vários pendentes, o sistema
+  devolve a lista: mostre e pergunte qual; chame de novo com lote = o número
+  depois do #. Não pergunte a base nem os chamados: estão no lote.

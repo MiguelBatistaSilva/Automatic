@@ -362,6 +362,8 @@ def responder(historico: list[dict], matricula: str = "", senha: str = "",
                 else:
                     if nome in refeitas:
                         args = {**args, "_refeita": True}
+                    if f.com_matricula:
+                        args = {**args, "_matricula": matricula}
                     r = f.preparar(args)
                     ler = f.antes is not None and (f.precisa_ler(args) if f.precisa_ler
                                                    else not isinstance(r, str))
