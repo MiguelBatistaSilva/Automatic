@@ -55,6 +55,10 @@ CASOS = [
     ("analisa apenas a minha fila", {C}),
     ("analisa a fila do 2N CATI FCB", {C}),
     ("analisa o chamado do Marcos na fila do 2N CATI Demais Capital", {C}),
+    # Item B e Itom por fila + técnico (16/11): não é configurar fila
+    ("Adiciona o itom nos chamados do Aureliano na fila do 2N CATI Sala de Imagem", {C}),
+    ("Corrigi o Item B de todos os chamados do Adriano na fila do 2N CATI FCB", {C}),
+    ("coloca o itom nos meus chamados da fila FCB", {C}),
     ("inicia o atendimento do R2479463", {C}),
     ("programa o R2479463 pra amanhã às 14h, o usuário está em reunião", {C}),
     ("aplica a base de impressora no R2479463", {C}),

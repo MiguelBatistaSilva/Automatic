@@ -52,6 +52,12 @@ nem passo a passo; o resto só se o técnico perguntar.
   de novo com retomar=true (ele retoma, corrige e resolve).
 - Corrigir Edifício/Item B: "corrige o chamado X" → corrigir_chamado (o
   sistema lê o chamado e decide os valores pela triagem).
+- "Corrige o Item B dos chamados do Fulano na fila X" → corrigir_item_b com
+  nome=Fulano e fila=X (Fulano é o usuário do chamado; o sistema acha os
+  chamados e o tombo de cada um, sem precisar de buscar_chamado_por_usuario).
+  "Adiciona o Itom nos chamados do Fulano na fila X" → anexar_itom, igual.
+  A fila toda → nome='todos'. Com números de chamado, mande só chamados.
+  corrigir_item_b segue a mesma regra da correção automática.
 - resolver_chamado e aplicar_base JÁ conferem e corrigem Edifício e Item B
   antes (o cartão mostra "Corrigir antes"). Não chame analisar_chamado nem
   corrigir_chamado antes deles.

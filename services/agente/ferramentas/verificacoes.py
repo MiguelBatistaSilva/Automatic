@@ -25,9 +25,21 @@ _EDIFICIO_DITO = {"type": "string", "description":
                   "Só quando o sistema perguntar o Edifício: o que o técnico escolheu."}
 
 
+def item_b_a_corrigir(b) -> bool:
+    """A regra do Item B (30/10, reconfirmada 16/11), única para a correção
+    automática e para o corrigir_item_b: só mexe no Item B VAZIO ou IC NÃO
+    LOCALIZADO (item de verdade foi escolhido por alguém). Com o tombo, vira
+    *tombo; se o Assyst não achar, o fluxo deixa IC NÃO LOCALIZADO."""
+    from services.agente.triagem import IC_NAO_LOCALIZADO
+
+    atual = b.atual.strip()
+    return bool(b.sugerido) and (not atual or atual == IC_NAO_LOCALIZADO) \
+        and b.sugerido != atual
+
+
 def _antes_corrigir(args: dict, s: Sessao) -> dict:
     from services.agente.ficha import ler_ficha
-    from services.agente.triagem import IC_NAO_LOCALIZADO, triar_ficha
+    from services.agente.triagem import triar_ficha
     from services.dados import referencia
 
     dito = str(args.get("edificio") or "").strip()
@@ -56,10 +68,7 @@ def _antes_corrigir(args: dict, s: Sessao) -> dict:
             else:
                 pendencias.append(f"{numero}: Edifício '{e.atual or 'vazio'}' e a seção não tem "
                                   "histórico. Pergunte o edifício e mande em edificio.")
-        # Só corrige Item B vazio ou IC NÃO LOCALIZADO: um item de verdade
-        # foi escolhido por alguém.
-        if b.sugerido and (not b.atual.strip() or b.atual.strip() == IC_NAO_LOCALIZADO) \
-                and b.sugerido != b.atual.strip():
+        if item_b_a_corrigir(b):
             c["item_b"] = b.sugerido
             partes.append(f"Item B '{b.atual or 'vazio'}' → {b.sugerido}; {b.motivo}")
         if c:

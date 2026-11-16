@@ -43,8 +43,10 @@ DOMINIOS: dict[str, re.Pattern] = {
     # Verbo antes OU depois de "fila" ("configura a fila X" / "a fila X
     # configurada"), ou a fila indo para o Assyst/menu. Frases achadas pelo
     # eval_roteador.py em 08/10.
+    # "Adiciona o Itom nos CHAMADOS do Fulano na fila X" (16/11) não é
+    # configurar fila: entre o verbo e "fila" não pode haver "chamad".
     "filas": re.compile(
-        r"(configur|cri[ae]|adicion|mont|cadastr|coloc)\w*\b.{0,40}\bfilas?\b"
+        r"(configur|cri[ae]|adicion|mont|cadastr|coloc)\w*\b(?:(?!chamad).){0,40}\bfilas?\b"
         r"|\bfilas?\b.{0,60}\b(configurad|criad|adicionad|cadastrad)"
         r"|\bfilas?\b.{0,40}\bno (meu )?(assyst|menu)\b|perfil de coluna"),
     # Termo de Responsabilidade de Instalação e Termo de Tarefa de Demanda (10/10).
