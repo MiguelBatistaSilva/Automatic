@@ -34,7 +34,11 @@ from services.agente.ferramentas.base import (
     _sem_acento,
 )
 from services.agente.ferramentas.investigacao import _FILA_ASSYST, _fila_pedida
-from services.agente.ferramentas.verificacoes import _executar_correcoes, item_b_a_corrigir
+from services.agente.ferramentas.verificacoes import (
+    _executar_correcoes,
+    item_b_a_corrigir,
+    marca_correcao,
+)
 from services.agente.sessao import Resultado, Sessao
 
 # ~5 s por chamado aberto: a conversa não pode ficar presa (Telegram).
@@ -197,11 +201,12 @@ def _prep_item_b(args: dict) -> "Acao | str":
 
 def _exec_item_b(a: dict, s: Sessao) -> Resultado:
     feitos = _executar_correcoes(a, s)
-    linhas = [f"- {_ok_falha(ok)} {n} — {txt}" for n, (ok, txt) in feitos.items()]
-    n_ok = sum(ok for ok, _ in feitos.values())
+    linhas = [f"- {marca_correcao(ok, txt)} {n} — {txt}" for n, (ok, txt) in feitos.items()]
+    n_ok = sum(marca_correcao(ok, txt) == "✅" for ok, txt in feitos.values())
     sufixo = " (simulação, nada salvo)" if s.modo_teste else ""
     cab = f"**Corrigir Item B{sufixo}** — {n_ok} de {len(feitos)}."
-    return Resultado("\n".join([cab] + linhas), ok=n_ok == len(feitos))
+    # Só falha de verdade (❌) interrompe o plano; ⚠️ é para escolher na mão.
+    return Resultado("\n".join([cab] + linhas), ok=all(ok for ok, _ in feitos.values()))
 
 
 # --------------------------------------------------------------------------- #

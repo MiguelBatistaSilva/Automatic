@@ -29,6 +29,7 @@ from services.agente.ferramentas.verificacoes import (
     _com_correcoes,
     _executar_correcoes,
     _executar_retomadas,
+    marca_correcao,
     _pergunta_edificio,
     _retomada,
 )
@@ -63,11 +64,12 @@ def _prep_corrigir(args: dict) -> "Acao | str":
 
 def _exec_corrigir(a: dict, s: Sessao) -> Resultado:
     feitos = _executar_correcoes(a, s)
-    linhas = [f"- {_ok_falha(ok)} {n} — {txt}" for n, (ok, txt) in feitos.items()]
-    n_ok = sum(ok for ok, _ in feitos.values())
+    linhas = [f"- {marca_correcao(ok, txt)} {n} — {txt}" for n, (ok, txt) in feitos.items()]
+    n_ok = sum(marca_correcao(ok, txt) == "✅" for ok, txt in feitos.values())
     sufixo = " (simulação, nada salvo)" if s.modo_teste else ""
     cab = f"**Corrigir chamado{sufixo}** — {n_ok} de {len(feitos)}."
-    return Resultado("\n".join([cab] + linhas), ok=n_ok == len(feitos))
+    # Só falha de verdade (❌) interrompe o plano; ⚠️ é para escolher na mão.
+    return Resultado("\n".join([cab] + linhas), ok=all(ok for ok, _ in feitos.values()))
 
 
 # --------------------------------------------------------------------------- #
@@ -505,7 +507,9 @@ def _exec_resolver(a, s: Sessao) -> Resultado:
         if corr and not corr[0]:
             linhas.append(f"- {_ok_falha(False)} {numero} — NÃO resolvido: {corr[1]}")
             continue
-        if corr:
+        if corr and marca_correcao(*corr) == "⚠️":
+            linhas.append(f"- ⚠️ {numero} — {corr[1]}")
+        elif corr:
             linhas.append(f"- Corrigido {numero} — {corr[1]}")
         s.log(f"Resolvendo o chamado {numero}...", "status")
         try:

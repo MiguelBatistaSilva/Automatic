@@ -96,8 +96,20 @@ def _com_correcoes(r: "Acao | str", args: dict, verbo: str) -> "Acao | str":
     return r
 
 
+NAO_CORRIGIDO = "não corrigido"
+
+
+def marca_correcao(ok: bool, texto: str) -> str:
+    """✅ / ❌, ou ⚠️ quando o fluxo não trocou e avisou (ex.: vários itens)."""
+    if ok and texto.startswith(NAO_CORRIGIDO):
+        return "⚠️"
+    return "✅" if ok else "❌"
+
+
 def _executar_correcoes(a: dict, s: Sessao) -> dict[str, tuple[bool, str]]:
-    """Corrige os chamados do cartão. {numero: (ok, texto para o resultado)}."""
+    """Corrige os chamados do cartão. {numero: (ok, texto para o resultado)}.
+    ok=True com texto 'não corrigido: ...' = não falhou, mas o técnico escolhe
+    na mão (o resolver/aplicar base seguem)."""
     from services.agente.ficha import esquecer
     from services.fluxos.flow_corrigir_chamado_pw import corrigir_chamado
 
@@ -111,8 +123,17 @@ def _executar_correcoes(a: dict, s: Sessao) -> dict[str, tuple[bool, str]]:
             ok, info = False, {"erro": str(e), "mudou": {}}
         esquecer(numero)
         mudou = "; ".join(f"{k}: {d}" for k, (_, d) in info.get("mudou", {}).items())
-        saida[numero] = (ok, (mudou or "já estava certo") if ok
-                         else f"correção falhou: {info.get('erro')}")
+        # Tombo com VÁRIOS itens no Assyst (ou não achado sobre item de
+        # verdade): o fluxo não troca e devolve o aviso com os itens, como na
+        # tela do Desmembramento. Antes (16/11) saía "já estava certo".
+        if ok and not mudou and info.get("aviso"):
+            texto = f"{NAO_CORRIGIDO}: {info['aviso']}"
+        elif ok:
+            texto = mudou + (f" ({info['aviso']})" if mudou and info.get("aviso") else "") \
+                or "já estava certo"
+        else:
+            texto = f"correção falhou: {info.get('erro')}"
+        saida[numero] = (ok, texto)
     return saida
 
 

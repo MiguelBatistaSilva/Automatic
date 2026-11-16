@@ -24,6 +24,7 @@ from services.agente.ferramentas.verificacoes import (
     _antes_corrigir,
     _com_correcoes,
     _executar_correcoes,
+    marca_correcao,
 )
 from services.agente.sessao import Resultado, Sessao
 
@@ -331,7 +332,7 @@ def _exec_aplicar_base(a: dict, s: Sessao) -> Resultado:
         st = por_indice.get(i, "pendente")
         feitos += st == "concluido"
         linhas.append(f"- {_ok_falha(st == 'concluido')} {c}" + ("" if st == "concluido" else f" ({st})"))
-    linhas += [f"- {_ok_falha(ok)} Correção {n} — {txt}" for n, (ok, txt) in correcoes.items()]
+    linhas += [f"- {marca_correcao(ok, txt)} Correção {n} — {txt}" for n, (ok, txt) in correcoes.items()]
     cab = f"**Base {a['base']}** — {feitos} de {len(a['chamados'])} chamado(s)."
     return Resultado("\n".join([cab] + linhas), ok=feitos == len(a["chamados"]))
 
