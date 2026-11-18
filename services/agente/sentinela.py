@@ -41,9 +41,11 @@ _PROGRAMADO = "Atendimento Programado"
 log = logging.getLogger("sentinela")
 
 # "programado para o dia 14/11 às 08:00" / "dia 14/11/2026 às 8h" / "as 14h30"
+# 18/11: também "08h:30m" (digitado à mão no Assyst), "08h 30", "08h30min" —
+# antes o "h:" perdia os minutos e iniciava às 08:00.
 _RE_DIA_HORA = re.compile(
     r"programad[oa]\s+para\s+(?:o\s+)?dia\s+(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?"
-    r"\s*,?\s*(?:às|as|à|a)\s+(\d{1,2})\s*(?:[:h]\s*(\d{2})?)",
+    r"\s*,?\s*(?:às|as|à|a)\s+(\d{1,2})\s*(?:h\s*:?|:)\s*(\d{2})?",
     re.I)
 
 
