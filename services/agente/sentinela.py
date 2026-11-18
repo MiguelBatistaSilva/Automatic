@@ -81,6 +81,19 @@ def ligar(matricula: str) -> None:
         _gravar(con, e)
 
 
+def varrer_agora() -> bool:
+    """Botão "Varrer agora" (18/11): antecipa a próxima varredura para já (o
+    vigia pega em até 1 min; a seguinte fica para 5 h depois dela). False =
+    desligado ou já varrendo."""
+    with db.transacao() as con:
+        e = _ler(con)
+        if not e.get("ligado") or e.get("rodando"):
+            return False
+        e["proxima"] = time.time()
+        _gravar(con, e)
+    return True
+
+
 def desligar() -> None:
     with db.transacao() as con:
         e = _ler(con)
@@ -166,7 +179,11 @@ def varrer(page, matricula: str, registrar=None) -> dict:
     if fila is None:
         res["erros"].append("não consegui abrir a fila")
         return res
+    from services.assyst.assyst_common import _so_o_nome
     refs = [c["referencia"] for c in fila if c.get("referencia")]
+    # Nome do afetado, já na grade da fila: só para a tabela (nunca para a IA).
+    afetados = {c["referencia"]: _so_o_nome(c.get("afetado") or "")
+                for c in fila if c.get("referencia")}
     res["total"] = len(refs)
     registrar(f"Fila {FILA}: {len(refs)} chamados.")
 
@@ -191,16 +208,19 @@ def varrer(page, matricula: str, registrar=None) -> dict:
         if alvo is None:
             res["sem_data"].append({"chamado": ref})
             # 13/11: sem data e atrasado vão para a tabela como Aguardando.
-            agendados.aguardar(ref, matricula, "Sem data/hora")
+            agendados.aguardar(ref, matricula, "Sem data/hora", afetados.get(ref, ""))
             registrar(f"{ref}: Programado sem dia e hora no texto.")
         elif alvo <= agora:
             res["atrasados"].append({"chamado": ref, "quando": _quando(alvo)})
-            agendados.aguardar(ref, matricula, f"Horário já passou (era {_quando(alvo)})")
+            agendados.aguardar(ref, matricula, f"Horário já passou (era {_quando(alvo)})",
+                              afetados.get(ref, ""))
             registrar(f"{ref}: estava marcado para {_quando(alvo)}, não iniciei.")
         elif ref in pendentes and abs(pendentes[ref]["executar_em"] - alvo.timestamp()) < 60:
+            if not pendentes[ref].get("afetado"):
+                agendados.gravar_afetado(pendentes[ref]["id"], afetados.get(ref, ""))
             res["ja_agendados"].append({"chamado": ref, "quando": _quando(alvo)})
         else:
-            agendados.agendar(ref, alvo, matricula)
+            agendados.agendar(ref, alvo, matricula, afetado=afetados.get(ref, ""))
             res["agendados"].append({"chamado": ref, "quando": _quando(alvo),
                                      "mudou": ref in pendentes})
             registrar(f"{ref}: agendado para {_quando(alvo)}.")

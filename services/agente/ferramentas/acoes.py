@@ -387,7 +387,7 @@ def _exec_programar(a, s: Sessao) -> Resultado:
         if ok and not s.modo_teste:
             try:
                 agendados.agendar(numero, datetime.datetime.fromisoformat(a["inicio"]),
-                                  s.matricula, s.chat_id)
+                                  s.matricula, s.chat_id, afetado=info.get("usuario", ""))
             except Exception as e:
                 ok = False
                 feitos -= 1

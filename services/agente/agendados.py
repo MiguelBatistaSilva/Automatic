@@ -42,6 +42,9 @@ CONCLUIDO, ERRO, CANCELADO = "concluido", "erro", "cancelado"
 # 13/11: Programado que o sentinela achou sem dia/hora no texto. Fica na tabela
 # para o técnico ver; o vigia nunca roda (sem executar_em).
 AGUARDANDO = "aguardando"
+# 18/11: o nome do usuário afetado vai em `dados.afetado` (só para a tela; NUNCA
+# para a IA). Vem da fila (sentinela), do chamado aberto (agente) ou da hora de
+# iniciar. Vazio = ainda não lido.
 
 _INTERVALO_S = 20
 _ATRASO_MIN = 5   # acima disto, o aviso diz a hora que estava marcada
@@ -67,10 +70,30 @@ def data_do_inicio(dia: str, hora: str, agora: "datetime.datetime | None" = None
     return alvo
 
 
-def agendar(numero: str, quando: datetime.datetime, matricula: str, chat_id=None) -> None:
-    """Grava o início. Programar de novo o mesmo chamado substitui o anterior."""
+def _afetado_salvo(con, numero: str) -> str:
+    r = con.execute(
+        "SELECT json_extract(dados, '$.afetado') AS a FROM tarefas WHERE tipo = ? "
+        "AND status IN (?, ?) AND json_extract(dados, '$.chamado') = ? "
+        "AND json_extract(dados, '$.afetado') != '' LIMIT 1",
+        (TIPO, PENDENTE, AGUARDANDO, numero)).fetchone()
+    return (r["a"] or "") if r else ""
+
+
+def _dados(numero: str, afetado: str) -> str:
+    d = {"chamado": numero}
+    if afetado:
+        d["afetado"] = afetado
+    return json.dumps(d, ensure_ascii=False)
+
+
+def agendar(numero: str, quando: datetime.datetime, matricula: str, chat_id=None,
+            afetado: str = "") -> None:
+    """Grava o início. Programar de novo o mesmo chamado substitui o anterior
+    (sem `afetado`, fica o nome que o anterior já tinha)."""
     numero = numero.strip().upper()
+    afetado = (afetado or "").strip()
     with db.transacao() as con:
+        afetado = afetado or _afetado_salvo(con, numero)
         con.execute(
             "DELETE FROM tarefas WHERE tipo = ? AND status = ? "
             "AND json_extract(dados, '$.chamado') = ?", (TIPO, AGUARDANDO, numero))
@@ -82,16 +105,16 @@ def agendar(numero: str, quando: datetime.datetime, matricula: str, chat_id=None
         con.execute(
             "INSERT INTO tarefas (id, tipo, chat_id, quem, dados, executar_em, "
             "executar_em_label, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (uuid.uuid4().hex, TIPO, chat_id, matricula,
-             json.dumps({"chamado": numero}, ensure_ascii=False),
+            (uuid.uuid4().hex, TIPO, chat_id, matricula, _dados(numero, afetado),
              quando.timestamp(), quando.strftime("%d/%m/%Y %H:%M"), PENDENTE))
 
 
-def aguardar(numero: str, matricula: str, detalhe: str) -> bool:
+def aguardar(numero: str, matricula: str, detalhe: str, afetado: str = "") -> bool:
     """Põe na tabela como Aguardando (não há hora para iniciar: sem data ou
     horário já passado). Já estando lá, só atualiza o detalhe; pendente não é
     mexido. True = entrou agora."""
     numero = numero.strip().upper()
+    afetado = (afetado or "").strip()
     with db.transacao() as con:
         if con.execute(
                 "SELECT 1 FROM tarefas WHERE tipo = ? AND status = ? "
@@ -99,15 +122,16 @@ def aguardar(numero: str, matricula: str, detalhe: str) -> bool:
                 (TIPO, PENDENTE, numero)).fetchone():
             return False
         if con.execute(
-                "UPDATE tarefas SET detalhe = ?, atualizado_em = datetime('now', 'localtime') "
+                "UPDATE tarefas SET detalhe = ?, "
+                "dados = CASE WHEN ? = '' THEN dados ELSE json_set(dados, '$.afetado', ?) END, "
+                "atualizado_em = datetime('now', 'localtime') "
                 "WHERE tipo = ? AND status = ? AND json_extract(dados, '$.chamado') = ?",
-                (detalhe, TIPO, AGUARDANDO, numero)).rowcount:
+                (detalhe, afetado, afetado, TIPO, AGUARDANDO, numero)).rowcount:
             return False
         con.execute(
             "INSERT INTO tarefas (id, tipo, quem, dados, executar_em_label, status, detalhe) "
             "VALUES (?, ?, ?, ?, '', ?, ?)",
-            (uuid.uuid4().hex, TIPO, matricula,
-             json.dumps({"chamado": numero}, ensure_ascii=False), AGUARDANDO, detalhe))
+            (uuid.uuid4().hex, TIPO, matricula, _dados(numero, afetado), AGUARDANDO, detalhe))
     return True
 
 
@@ -122,8 +146,19 @@ def limpar_aguardando(matricula: str, manter: set[str]) -> None:
                 con.execute("DELETE FROM tarefas WHERE id = ?", (r["id"],))
 
 
+def gravar_afetado(id_tarefa: str, afetado: str) -> None:
+    afetado = (afetado or "").strip()
+    if not afetado:
+        return
+    with db.transacao() as con:
+        con.execute("UPDATE tarefas SET dados = json_set(dados, '$.afetado', ?) WHERE id = ?",
+                    (afetado, id_tarefa))
+
+
 def _dict(r) -> dict:
-    return {"id": r["id"], "chamado": json.loads(r["dados"])["chamado"], "chat_id": r["chat_id"],
+    dados = json.loads(r["dados"])
+    return {"id": r["id"], "chamado": dados["chamado"], "afetado": dados.get("afetado", ""),
+            "chat_id": r["chat_id"],
             "quem": r["quem"], "quando": r["executar_em_label"], "executar_em": r["executar_em"],
             "status": r["status"], "detalhe": r["detalhe"]}
 
@@ -198,7 +233,7 @@ def _registrar(m, tipo="info") -> None:
     log.info("%s", m)
 
 
-def _iniciar_um(s: Sessao, numero: str) -> tuple[str, str]:
+def _iniciar_um(s: Sessao, numero: str, id_tarefa: str = "") -> tuple[str, str]:
     from services.agente.ferramentas.verificacoes import _pausa_atual
     from services.agente.ficha import esquecer
     from services.fluxos.flow_atendimento_pw import iniciar_atendimento
@@ -208,6 +243,12 @@ def _iniciar_um(s: Sessao, numero: str) -> tuple[str, str]:
     historico = extrair_historico_chamado(page, numero, s.log)
     if not historico:
         return ERRO, "Não consegui ler o histórico: o atendimento não foi iniciado."
+    if id_tarefa:
+        try:   # nome para a tabela; nunca impede o início
+            from services.assyst.browser_pw import _usuario_afetado_pw
+            gravar_afetado(id_tarefa, _usuario_afetado_pw(page))
+        except Exception:
+            pass
     pausa = _pausa_atual(historico)
     if not pausa or pausa[0] != "Atendimento Programado":
         return CANCELADO, "Não está mais em Atendimento Programado: o atendimento não foi iniciado."
@@ -275,7 +316,7 @@ def _rodar_grupo(tarefas: list[dict]) -> None:
                 status, detalhe = ERRO, erro_geral
             else:
                 try:
-                    status, detalhe = _iniciar_um(sessao, t["chamado"])
+                    status, detalhe = _iniciar_um(sessao, t["chamado"], t["id"])
                 except ErroSessao as e:
                     erro_geral = f"{e} O atendimento não foi iniciado."
                     status, detalhe = ERRO, erro_geral
