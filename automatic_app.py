@@ -18,6 +18,7 @@ from pages.license import license_page
 from pages.sla import sla_page
 from pages.desmembramento import desmembramento_page
 from pages.atendimento import atendimento_page
+from pages.plantoes import plantoes_page
 from pages.requisicao import requisicao_page
 from pages.configuracoes import configuracoes_page
 from pages.meus_fluxos import meus_fluxos_page
@@ -25,6 +26,7 @@ from pages.assistente import assistente_page
 from pages.api_keys import api_keys_page
 from state.api_keys_state import ApiKeysState, ROTA as ROTA_API_KEYS
 from state.atendimento_state import AtendimentoState
+from state.plantoes_state import PlantoesState
 from state.desmembramento_state import DesmembramentoState
 from state.kb_state import KBState
 from state.meus_fluxos_state import MeusFluxosState
@@ -59,6 +61,13 @@ def _vigiar_sentinela():
     iniciar_vigia()
 
 
+def _vigiar_plantoes():
+    """Sentinela da página Plantões Judiciários (services/plantoes.py): cria as
+    Requisições quando a escala fica completa. Só o app roda."""
+    from services.plantoes import iniciar_vigia
+    iniciar_vigia()
+
+
 def _retomar_bot():
     """Quem ligou o bot pela tela do Assistente: volta a ligar ao abrir o app."""
     from services import bot_processo
@@ -67,6 +76,7 @@ def _retomar_bot():
 
 app.register_lifespan_task(_vigiar_agendados)
 app.register_lifespan_task(_vigiar_sentinela)
+app.register_lifespan_task(_vigiar_plantoes)
 app.register_lifespan_task(_retomar_bot)
 
 app.add_page(
@@ -80,6 +90,12 @@ app.add_page(
     route="/atendimento",
     title="Automatic — Iniciar Atendimento",
     on_load=AtendimentoState.carregar,
+)
+app.add_page(
+    plantoes_page,
+    route="/plantoes",
+    title="Automatic — Plantões Judiciários",
+    on_load=PlantoesState.carregar,
 )
 app.add_page(
     requisicao_page,

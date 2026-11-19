@@ -27,6 +27,7 @@ NAV_ITEMS: list[NavItem] = [
     NavItem("sparkles", "Assistente", "/"),
     NavItem("file-plus", "Requisição de Serviço", "/requisicao"),
     NavItem("circle-play", "Iniciar Atendimento", "/atendimento"),
+    NavItem("calendar-days", "Plantões Judiciários", "/plantoes"),
     NavItem("copy", "Desmembramento", "/desmembramento"),
     NavItem("timer", "Análise de SLA", "/sla"),
     NavItem("history", "Meus fluxos", "/meus-fluxos"),

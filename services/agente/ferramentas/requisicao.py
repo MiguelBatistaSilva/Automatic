@@ -376,42 +376,15 @@ def _prep_por_tombo(args: dict) -> "Acao | str":
 # Plantões do fim de semana (13/10)
 # --------------------------------------------------------------------------- #
 # A lista que o líder sempre usa: por dia, 3 Requisições (Sede, Fórum,
-# Custódia). Só mudam o dia e os técnicos — um por local (a Sede também tem
-# técnico desde 13/10; a lista original a mandava sem). O código monta as linhas (a IA só passa datas e
-# nomes) e cai na Requisição comum: mesmo cartão, checkpoint e Copiar lista.
-# Ordem das linhas = a da lista dele: todos os dias da Sede, depois Fórum,
-# depois Custódia.
+# Custódia). Só mudam o dia e os técnicos. As regras moram em services/plantoes.py
+# desde 18/11 (a página Plantões Judiciários usa as mesmas): o mesmo plantão dá o
+# mesmo texto e a mesma chave de checkpoint pela página e pelo Assistente.
 
-# (edifício, onde na descrição, horário, fila, chave do técnico em `dias`)
-_PLANTOES = (
-    ("Sede Judiciária", "no TJCE", "08:00 as 18:00", "2N CATI TJ", "sede"),
-    ("Fórum Clóvis Beviláqua", "no Fórum", "08:00 as 18:00", "2N CATI FCB", "forum"),
-    ("Externo", "na Custódia", "08:00 as 14:00", "2N CATI FCB", "custodia"),
+from services.plantoes import (  # noqa: E402
+    proximo_fim_de_semana as _proximo_fim_de_semana,
+    salvar_supervisor as _salvar_supervisor,
+    supervisor as _supervisor,
 )
-
-
-# Matrícula do usuário afetado: a do SUPERVISOR. Muda quando muda a gestão,
-# por isso fica no banco (app_config), e não no código.
-_CHAVE_SUPERVISOR = "plantao_supervisor"
-
-
-def _supervisor() -> str:
-    from services.dados import db
-    r = db.consultar("SELECT valor FROM app_config WHERE chave = ?", (_CHAVE_SUPERVISOR,))
-    return r[0]["valor"] if r else ""
-
-
-def _salvar_supervisor(matricula: str) -> None:
-    from services.dados import db
-    with db.transacao() as con:
-        con.execute("INSERT OR REPLACE INTO app_config VALUES (?, ?)",
-                    (_CHAVE_SUPERVISOR, matricula))
-
-
-def _proximo_fim_de_semana(hoje: datetime.date) -> list[datetime.date]:
-    """Sábado e domingo que vêm (sábado hoje = este)."""
-    sabado = hoje + datetime.timedelta(days=(5 - hoje.weekday()) % 7)
-    return [sabado, sabado + datetime.timedelta(days=1)]
 
 
 def _data_plantao(v: str, hoje: datetime.date) -> datetime.date:
@@ -442,11 +415,11 @@ def _prep_plantoes(args: dict) -> "Acao | str":
     dias = [d for d in (args.get("dias") or []) if isinstance(d, dict)]
     padrao = _proximo_fim_de_semana(hoje)
     if not dias:
+        from services.plantoes import SEMANA_LONGA
         return ("Pergunte quem fica na Sede, no Fórum e na Custódia em cada dia: "
-                + " e ".join(f"{d:%d/%m} ({'sábado' if d.weekday() == 5 else 'domingo'})"
-                             for d in padrao) + ".")
+                + ", ".join(f"{d:%d/%m} ({SEMANA_LONGA[d.weekday()]})" for d in padrao) + ".")
     sem_data = [d for d in dias if not str(d.get("data") or "").strip()]
-    if sem_data and (len(sem_data) != len(dias) or len(dias) != 2):
+    if sem_data and (len(sem_data) != len(dias) or len(dias) != len(padrao)):
         return "Falta a data de algum dia (dd/mm). Pergunte ao técnico."
 
     tecnicos = _opcoes()["tecnicos"]
@@ -471,17 +444,8 @@ def _prep_plantoes(args: dict) -> "Acao | str":
     if len(set(datas)) != len(datas):
         return "Há data repetida nos plantões. Confira com o técnico."
 
-    reqs = [
-        {"usuario_afetado": matricula, "edificio": edificio,
-         "resumo": "Requisição de Serviço",
-         "descricao": (f"Solicito acompanhamento técnico ao Plantão Judiciário que "
-                       f"ocorrerá {onde} no dia {data:%d/%m/%Y}. Horário {horario}"),
-         "item": "Apoio a Eventos e Audiências", "item_b": "IC NÃO LOCALIZADO",
-         "categoria": "Apoio Técnico em Evento ou Reunião", "grupo_atribuido": fila,
-         "usuario_atribuido": quem[chave]}
-        for edificio, onde, horario, fila, chave in _PLANTOES
-        for data, quem in zip(datas, nomes)
-    ]
+    from services.plantoes import montar
+    reqs = montar(datas, nomes, matricula)
     base = _prep_requisicoes({"requisicoes": reqs})
     if isinstance(base, str):
         return base
