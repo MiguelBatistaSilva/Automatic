@@ -42,6 +42,11 @@ class PlantoesState(rx.State):
     dias: list[DiaPlantao] = []
     tecnicos: list[str] = []
     supervisor: str = ""
+    supervisor_nac: str = ""
+    # Pop-up "Cadastrar matrículas" (23/11): rascunho, só grava no Salvar.
+    sup_capital: str = ""
+    sup_nac: str = ""
+    matriculas_aberto: bool = False
     ligado: bool = False
     fase: str = ""
     travada: bool = False
@@ -62,6 +67,7 @@ class PlantoesState(rx.State):
         op = _opcoes()
         self.tecnicos = op["tecnicos"]
         self.supervisor = plantoes.supervisor()
+        self.supervisor_nac = plantoes.supervisor(nac=True)
         ds = plantoes.datas(e)
         fer = plantoes.feriados({d.year for d in ds})
         self.dias = [DiaPlantao(d.isoformat(),
@@ -75,7 +81,7 @@ class PlantoesState(rx.State):
             LinhaPlantao(chave, d.isoformat(), plantoes.rotulo_dia(d), f"{d:%d/%m/%Y}",
                          cel["tecnico"],
                          _aviso_fila(cel["tecnico"], fila) if cel["tecnico"] else "")
-            for chave, *_, fila in plantoes.LOCAIS for d in ds
+            for chave, *_, fila in plantoes._locais_da(e) for d in ds
             for cel in [e["escala"][chave][d.isoformat()]]
         ]
         self.ligado = bool(s.get("ligado"))
@@ -85,8 +91,8 @@ class PlantoesState(rx.State):
         hf = s.get("hora_fixa") or plantoes.HORA_FIXA_PADRAO
         self.hora_hora = hf["hora"]
         self.falta = "" if self.supervisor else "Falta a matrícula do supervisor."
-        self.pendente = {}
-        for chave, *_ in plantoes.LOCAIS:
+        self.pendente = {c: "" for c, *_ in plantoes.LOCAIS}
+        for chave, *_ in plantoes._locais_da(e):
             dias = [plantoes.rotulo_dia(d) for d in ds
                     if not e["escala"][chave][d.isoformat()].get("tecnico")]
             self.pendente[chave] = ("Falta o técnico em: " + ", ".join(dias) + ".") if dias else ""
@@ -125,19 +131,36 @@ class PlantoesState(rx.State):
         return self._depois(plantoes.definir(local, dia, campo, valor))
 
     @rx.event
-    def set_supervisor(self, v: str):
-        self.supervisor = v
+    def abrir_matriculas(self, aberto: bool = True):
+        self._ler()
+        self.sup_capital = self.supervisor
+        self.sup_nac = self.supervisor_nac
+        self.matriculas_aberto = aberto
 
     @rx.event
-    def salvar_supervisor(self):
+    def set_sup_capital(self, v: str):
+        self.sup_capital = v
+
+    @rx.event
+    def set_sup_nac(self, v: str):
+        self.sup_nac = v
+
+    @rx.event
+    def salvar_matriculas(self):
         import re
-        m = re.sub(r"\D", "", self.supervisor)
-        if not m:
-            self._ler()
-            return rx.toast.error("Informe a matrícula do supervisor.")
-        if m == plantoes.supervisor():
-            return
-        return self._depois(plantoes.definir_supervisor(m))
+        cap = re.sub(r"\D", "", self.sup_capital)
+        nac = re.sub(r"\D", "", self.sup_nac)
+        if not cap or not nac:
+            return rx.toast.error("Informe as duas matrículas (capital e NACs).")
+        erro = ""
+        for m, e_nac in ((cap, False), (nac, True)):
+            if m != plantoes.supervisor(nac=e_nac):
+                erro = plantoes.definir_supervisor(m, e_nac) or erro
+        self._ler()
+        if erro:
+            return rx.toast.error(erro)
+        self.matriculas_aberto = False
+        return rx.toast.success("Matrículas salvas.")
 
     @rx.event
     def remover_dia(self, dia: str):

@@ -1,7 +1,8 @@
 """
 pages/plantoes.py — Tela "Plantões Judiciários" (18/11).
 
-Um acordeão por local (Sede, Fórum, Custódia, cada um com a sua fila); dentro,
+Um acordeão por local (Capital: Sede, Fórum, Custódia; Interior: os 7 NACs,
+desde 23/11), cada um com a sua fila; dentro,
 os dias lado a lado, cada um com o técnico. O Sentinela (services/plantoes.py) cria as Requisições
 quando a escala fica completa. O back-end está em state/plantoes_state.py.
 """
@@ -182,6 +183,8 @@ def _sentinela() -> rx.Component:
                 botao_secundario("Atualizar", on_click=PlantoesState.carregar),
                 _feriados_extras(),
                 rx.cond(PlantoesState.info != "", rx.text(PlantoesState.info, size="2")),
+                rx.spacer(),
+                _matriculas(),
                 align="center",
                 spacing="2",
                 width="100%",
@@ -218,6 +221,74 @@ def _sentinela() -> rx.Component:
     )
 
 
+def _campo_matricula(rotulo: str, valor, ao_mudar) -> rx.Component:
+    return rx.vstack(
+        rx.text(rotulo, size="2", weight="bold"),
+        rx.input(value=valor, on_change=ao_mudar, placeholder="Matrícula",
+                 width="100%"),
+        spacing="1",
+        width="100%",
+    )
+
+
+def _matriculas() -> rx.Component:
+    """Pop-up 'Cadastrar matrículas' (23/11): os supervisores que vão como
+    usuário afetado. Troca de supervisor = alterar e salvar."""
+    falta = (PlantoesState.supervisor == "") | (PlantoesState.supervisor_nac == "")
+    return rx.dialog.root(
+        rx.dialog.trigger(
+            botao_secundario(
+                rx.icon("id-card", size=16), "Cadastrar matrículas",
+                rx.cond(falta, rx.badge("Pendente", color_scheme="orange", variant="soft")),
+            ),
+        ),
+        rx.dialog.content(
+            rx.dialog.title("Cadastrar matrículas"),
+            rx.dialog.description(
+                "Matrícula dos supervisores: vão como usuário afetado das Requisições. "
+                "Se o supervisor mudar, altere e salve.",
+                size="2",
+            ),
+            rx.vstack(
+                _campo_matricula("Supervisor da capital (Sede, Fórum, Custódia)",
+                                 PlantoesState.sup_capital, PlantoesState.set_sup_capital),
+                _campo_matricula("Supervisor dos NACs", PlantoesState.sup_nac,
+                                 PlantoesState.set_sup_nac),
+                rx.hstack(
+                    rx.spacer(),
+                    rx.dialog.close(botao_secundario("Cancelar")),
+                    botao_primario("Salvar", on_click=PlantoesState.salvar_matriculas,
+                                   disabled=PlantoesState.travada),
+                    spacing="2",
+                    width="100%",
+                ),
+                spacing="3",
+                width="100%",
+                margin_top="1em",
+            ),
+            max_width="460px",
+        ),
+        open=PlantoesState.matriculas_aberto,
+        on_open_change=PlantoesState.abrir_matriculas,
+    )
+
+
+def _grupo(titulo: str, locais: tuple) -> rx.Component:
+    return rx.vstack(
+        rx.text(titulo, weight="bold", size="4"),
+        rx.accordion.root(
+            *[_local(chave, nome, horario, fila) for chave, nome, _, _, horario, fila in locais],
+            type="multiple",
+            default_value=[c for c, *_ in locais],
+            collapsible=True,
+            width="100%",
+            variant="outline",
+        ),
+        spacing="2",
+        width="100%",
+    )
+
+
 def plantoes_page() -> rx.Component:
     conteudo = rx.vstack(
         _topo(),
@@ -228,27 +299,9 @@ def plantoes_page() -> rx.Component:
             color="#6B7280",
         ),
         _sentinela(),
-        rx.hstack(
-            rx.text("Matrícula do supervisor (usuário afetado)", weight="bold"),
-            rx.input(value=PlantoesState.supervisor, on_change=PlantoesState.set_supervisor,
-                     on_blur=PlantoesState.salvar_supervisor, width="140px",
-                     disabled=PlantoesState.travada),
-            rx.cond(
-                PlantoesState.falta != "",
-                rx.badge(rx.icon("clock", size=12), "Pendente", color_scheme="orange", variant="soft"),
-            ),
-            align="center",
-            spacing="3",
-        ),
         _dias(),
-        rx.accordion.root(
-            *[_local(chave, nome, horario, fila) for chave, nome, _, _, horario, fila in plantoes.LOCAIS],
-            type="multiple",
-            default_value=[c for c, *_ in plantoes.LOCAIS],
-            collapsible=True,
-            width="100%",
-            variant="outline",
-        ),
+        _grupo("Capital", plantoes.CAPITAL),
+        _grupo("Interior (NACs)", plantoes.NACS),
         spacing="4",
         width="100%",
     )

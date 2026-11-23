@@ -7,7 +7,8 @@ ESCALA da página Plantões Judiciários, com o Sentinela que cria as Requisiç�
 Regras (do líder, 13/10): por dia, 3 Requisições — Sede Judiciária, Fórum
 Clóvis Beviláqua e Custódia (edifício Externo) —, um técnico por local, mesma
 descrição, item e categoria; usuário afetado = matrícula do SUPERVISOR (fica no
-app_config, muda com a gestão). A página e o agente montam as linhas AQUI, então
+app_config, muda com a gestão). 23/11: mais 7 NACs do interior (08:00 as 14:00,
+fila do Polo), também Requisição, no nome do supervisor DOS NACs. A página e o agente montam as linhas AQUI, então
 o mesmo plantão dá o mesmo texto e a mesma chave de checkpoint nos dois.
 
 Escala: em app_config['plantoes_escala'] (JSON) para o Sentinela, que roda no
@@ -40,18 +41,40 @@ log = logging.getLogger("plantoes")
 
 # (chave, nome na página, edifício, onde na descrição, horário, fila)
 # Cada local tem a SUA fila (19/11: sem seletor de fila na página).
-LOCAIS = (
+CAPITAL = (
     ("sede", "Sede Judiciária (TJCE)", "Sede Judiciária", "no TJCE", "08:00 as 18:00", "2N CATI TJ"),
     ("forum", "Fórum Clóvis Beviláqua", "Fórum Clóvis Beviláqua", "no Fórum", "08:00 as 18:00", "2N CATI FCB"),
     ("custodia", "Custódia", "Externo", "na Custódia", "08:00 as 14:00", "2N CATI Vara de Custódia"),
 )
+
+
+def _nac(chave: str, cidade: str, nome_edificio: str, polo: str) -> tuple:
+    edificio = f"NAC {nome_edificio} - Núcleo de Audiência de Custódia"
+    return (chave, f"NAC {cidade}", edificio, f"na {edificio}", "08:00 as 14:00",
+            f"2N CATI Polo {polo}")
+
+
+# NACs do interior (23/11): também Requisição (R), como a capital (antes eram
+# abertos como "Reuniões e Eventos", S). Usuário afetado = supervisor dos NACs.
+NACS = (
+    _nac("nac_juazeiro", "Juazeiro", "Juazeiro do Norte", "Juazeiro"),
+    _nac("nac_quixada", "Quixadá", "Quixadá", "Quixadá"),
+    _nac("nac_iguatu", "Iguatu", "Iguatu", "Iguatu"),
+    _nac("nac_crateus", "Crateús", "Crateús", "Crateús"),
+    _nac("nac_sobral", "Sobral", "Sobral", "Sobral"),
+    _nac("nac_maracanau", "Maracanaú", "Maracanaú", "Maracanaú"),
+    _nac("nac_caucaia", "Caucaia", "Caucaia", "Caucaia"),
+)
+LOCAIS = CAPITAL + NACS
+CHAVES_NAC = frozenset(c for c, *_ in NACS)
 SEMANA = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
 SEMANA_LONGA = ("segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo")
 # "Inicia às" (19/11): os chamados saem na VÉSPERA do 1º dia, nesta hora.
 HORA_FIXA_PADRAO = {"hora": "14:00"}
 
 _CHAVE = "plantoes_escala"
-_CHAVE_SUPERVISOR = "plantao_supervisor"
+_CHAVE_SUPERVISOR = "plantao_supervisor"            # capital
+_CHAVE_SUPERVISOR_NAC = "plantao_supervisor_nac"    # NACs (23/11)
 _CHECAGEM_S = 30
 CRIANDO, CONCLUIDO, ERRO = "criando", "concluido", "erro"
 
@@ -60,15 +83,17 @@ CRIANDO, CONCLUIDO, ERRO = "criando", "concluido", "erro"
 # Regras
 # --------------------------------------------------------------------------- #
 
-def supervisor() -> str:
-    r = db.consultar("SELECT valor FROM app_config WHERE chave = ?", (_CHAVE_SUPERVISOR,))
+def supervisor(nac: bool = False) -> str:
+    """Matrícula do usuário afetado: o supervisor da capital ou o dos NACs."""
+    r = db.consultar("SELECT valor FROM app_config WHERE chave = ?",
+                     (_CHAVE_SUPERVISOR_NAC if nac else _CHAVE_SUPERVISOR,))
     return r[0]["valor"] if r else ""
 
 
-def salvar_supervisor(matricula: str) -> None:
+def salvar_supervisor(matricula: str, nac: bool = False) -> None:
     with db.transacao() as con:
         con.execute("INSERT OR REPLACE INTO app_config VALUES (?, ?)",
-                    (_CHAVE_SUPERVISOR, matricula))
+                    (_CHAVE_SUPERVISOR_NAC if nac else _CHAVE_SUPERVISOR, matricula))
 
 
 # --------------------------------------------------------------------------- #
@@ -207,12 +232,15 @@ def remover_extra(iso: str) -> None:
         remover_dia(iso)
 
 
-def montar(datas: list[datetime.date], quem: list[dict], matricula: str) -> list[dict]:
+def montar(datas: list[datetime.date], quem: list[dict], matricula: str,
+           matricula_nac: str = "") -> list[dict]:
     """As Requisições: `quem[i][local]` = técnico do dia i; a fila é a do
     local. Ordem = a da lista do líder: todos os dias da Sede, depois Fórum,
-    depois Custódia."""
+    depois Custódia, depois os NACs. Só entram os locais presentes em `quem`
+    (o agente ainda passa só os 3 da capital). Os NACs usam `matricula_nac`."""
     return [
-        {"usuario_afetado": matricula, "edificio": edificio,
+        {"usuario_afetado": matricula_nac if chave in CHAVES_NAC else matricula,
+         "edificio": edificio,
          "resumo": "Requisição de Serviço",
          "descricao": (f"Solicito acompanhamento técnico ao Plantão Judiciário que "
                        f"ocorrerá {onde} no dia {data:%d/%m/%Y}. Horário {horario}"),
@@ -221,6 +249,7 @@ def montar(datas: list[datetime.date], quem: list[dict], matricula: str) -> list
          "grupo_atribuido": fila,
          "usuario_atribuido": quem[i][chave]}
         for chave, _, edificio, onde, horario, fila in LOCAIS
+        if quem and all(chave in q for q in quem)
         for i, data in enumerate(datas)
     ]
 
@@ -254,9 +283,20 @@ def _ler(con) -> dict:
     if not e or not e.get("dias") or max(e["dias"]) < hoje.isoformat():
         e = _nova(proximo_fim_de_semana(hoje), (e or {}).get("sentinela"))
         _gravar(con, e)
-    elif _completar(e, hoje):
+    elif _novos_locais(e) | _completar(e, hoje):
         _gravar(con, e)
     return e
+
+
+def _novos_locais(e: dict) -> bool:
+    """Escala gravada antes de um local existir (NACs, 23/11): entra vazio.
+    Escala já travada fica como está (mudar a lista criaria em dobro)."""
+    if _travada(e):
+        return False
+    novos = [c for c, *_ in LOCAIS if c not in e["escala"]]
+    for c in novos:
+        e["escala"][c] = {d: {"tecnico": ""} for d in e["dias"]}
+    return bool(novos)
 
 
 def _completar(e: dict, hoje: datetime.date) -> bool:
@@ -312,8 +352,10 @@ def datas(e: dict) -> list[datetime.date]:
 
 def faltando(e: dict) -> list[str]:
     """O que falta para a escala ficar completa ('' de nada)."""
-    falta = [] if supervisor() else ["matrícula do supervisor"]
-    for chave, nome, *_ in LOCAIS:
+    falta = [] if supervisor() else ["matrícula do supervisor da capital"]
+    if any(c in CHAVES_NAC for c in e["escala"]) and not supervisor(nac=True):
+        falta.append("matrícula do supervisor dos NACs")
+    for chave, nome, *_ in _locais_da(e):
         for d in datas(e):
             cel = e["escala"][chave].get(d.isoformat()) or {}
             if not cel.get("tecnico"):
@@ -321,10 +363,16 @@ def faltando(e: dict) -> list[str]:
     return falta
 
 
+def _locais_da(e: dict) -> list[tuple]:
+    """Os locais que esta escala tem (uma travada antes dos NACs não os tem)."""
+    return [l for l in LOCAIS if l[0] in e["escala"]]
+
+
 def requisicoes(e: dict) -> list[dict]:
     ds = datas(e)
-    quem = [{c: e["escala"][c][d.isoformat()]["tecnico"] for c, *_ in LOCAIS} for d in ds]
-    return montar(ds, quem, supervisor())
+    quem = [{c: e["escala"][c][d.isoformat()]["tecnico"] for c, *_ in _locais_da(e)}
+            for d in ds]
+    return montar(ds, quem, supervisor(), supervisor(nac=True))
 
 
 def momento_fixo(e: dict) -> datetime.datetime:
@@ -382,8 +430,8 @@ def remover_dia(iso: str) -> str:
     return _mudar(fn)
 
 
-def definir_supervisor(matricula: str) -> str:
-    salvar_supervisor(matricula)
+def definir_supervisor(matricula: str, nac: bool = False) -> str:
+    salvar_supervisor(matricula, nac)
     return _mudar(lambda e: None)
 
 
