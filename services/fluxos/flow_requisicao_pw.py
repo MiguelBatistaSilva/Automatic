@@ -549,6 +549,27 @@ def selecionar_lookup(page, log, prefixo, campo, valor: str) -> bool:
     return True
 
 
+def _limpar_lookup(page, prefixo, campo) -> bool:
+    """Apaga o que ficou digitado num lookup que nao achou o valor.
+
+    Depois de uma busca sem resultado o texto continua no input (e a lista pode
+    estar aberta); salvar assim faria o Assyst reclamar do valor invalido. Fecha a
+    lista, limpa e confere que ficou vazio. False = nao conseguiu limpar.
+    """
+    try:
+        caixa = page.locator(id_campo(prefixo, campo)).first
+        caixa.press("Escape")
+        _esperar_lista_fechar(page, prefixo, campo)
+        caixa.click()
+        caixa.press("Control+a")
+        caixa.press("Delete")
+        caixa.press("Tab")
+        page.wait_for_timeout(300)
+    except Exception:
+        return False
+    return not _valor_de(page, prefixo, campo)
+
+
 # Nomes (1a coluna) das linhas da grade do dialogo de busca do lookup, achado
 # pelo botao Cancelar dele (12/11, capturado no R2512134 com *302533).
 _JS_NOMES_DO_DIALOGO = """sel => {
@@ -927,6 +948,15 @@ def criar_requisicao(page, log, valores: dict[str, str],
         if not valor:
             continue
         if not _preencher_campo(page, log, prefixo, campo, valor):
+            # Tecnico fora da fila (23/11, decisao do usuario): o Assyst so lista
+            # quem tem a fila no perfil. Em vez de abortar, o chamado vai so para
+            # a fila. Vale SO para este campo — os outros continuam abortando.
+            if (campo.chave == "usuario_atribuido"
+                    and _limpar_lookup(page, prefixo, campo)):
+                log(f"Técnico {valor!r} não encontrado na fila "
+                    f"{valores.get('grupo_atribuido') or ''} — o chamado vai só "
+                    "para a fila, sem técnico.", "status")
+                continue
             log(f"Abortado em '{campo.rotulo}' — nada foi salvo.", "error")
             return None
         # Espera a resposta do Assyst antes do proximo campo — pelo SINAL, nao por
