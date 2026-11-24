@@ -22,10 +22,13 @@ página (portaria, ponto facultativo). Feriado no meio da semana: o técnico
 adiciona o dia na mão. Dia tirado na mão não volta sozinho (e['removidos']).
 
 Sentinela ("Inicia às", 19/11): na VÉSPERA do 1º dia do plantão, na hora
-configurada (padrão 14:00; sexta feriado -> quinta). Completa -> cria. Incompleta ->
-avisa (página e Telegram) uma vez e cria assim que completar. Antes da hora, nada.
-Depois de começar a criar, a escala trava (mudar mudaria a chave do checkpoint
-e criaria em dobro). Erro no meio: "Tentar de novo" retoma pelo checkpoint.
+configurada (padrão 14:00; sexta feriado -> quinta). Desde 24/11 por BLOCO
+(Capital e Interior, independentes): bloco completo -> cria; incompleto ->
+avisa (página e Telegram) uma vez e cria assim que completar. Antes da hora,
+nada. Depois de começar a criar, o bloco trava (mudar mudaria a chave do
+checkpoint e criaria em dobro) e os dias travam para todos. Erro no meio:
+"Tentar de novo" do bloco retoma pelo checkpoint. Dias passados = escala nova
+sozinha (o botão "Nova escala" saiu em 24/11).
 Roda na máquina de quem ligou, com o login do app.
 """
 
@@ -67,6 +70,13 @@ NACS = (
 )
 LOCAIS = CAPITAL + NACS
 CHAVES_NAC = frozenset(c for c, *_ in NACS)
+# Blocos independentes (24/11): cada um é criado quando ele mesmo fica completo.
+GRUPOS = {"capital": CAPITAL, "interior": NACS}
+NOME_GRUPO = {"capital": "Capital", "interior": "Interior"}
+
+
+def grupo_do(local: str) -> str:
+    return "interior" if local in CHAVES_NAC else "capital"
 SEMANA = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
 SEMANA_LONGA = ("segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo")
 # "Inicia às" (19/11): os chamados saem na VÉSPERA do 1º dia, nesta hora.
@@ -256,21 +266,30 @@ def montar(datas: list[datetime.date], quem: list[dict], matricula: str,
 
 def rotulo_dia(d: datetime.date) -> str:
     return f"{SEMANA[d.weekday()]} {d:%d/%m}"
-
-
 # --------------------------------------------------------------------------- #
 # Escala (banco)
 # --------------------------------------------------------------------------- #
+# Blocos independentes (24/11): Capital e Interior têm, cada um, a sua fase
+# (criando/concluído/erro), o seu resumo e o seu aviso de incompleta, em
+# e['blocos'][grupo]. O Sentinela cria o bloco que estiver completo; o outro
+# espera completar. Compartilhados (e['sentinela']): ligado, "Inicia às",
+# matrícula de quem ligou. Os DIAS também são de todos: travam assim que
+# qualquer bloco começa a ser criado.
+
+def _bloco_vazio() -> dict:
+    return {"fase": "", "resumo": "", "avisou_incompleto": False, "quando": ""}
+
 
 def _nova(dias: list[datetime.date], sentinela: "dict | None" = None) -> dict:
-    s = dict(sentinela or {})
-    s.update({"fase": "", "resumo": "", "avisou_incompleto": False})
+    s = {k: v for k, v in (sentinela or {}).items()
+         if k in ("ligado", "hora_fixa", "matricula")}
     s.setdefault("ligado", False)
     s.setdefault("hora_fixa", dict(HORA_FIXA_PADRAO))
     return {"dias": [d.isoformat() for d in dias],
             "escala": {c: {d.isoformat(): {"tecnico": ""} for d in dias}
                        for c, *_ in LOCAIS},
-            "sentinela": s}
+            "sentinela": s,
+            "blocos": {g: _bloco_vazio() for g in GRUPOS}}
 
 
 def _ler(con) -> dict:
@@ -283,17 +302,28 @@ def _ler(con) -> dict:
     if not e or not e.get("dias") or max(e["dias"]) < hoje.isoformat():
         e = _nova(proximo_fim_de_semana(hoje), (e or {}).get("sentinela"))
         _gravar(con, e)
-    elif _novos_locais(e) | _completar(e, hoje):
+    elif _migrar_blocos(e) | _novos_locais(e) | _completar(e, hoje):
         _gravar(con, e)
     return e
 
 
-def _novos_locais(e: dict) -> bool:
-    """Escala gravada antes de um local existir (NACs, 23/11): entra vazio.
-    Escala já travada fica como está (mudar a lista criaria em dobro)."""
-    if _travada(e):
+def _migrar_blocos(e: dict) -> bool:
+    """Escala de antes dos blocos (24/11): a fase única era a da capital."""
+    if "blocos" in e:
         return False
-    novos = [c for c, *_ in LOCAIS if c not in e["escala"]]
+    s = e["sentinela"]
+    cap = _bloco_vazio()
+    cap.update({k: s.pop(k) for k in ("fase", "resumo", "avisou_incompleto", "quando")
+                if k in s})
+    e["blocos"] = {"capital": cap, "interior": _bloco_vazio()}
+    return True
+
+
+def _novos_locais(e: dict) -> bool:
+    """Escala gravada antes de um local existir (NACs, 23/11): entra vazio,
+    se o bloco dele ainda não começou (mudar a lista criaria em dobro)."""
+    novos = [c for c, *_ in LOCAIS
+             if c not in e["escala"] and not _travado(e, grupo_do(c))]
     for c in novos:
         e["escala"][c] = {d: {"tecnico": ""} for d in e["dias"]}
     return bool(novos)
@@ -330,7 +360,7 @@ def _sabado_da_escala(e: dict) -> "datetime.date | None":
 def _incluir(e: dict, d: datetime.date) -> None:
     iso = d.isoformat()
     e["dias"] = sorted(e["dias"] + [iso])
-    for c, *_ in LOCAIS:
+    for c in e["escala"]:
         e["escala"][c][iso] = {"tecnico": ""}
     if iso in (e.get("removidos") or []):
         e["removidos"].remove(iso)
@@ -350,12 +380,18 @@ def datas(e: dict) -> list[datetime.date]:
     return [datetime.date.fromisoformat(d) for d in e["dias"]]
 
 
-def faltando(e: dict) -> list[str]:
-    """O que falta para a escala ficar completa ('' de nada)."""
-    falta = [] if supervisor() else ["matrícula do supervisor da capital"]
-    if any(c in CHAVES_NAC for c in e["escala"]) and not supervisor(nac=True):
-        falta.append("matrícula do supervisor dos NACs")
-    for chave, nome, *_ in _locais_da(e):
+def _locais_da(e: dict, grupo: str = "") -> list[tuple]:
+    """Os locais que esta escala tem (do grupo, se pedido). Uma escala travada
+    antes dos NACs não os tem."""
+    return [l for l in (GRUPOS[grupo] if grupo else LOCAIS) if l[0] in e["escala"]]
+
+
+def faltando(e: dict, grupo: str) -> list[str]:
+    """O que falta para o bloco ficar completo ([] = nada)."""
+    nac = grupo == "interior"
+    falta = [] if supervisor(nac=nac) else [
+        "matrícula do supervisor " + ("dos NACs" if nac else "da capital")]
+    for chave, nome, *_ in _locais_da(e, grupo):
         for d in datas(e):
             cel = e["escala"][chave].get(d.isoformat()) or {}
             if not cel.get("tecnico"):
@@ -363,16 +399,18 @@ def faltando(e: dict) -> list[str]:
     return falta
 
 
-def _locais_da(e: dict) -> list[tuple]:
-    """Os locais que esta escala tem (uma travada antes dos NACs não os tem)."""
-    return [l for l in LOCAIS if l[0] in e["escala"]]
-
-
-def requisicoes(e: dict) -> list[dict]:
+def requisicoes(e: dict, grupo: str) -> list[dict]:
     ds = datas(e)
-    quem = [{c: e["escala"][c][d.isoformat()]["tecnico"] for c, *_ in _locais_da(e)}
+    quem = [{c: e["escala"][c][d.isoformat()]["tecnico"] for c, *_ in _locais_da(e, grupo)}
             for d in ds]
     return montar(ds, quem, supervisor(), supervisor(nac=True))
+
+
+def referencias(e: dict, grupo: str) -> list[str]:
+    """Rótulo de cada Requisição para o Meus fluxos, na ordem do montar:
+    'NAC Caucaia · sáb 28/11'."""
+    return [f"{nome.split(' (')[0]} · {rotulo_dia(d)}"
+            for _, nome, *_ in _locais_da(e, grupo) for d in datas(e)]
 
 
 def momento_fixo(e: dict) -> datetime.datetime:
@@ -384,25 +422,33 @@ def momento_fixo(e: dict) -> datetime.datetime:
     return datetime.datetime(d.year, d.month, d.day, h, m)
 
 
+def _travado(e: dict, grupo: str) -> bool:
+    return e["blocos"][grupo].get("fase") in (CRIANDO, CONCLUIDO, ERRO)
+
+
 def _travada(e: dict) -> bool:
-    return e["sentinela"].get("fase") in (CRIANDO, CONCLUIDO, ERRO)
+    """Algum bloco começou: os DIAS (de todos) não mudam mais."""
+    return any(_travado(e, g) for g in GRUPOS)
 
 
-def _recalcular(e: dict) -> None:
+def _recalcular(e: dict, grupo: str = "") -> None:
     """Depois de qualquer mudança na escala: o aviso de incompleta pode voltar."""
-    e["sentinela"]["avisou_incompleto"] = False
+    for g in ([grupo] if grupo else GRUPOS):
+        e["blocos"][g]["avisou_incompleto"] = False
 
 
-def _mudar(fn) -> str:
-    """Aplica `fn(e)` numa transação. Devolve '' ou o motivo de não poder."""
+def _mudar(fn, grupo: str = "") -> str:
+    """Aplica `fn(e)` numa transação. Devolve '' ou o motivo de não poder.
+    Com `grupo`, só aquele bloco precisa estar livre; sem, todos (os dias)."""
     with db.transacao() as con:
         e = _ler(con)
-        if _travada(e):
-            return "A criação já começou: a escala não muda mais."
+        if _travado(e, grupo) if grupo else _travada(e):
+            return ("A criação deste bloco já começou: ele não muda mais." if grupo else
+                    "A criação já começou: os dias não mudam mais.")
         erro = fn(e)
         if erro:
             return erro
-        _recalcular(e)
+        _recalcular(e, grupo)
         _gravar(con, e)
     return ""
 
@@ -414,7 +460,7 @@ def definir(local: str, dia: str, campo: str, valor: str) -> str:
         if dia not in e["escala"][local]:
             return "Dia fora da escala."
         e["escala"][local][dia][campo] = valor
-    return _mudar(fn)
+    return _mudar(fn, grupo_do(local))
 
 
 def remover_dia(iso: str) -> str:
@@ -425,23 +471,24 @@ def remover_dia(iso: str) -> str:
             return "Sábado e domingo são fixos."
         e["dias"].remove(iso)
         e.setdefault("removidos", []).append(iso)
-        for c, *_ in LOCAIS:
+        for c in e["escala"]:
             e["escala"][c].pop(iso, None)
     return _mudar(fn)
 
 
 def definir_supervisor(matricula: str, nac: bool = False) -> str:
-    salvar_supervisor(matricula, nac)
-    return _mudar(lambda e: None)
-
-
-def nova_escala() -> None:
-    """Depois de criada (ou para recomeçar): próximo fim de semana, vazia."""
+    """Só grava se o bloco dele não começou a ser criado."""
+    grupo = "interior" if nac else "capital"
     with db.transacao() as con:
         e = _ler(con)
-        if e["sentinela"].get("fase") == CRIANDO:
-            return
-        _gravar(con, _nova(proximo_fim_de_semana(datetime.date.today()), e["sentinela"]))
+        if _travado(e, grupo):
+            return ("A criação " + ("do Interior" if nac else "da Capital")
+                    + " já começou: a matrícula não muda mais.")
+        con.execute("INSERT OR REPLACE INTO app_config VALUES (?, ?)",
+                    (_CHAVE_SUPERVISOR_NAC if nac else _CHAVE_SUPERVISOR, matricula))
+        _recalcular(e, grupo)
+        _gravar(con, e)
+    return ""
 
 
 # --------------------------------------------------------------------------- #
@@ -452,8 +499,7 @@ def ligar(matricula: str) -> None:
     with db.transacao() as con:
         e = _ler(con)
         e["sentinela"].update({"ligado": True, "matricula": matricula})
-        if not _travada(e):
-            _recalcular(e)
+        _recalcular(e)
         _gravar(con, e)
 
 
@@ -472,49 +518,51 @@ def definir_hora_fixa(hora: str) -> str:
         return "Horário inválido."
     with db.transacao() as con:
         e = _ler(con)
-        e["sentinela"].update({"hora_fixa": {"hora": f"{h:02d}:{m:02d}"},
-                               "avisou_incompleto": False})
+        e["sentinela"]["hora_fixa"] = {"hora": f"{h:02d}:{m:02d}"}
+        _recalcular(e)
         _gravar(con, e)
     return ""
 
 
-def tentar_de_novo() -> None:
+def tentar_de_novo(grupo: str) -> None:
     """Depois de erro: cria o que faltou (o checkpoint pula as já criadas)."""
     with db.transacao() as con:
         e = _ler(con)
-        if e["sentinela"].get("fase") == ERRO:
-            e["sentinela"]["fase"] = ""
+        if e["blocos"][grupo].get("fase") == ERRO:
+            e["blocos"][grupo]["fase"] = ""
             _gravar(con, e)
 
 
-def _pegar_vez(agora: float) -> "tuple[str, dict] | None":
-    """('criar' | 'avisar', estado) ou None. Em transação: dois backends
-    (hot-reload) nunca criam juntos."""
+def _pegar_vez(agora: float) -> "tuple[str, str, dict] | None":
+    """('criar' | 'avisar', grupo, estado) ou None. Em transação: dois
+    backends (hot-reload) nunca criam juntos. Um bloco por vez; o outro sai
+    na volta seguinte do laço."""
     with db.transacao() as con:
         e = _ler(con)
-        s = e["sentinela"]
-        if not s.get("ligado") or _travada(e):
+        if not e["sentinela"].get("ligado") or agora < momento_fixo(e).timestamp():
             return None
-        if agora < momento_fixo(e).timestamp():
-            return None
-        # Passou da hora: completa inicia já; incompleta avisa uma vez e
-        # inicia assim que completar.
-        if not faltando(e):
-            s.update({"fase": CRIANDO, "resumo": "Criando as Requisições..."})
-            _gravar(con, e)
-            return "criar", e
-        if not s.get("avisou_incompleto"):
-            s["avisou_incompleto"] = True
-            _gravar(con, e)
-            return "avisar", e
+        for g in GRUPOS:
+            b = e["blocos"][g]
+            if _travado(e, g):
+                continue
+            # Passou da hora: completo inicia já; incompleto avisa uma vez e
+            # inicia assim que completar.
+            if not faltando(e, g):
+                b.update({"fase": CRIANDO, "resumo": "Criando as Requisições..."})
+                _gravar(con, e)
+                return "criar", g, e
+            if not b.get("avisou_incompleto"):
+                b["avisou_incompleto"] = True
+                _gravar(con, e)
+                return "avisar", g, e
     return None
 
 
-def _concluir(fase: str, resumo: str) -> None:
+def _concluir(grupo: str, fase: str, resumo: str) -> None:
     with db.transacao() as con:
         e = _ler(con)
-        e["sentinela"].update({"fase": fase, "resumo": resumo,
-                               "quando": datetime.datetime.now().strftime("%d/%m %H:%M")})
+        e["blocos"][grupo].update({"fase": fase, "resumo": resumo,
+                                   "quando": datetime.datetime.now().strftime("%d/%m %H:%M")})
         _gravar(con, e)
 
 
@@ -526,7 +574,7 @@ def _telegram(matricula: str, texto: str) -> None:
         agendados._mandar_telegram(r[0]["chat_id"], texto)
 
 
-def _criar(e: dict) -> None:
+def _criar(e: dict, grupo: str) -> None:
     from services.agente.ferramentas import requisicao
     from services.agente.sessao import Sessao
     from services.dados import credenciais
@@ -534,12 +582,14 @@ def _criar(e: dict) -> None:
     dono = e["sentinela"].get("matricula", "")
     matricula, senha = credenciais.carregar()
     if matricula != dono or not senha:
-        _concluir(ERRO, "A credencial do app não é a de quem ligou o Sentinela.")
+        _concluir(grupo, ERRO, "A credencial do app não é a de quem ligou o Sentinela.")
         return
-    acao = requisicao._prep_requisicoes({"requisicoes": requisicoes(e)})
+    acao = requisicao._prep_requisicoes({"requisicoes": requisicoes(e, grupo)})
     if isinstance(acao, str):
-        _concluir(ERRO, acao)
+        _concluir(grupo, ERRO, acao)
         return
+    # Meus fluxos: "Plantões · Capital/Interior", cada linha com local e dia.
+    acao.args.update({"fluxo": f"plantoes_{grupo}", "referencias": referencias(e, grupo)})
     sessao = Sessao(matricula, senha, lambda m, t="info": log.info("%s", m))
     try:
         res = requisicao._exec_requisicoes(acao.args, sessao)
@@ -548,18 +598,18 @@ def _criar(e: dict) -> None:
         fase, texto = ERRO, f"❌ {ex or type(ex).__name__}"
     finally:
         sessao.fechar()
-    _concluir(fase, texto)
+    _concluir(grupo, fase, texto)
     dias = ", ".join(rotulo_dia(d) for d in datas(e))
-    _telegram(dono, f"🛡️ Plantões Judiciários ({dias})\n\n{texto}")
+    _telegram(dono, f"🛡️ Plantões Judiciários · {NOME_GRUPO[grupo]} ({dias})\n\n{texto}")
 
 
-def _avisar_incompleto(e: dict) -> None:
-    falta = faltando(e)
-    texto = ("Chegou o horário de criar os plantões, mas a escala está incompleta. "
-             "Falta: " + ", ".join(falta) + ". Inicia assim que completar.")
+def _avisar_incompleto(e: dict, grupo: str) -> None:
+    falta = faltando(e, grupo)
+    texto = (f"Chegou o horário de criar os plantões ({NOME_GRUPO[grupo]}), mas a escala "
+             "está incompleta. Falta: " + ", ".join(falta) + ". Inicia assim que completar.")
     with db.transacao() as con:
         e2 = _ler(con)
-        e2["sentinela"]["resumo"] = "⚠️ " + texto
+        e2["blocos"][grupo]["resumo"] = "⚠️ " + texto
         _gravar(con, e2)
     _telegram(e["sentinela"].get("matricula", ""), "🛡️ Plantões Judiciários\n\n⚠️ " + texto)
 
@@ -583,9 +633,13 @@ def iniciar_vigia() -> None:
         try:
             with db.transacao() as con:
                 e = _ler(con)
-                if e["sentinela"].get("fase") == CRIANDO:
-                    e["sentinela"].update({"fase": ERRO, "resumo":
-                                           "O app fechou no meio da criação. Confira e tente de novo."})
+                mudou = False
+                for b in e["blocos"].values():
+                    if b.get("fase") == CRIANDO:
+                        b.update({"fase": ERRO, "resumo":
+                                  "O app fechou no meio da criação. Confira e tente de novo."})
+                        mudou = True
+                if mudou:
                     _gravar(con, e)
         except Exception:
             log.exception("Plantões: falha ao limpar o estado")
@@ -593,9 +647,9 @@ def iniciar_vigia() -> None:
             try:
                 vez = _pegar_vez(time.time())
                 if vez and vez[0] == "criar":
-                    _criar(vez[1])
+                    _criar(vez[2], vez[1])
                 elif vez:
-                    _avisar_incompleto(vez[1])
+                    _avisar_incompleto(vez[2], vez[1])
             except Exception:
                 log.exception("Falha no Sentinela dos plantões")
             time.sleep(_CHECAGEM_S)

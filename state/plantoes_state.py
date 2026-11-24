@@ -38,6 +38,7 @@ class DiaExtra:
 
 
 class PlantoesState(rx.State):
+    grupo: str = "capital"     # segmented control: "capital" | "interior"
     linhas: list[LinhaPlantao] = []
     dias: list[DiaPlantao] = []
     tecnicos: list[str] = []
@@ -48,8 +49,9 @@ class PlantoesState(rx.State):
     sup_nac: str = ""
     matriculas_aberto: bool = False
     ligado: bool = False
-    fase: str = ""
-    travada: bool = False
+    fase: str = ""            # do bloco escolhido
+    travada: bool = False     # bloco escolhido já começou (técnicos travam)
+    dias_travados: bool = False   # algum bloco começou (dias travam)
     info: str = ""
     falta: str = ""
     pendente: dict[str, str] = {}   # local -> "Falta: sáb 21/11, ..." ("" = completo)
@@ -85,9 +87,11 @@ class PlantoesState(rx.State):
             for cel in [e["escala"][chave][d.isoformat()]]
         ]
         self.ligado = bool(s.get("ligado"))
-        self.fase = s.get("fase") or ""
-        self.travada = self.fase in (plantoes.CRIANDO, plantoes.CONCLUIDO, plantoes.ERRO)
-        self.resumo = s.get("resumo") or ""
+        b = e["blocos"][self.grupo]
+        self.fase = b.get("fase") or ""
+        self.travada = plantoes._travado(e, self.grupo)
+        self.dias_travados = plantoes._travada(e)
+        self.resumo = b.get("resumo") or ""
         hf = s.get("hora_fixa") or plantoes.HORA_FIXA_PADRAO
         self.hora_hora = hf["hora"]
         self.falta = "" if self.supervisor else "Falta a matrícula do supervisor."
@@ -98,27 +102,33 @@ class PlantoesState(rx.State):
             self.pendente[chave] = ("Falta o técnico em: " + ", ".join(dias) + ".") if dias else ""
         fixo = plantoes.momento_fixo(e)
         self.inicio = plantoes.rotulo_dia(fixo.date())
-        completa = not plantoes.faltando(e)
+        completa = not plantoes.faltando(e, self.grupo)
         passou = datetime.datetime.now() >= fixo
+        nome = plantoes.NOME_GRUPO[self.grupo]
         if not self.ligado:
             self.info = ""
         elif self.fase == plantoes.CRIANDO:
-            self.info = "Criando as Requisições agora..."
+            self.info = f"{nome}: criando as Requisições agora..."
         elif self.fase == plantoes.CONCLUIDO:
-            self.info = f"Plantões criados ({s.get('quando', '')})."
+            self.info = f"{nome}: plantões criados ({b.get('quando', '')})."
         elif self.fase == plantoes.ERRO:
-            self.info = "A criação parou no meio. Confira o resumo."
+            self.info = f"{nome}: a criação parou no meio. Confira o resultado."
         elif passou and completa:
-            self.info = "Escala completa: iniciando em instantes..."
+            self.info = f"{nome} completo: iniciando em instantes..."
         elif passou:
-            self.info = "Passou do horário e a escala está incompleta: inicia assim que completar."
+            self.info = f"{nome}: passou do horário e está incompleto. Inicia assim que completar."
         elif completa:
-            self.info = f"Escala completa: inicia {self.inicio} às {self.hora_hora}."
+            self.info = f"{nome} completo: inicia {self.inicio} às {self.hora_hora}."
         else:
-            self.info = f"Inicia {self.inicio} às {self.hora_hora}, se a escala estiver completa."
+            self.info = f"{nome}: inicia {self.inicio} às {self.hora_hora}, se estiver completo."
 
     @rx.event
     def carregar(self):
+        self._ler()
+
+    @rx.event
+    def set_grupo(self, v):
+        self.grupo = v if v in plantoes.GRUPOS else "capital"
         self._ler()
 
     def _depois(self, erro: str):
@@ -214,11 +224,6 @@ class PlantoesState(rx.State):
 
     @rx.event
     def tentar_de_novo(self):
-        plantoes.tentar_de_novo()
+        plantoes.tentar_de_novo(self.grupo)
         self._ler()
         return rx.toast.info("Vai tentar de novo em até 30 s (as já criadas são puladas).")
-
-    @rx.event
-    def nova_escala(self):
-        plantoes.nova_escala()
-        self._ler()

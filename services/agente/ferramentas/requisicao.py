@@ -171,9 +171,11 @@ def _exec_requisicoes(a: dict, s: Sessao) -> Resultado:
             feitas = {l["index"]: l for l in cp.status_linhas(chave)
                       if l["status"] == cp.STATUS_CONCLUIDO}
         else:
-            cp.inicializar(chave, total, fluxo="requisicao", origem="ui",
-                           matricula=s.matricula,
-                           referencias=[r.get("usuario_afetado", "") for r in reqs])
+            # Plantões (24/11) mandam o próprio fluxo e um rótulo por linha
+            # (local e dia) para o Meus fluxos.
+            refs = a.get("referencias") or [r.get("usuario_afetado", "") for r in reqs]
+            cp.inicializar(chave, total, fluxo=a.get("fluxo") or "requisicao", origem="ui",
+                           matricula=s.matricula, referencias=refs)
 
     resultado = []
     page = s.pagina()

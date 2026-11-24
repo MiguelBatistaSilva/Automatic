@@ -31,10 +31,13 @@ FLUXOS: dict[str, str] = {
     "desmembramento_itemb":    "Desmembramento · Corrigir Item B",
     "correcao_chamado":        "Correção (Edifício/Item B)",
     "requisicao":              "Requisição de Serviço",
+    # Sentinela da página Plantões Judiciários (24/11).
+    "plantoes_capital":        "Plantões · Capital",
+    "plantoes_interior":       "Plantões · Interior",
 }
 
 FILTRO_TODOS = "Todos"
-FILTROS_FLUXO: list[str] = [FILTRO_TODOS, "Desmembramento", "Requisição de Serviço"]
+FILTROS_FLUXO: list[str] = [FILTRO_TODOS, "Desmembramento", "Requisição de Serviço", "Plantões"]
 FILTROS_STATUS: list[str] = [FILTRO_TODOS, "Em andamento", "Concluído", "Substituído"]
 
 _STATUS_LINHA = {

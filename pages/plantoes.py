@@ -93,7 +93,7 @@ def _dias() -> rx.Component:
             lambda d: rx.badge(
                 d.rotulo,
                 rx.cond(
-                    PlantoesState.travada | d.fixo,
+                    PlantoesState.dias_travados | d.fixo,
                     rx.fragment(),
                     rx.icon("x", size=12, cursor="pointer",
                             on_click=PlantoesState.remover_dia(d.dia)),
@@ -201,19 +201,6 @@ def _sentinela() -> rx.Component:
                 spacing="2",
                 wrap="wrap",
             ),
-            rx.cond(
-                PlantoesState.resumo != "",
-                rx.box(rx.markdown(PlantoesState.resumo), width="100%"),
-            ),
-            rx.cond(
-                PlantoesState.fase == plantoes.ERRO,
-                botao_primario("Tentar de novo", on_click=PlantoesState.tentar_de_novo),
-            ),
-            rx.cond(
-                (PlantoesState.fase == plantoes.CONCLUIDO) | (PlantoesState.fase == plantoes.ERRO),
-                botao_secundario("Nova escala (próximo fim de semana)",
-                                 on_click=PlantoesState.nova_escala),
-            ),
             spacing="3",
             width="100%",
         ),
@@ -257,8 +244,7 @@ def _matriculas() -> rx.Component:
                 rx.hstack(
                     rx.spacer(),
                     rx.dialog.close(botao_secundario("Cancelar")),
-                    botao_primario("Salvar", on_click=PlantoesState.salvar_matriculas,
-                                   disabled=PlantoesState.travada),
+                    botao_primario("Salvar", on_click=PlantoesState.salvar_matriculas),
                     spacing="2",
                     width="100%",
                 ),
@@ -273,19 +259,43 @@ def _matriculas() -> rx.Component:
     )
 
 
-def _grupo(titulo: str, locais: tuple) -> rx.Component:
-    return rx.vstack(
-        rx.text(titulo, weight="bold", size="4"),
-        rx.accordion.root(
-            *[_local(chave, nome, horario, fila) for chave, nome, _, _, horario, fila in locais],
-            type="multiple",
-            default_value=[c for c, *_ in locais],
-            collapsible=True,
-            width="100%",
-            variant="outline",
-        ),
-        spacing="2",
+def _grupo(locais: tuple) -> rx.Component:
+    return rx.accordion.root(
+        *[_local(chave, nome, horario, fila) for chave, nome, _, _, horario, fila in locais],
+        type="multiple",
+        default_value=[c for c, *_ in locais],
+        collapsible=True,
         width="100%",
+        variant="outline",
+    )
+
+
+def _seletor() -> rx.Component:
+    return rx.segmented_control.root(
+        rx.segmented_control.item("Capital", value="capital"),
+        rx.segmented_control.item("Interior", value="interior"),
+        value=PlantoesState.grupo,
+        on_change=PlantoesState.set_grupo,
+    )
+
+
+def _resultado() -> rx.Component:
+    """Resultado da criação do bloco escolhido, abaixo dos acordeões (24/11)."""
+    return rx.cond(
+        PlantoesState.resumo != "",
+        rx.card(
+            rx.vstack(
+                rx.text("Resultado", weight="bold"),
+                rx.box(rx.markdown(PlantoesState.resumo), width="100%"),
+                rx.cond(
+                    PlantoesState.fase == plantoes.ERRO,
+                    botao_primario("Tentar de novo", on_click=PlantoesState.tentar_de_novo),
+                ),
+                spacing="2",
+                width="100%",
+            ),
+            width="100%",
+        ),
     )
 
 
@@ -295,13 +305,19 @@ def plantoes_page() -> rx.Component:
         rx.text(
             "Escolha o técnico de cada local em cada dia (a fila é a do local). Com o Sentry Mode "
             "ligado, as Requisições do plantão são criadas na véspera do 1º dia, no horário "
-            "marcado. Se a escala estiver incompleta, avisa e inicia assim que completar.",
+            "marcado. Capital e Interior são independentes: cada um é criado quando ele "
+            "estiver completo; o incompleto avisa e inicia assim que completar.",
             color="#6B7280",
         ),
         _sentinela(),
         _dias(),
-        _grupo("Capital", plantoes.CAPITAL),
-        _grupo("Interior (NACs)", plantoes.NACS),
+        _seletor(),
+        rx.cond(
+            PlantoesState.grupo == "capital",
+            _grupo(plantoes.CAPITAL),
+            _grupo(plantoes.NACS),
+        ),
+        _resultado(),
         spacing="4",
         width="100%",
     )
