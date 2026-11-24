@@ -413,6 +413,48 @@ def referencias(e: dict, grupo: str) -> list[str]:
             for _, nome, *_ in _locais_da(e, grupo) for d in datas(e)]
 
 
+def resultados(e: dict, grupo: str) -> list[dict]:
+    """Tabela "Resultados" da página (24/11): uma linha por Requisição do
+    bloco, com o número lido do checkpoint do lote (mesma chave que a criação
+    usa: o hash do texto). Vazia antes de criar; as linhas entram com o fluxo."""
+    from services.agente.ferramentas.requisicao import _texto_requisicoes
+    from services.dados import checkpoint as cp
+    from services.fluxos.flow_requisicao_pw import _chave_checkpoint
+
+    reqs = requisicoes(e, grupo)
+    if not reqs:
+        return []
+    feitas = {}
+    try:
+        chave = _chave_checkpoint(_texto_requisicoes(reqs))
+        feitas = {l["index"]: l for l in cp.status_linhas(chave)
+                  if l.get("status") == cp.STATUS_CONCLUIDO}
+    except Exception:
+        log.exception("Plantões: falha ao ler o checkpoint")
+    # As linhas ENTRAM conforme o fluxo anda (como na Requisição de Serviço):
+    # antes de criar, vazia. O laço é em ordem, então uma linha sem número
+    # ANTES da última criada já foi tentada e falhou; no fim (concluído/erro),
+    # todas as que não saíram são "Não criado".
+    fase = e["blocos"][grupo].get("fase")
+    if fase == CONCLUIDO or fase == ERRO:
+        ate = len(reqs)
+    elif fase == CRIANDO and feitas:
+        ate = max(feitas) + 1
+    else:
+        ate = 0
+    out = []
+    for i, (ref, r) in enumerate(zip(referencias(e, grupo), reqs)):
+        if i >= ate and i not in feitas:
+            continue
+        if i in feitas:
+            status, numero, cor = "Criado", feitas[i].get("numero", ""), "green"
+        else:
+            status, numero, cor = "Não criado", "--", "red"
+        out.append({"local": ref, "tecnico": r.get("usuario_atribuido") or "--",
+                    "numero": numero, "status": status, "cor": cor})
+    return out
+
+
 def momento_fixo(e: dict) -> datetime.datetime:
     """Quando inicia: véspera do 1º dia do plantão (sexta-feira feriado: a
     quinta), na hora configurada."""
@@ -566,6 +608,47 @@ def _concluir(grupo: str, fase: str, resumo: str) -> None:
         _gravar(con, e)
 
 
+# Log por bloco (24/11): o Sentinela roda no backend, fora da página; cada
+# passo vai para o banco e a página lê enquanto está aberta. Fica até a
+# próxima criação do mesmo bloco (para ver depois como foi).
+_CHAVE_LOG = "plantoes_log"
+_MAX_LOG = 500
+
+
+def registrar(grupo: str, msg: str, tipo: str = "info") -> None:
+    linha = {"ts": time.strftime("%d/%m %H:%M:%S"), "tipo": tipo, "msg": str(msg)}
+    with db.transacao() as con:
+        r = con.execute("SELECT valor FROM app_config WHERE chave = ?", (_CHAVE_LOG,)).fetchone()
+        try:
+            tudo = json.loads(r["valor"]) if r else {}
+        except (ValueError, KeyError):
+            tudo = {}
+        tudo[grupo] = (tudo.get(grupo) or [])[-(_MAX_LOG - 1):] + [linha]
+        con.execute("INSERT OR REPLACE INTO app_config VALUES (?, ?)",
+                    (_CHAVE_LOG, json.dumps(tudo, ensure_ascii=False)))
+    log.info("[%s] %s", grupo, msg)
+
+
+def limpar_log(grupo: str) -> None:
+    with db.transacao() as con:
+        r = con.execute("SELECT valor FROM app_config WHERE chave = ?", (_CHAVE_LOG,)).fetchone()
+        try:
+            tudo = json.loads(r["valor"]) if r else {}
+        except (ValueError, KeyError):
+            tudo = {}
+        tudo[grupo] = []
+        con.execute("INSERT OR REPLACE INTO app_config VALUES (?, ?)",
+                    (_CHAVE_LOG, json.dumps(tudo, ensure_ascii=False)))
+
+
+def linhas_log(grupo: str) -> list[dict]:
+    r = db.consultar("SELECT valor FROM app_config WHERE chave = ?", (_CHAVE_LOG,))
+    try:
+        return list((json.loads(r[0]["valor"]) if r else {}).get(grupo) or [])
+    except (ValueError, TypeError):
+        return []
+
+
 def _telegram(matricula: str, texto: str) -> None:
     from services.agente import agendados
     r = db.consultar("SELECT chat_id FROM bot_credenciais WHERE matricula = ? LIMIT 1",
@@ -579,25 +662,32 @@ def _criar(e: dict, grupo: str) -> None:
     from services.agente.sessao import Sessao
     from services.dados import credenciais
 
+    limpar_log(grupo)
+    registrar(grupo, f"Iniciando a criação dos plantões ({NOME_GRUPO[grupo]}).", "status")
     dono = e["sentinela"].get("matricula", "")
     matricula, senha = credenciais.carregar()
     if matricula != dono or not senha:
+        registrar(grupo, "A credencial do app não é a de quem ligou o Sentinela.", "error")
         _concluir(grupo, ERRO, "A credencial do app não é a de quem ligou o Sentinela.")
         return
     acao = requisicao._prep_requisicoes({"requisicoes": requisicoes(e, grupo)})
     if isinstance(acao, str):
+        registrar(grupo, acao, "error")
         _concluir(grupo, ERRO, acao)
         return
     # Meus fluxos: "Plantões · Capital/Interior", cada linha com local e dia.
     acao.args.update({"fluxo": f"plantoes_{grupo}", "referencias": referencias(e, grupo)})
-    sessao = Sessao(matricula, senha, lambda m, t="info": log.info("%s", m))
+    sessao = Sessao(matricula, senha, lambda m, t="info": registrar(grupo, m, t))
     try:
         res = requisicao._exec_requisicoes(acao.args, sessao)
         fase, texto = (CONCLUIDO if res.ok else ERRO), res.texto
     except Exception as ex:
         fase, texto = ERRO, f"❌ {ex or type(ex).__name__}"
+        registrar(grupo, f"Erro: {ex or type(ex).__name__}", "error")
     finally:
         sessao.fechar()
+    registrar(grupo, "Concluído." if fase == CONCLUIDO else "Parou com erro: confira o resultado.",
+              "success" if fase == CONCLUIDO else "error")
     _concluir(grupo, fase, texto)
     dias = ", ".join(rotulo_dia(d) for d in datas(e))
     _telegram(dono, f"🛡️ Plantões Judiciários · {NOME_GRUPO[grupo]} ({dias})\n\n{texto}")
@@ -611,6 +701,7 @@ def _avisar_incompleto(e: dict, grupo: str) -> None:
         e2 = _ler(con)
         e2["blocos"][grupo]["resumo"] = "⚠️ " + texto
         _gravar(con, e2)
+    registrar(grupo, texto, "error")
     _telegram(e["sentinela"].get("matricula", ""), "🛡️ Plantões Judiciários\n\n⚠️ " + texto)
 
 

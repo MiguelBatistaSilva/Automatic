@@ -11,6 +11,7 @@ import reflex as rx
 
 from components.botoes import botao_primario, botao_secundario
 from components.layout import page_layout
+from components.log_console import log_console
 from components.theme import TAMANHO_BOTAO
 from services import plantoes
 from state.plantoes_state import PlantoesState
@@ -279,23 +280,48 @@ def _seletor() -> rx.Component:
     )
 
 
-def _resultado() -> rx.Component:
-    """Resultado da criação do bloco escolhido, abaixo dos acordeões (24/11)."""
-    return rx.cond(
-        PlantoesState.resumo != "",
-        rx.card(
-            rx.vstack(
-                rx.text("Resultado", weight="bold"),
-                rx.box(rx.markdown(PlantoesState.resumo), width="100%"),
-                rx.cond(
-                    PlantoesState.fase == plantoes.ERRO,
-                    botao_primario("Tentar de novo", on_click=PlantoesState.tentar_de_novo),
-                ),
-                spacing="2",
-                width="100%",
+def _linha_resultado(r: rx.Var) -> rx.Component:
+    return rx.table.row(
+        rx.table.cell(r.local),
+        rx.table.cell(r.tecnico),
+        rx.table.cell(r.numero, font_weight="bold"),
+        rx.table.cell(
+            r.status,
+            color=rx.match(r.cor, ("green", "#16A34A"), ("red", "#DC2626"), "#6B7280"),
+            font_weight="bold",
+        ),
+    )
+
+
+def _resultados() -> rx.Component:
+    """Tabela "Resultados" do bloco escolhido, como na Requisição de Serviço (24/11)."""
+    return rx.vstack(
+        rx.hstack(
+            rx.heading("Resultados", size="4"),
+            rx.spacer(),
+            rx.cond(
+                PlantoesState.fase == plantoes.ERRO,
+                botao_primario("Tentar de novo", on_click=PlantoesState.tentar_de_novo),
             ),
+            align="center",
             width="100%",
         ),
+        rx.table.root(
+            rx.table.header(
+                rx.table.row(
+                    rx.table.column_header_cell("Local · dia"),
+                    rx.table.column_header_cell("Técnico"),
+                    rx.table.column_header_cell("Chamado criado"),
+                    rx.table.column_header_cell("Status"),
+                ),
+            ),
+            rx.table.body(rx.foreach(PlantoesState.resultados, _linha_resultado)),
+            width="100%",
+            variant="surface",
+        ),
+        spacing="2",
+        width="100%",
+        margin_top="0.5em",
     )
 
 
@@ -317,7 +343,9 @@ def plantoes_page() -> rx.Component:
             _grupo(plantoes.CAPITAL),
             _grupo(plantoes.NACS),
         ),
-        _resultado(),
+        _resultados(),
+        rx.heading("Registro de Execução", size="4", margin_top="0.5em"),
+        log_console(PlantoesState.logs),
         spacing="4",
         width="100%",
     )

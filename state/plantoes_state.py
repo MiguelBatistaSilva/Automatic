@@ -6,12 +6,20 @@ Sentinela de lá, no backend. A tela lê o banco ao abrir, a cada ação e no
 botão Atualizar.
 """
 
+import asyncio
 import dataclasses
 import datetime
+import time
+import uuid
 
 import reflex as rx
 
 from services import plantoes
+from state.flow_runner import LogLine
+
+# Enquanto a página está aberta, relê o banco (o Sentinela roda no backend).
+_ATUALIZAR_S = 3
+_DURACAO_S = 60 * 60
 
 
 @dataclasses.dataclass
@@ -22,6 +30,15 @@ class LinhaPlantao:
     data: str         # "22/11/2026"
     tecnico: str
     aviso: str        # técnico fora da fila do local
+
+
+@dataclasses.dataclass
+class ResultadoPlantao:
+    local: str        # "NAC Caucaia · sáb 28/11"
+    tecnico: str
+    numero: str       # chamado criado ("--" se ainda não)
+    status: str       # Criado | Não criado
+    cor: str
 
 
 @dataclasses.dataclass
@@ -39,6 +56,9 @@ class DiaExtra:
 
 class PlantoesState(rx.State):
     grupo: str = "capital"     # segmented control: "capital" | "interior"
+    logs: list[LogLine] = []   # do bloco escolhido (services/plantoes.registrar)
+    resultados: list[ResultadoPlantao] = []   # do bloco escolhido
+    _ronda: str = ""
     linhas: list[LinhaPlantao] = []
     dias: list[DiaPlantao] = []
     tecnicos: list[str] = []
@@ -86,6 +106,9 @@ class PlantoesState(rx.State):
             for chave, *_, fila in plantoes._locais_da(e) for d in ds
             for cel in [e["escala"][chave][d.isoformat()]]
         ]
+        self.logs = [LogLine(ts=l.get("ts", ""), tipo=l.get("tipo", "info"), msg=l.get("msg", ""))
+                     for l in plantoes.linhas_log(self.grupo)]
+        self.resultados = [ResultadoPlantao(**r) for r in plantoes.resultados(e, self.grupo)]
         self.ligado = bool(s.get("ligado"))
         b = e["blocos"][self.grupo]
         self.fase = b.get("fase") or ""
@@ -125,6 +148,25 @@ class PlantoesState(rx.State):
     @rx.event
     def carregar(self):
         self._ler()
+        return PlantoesState.acompanhar
+
+    @rx.event(background=True)
+    async def acompanhar(self):
+        """Relê a escala e o log a cada poucos segundos (1 h no máximo; abrir a
+        página de novo recomeça). Ronda nova para a anterior."""
+        ronda = uuid.uuid4().hex
+        async with self:
+            self._ronda = ronda
+        fim = time.time() + _DURACAO_S
+        while time.time() < fim:
+            await asyncio.sleep(_ATUALIZAR_S)
+            async with self:
+                if self._ronda != ronda:
+                    return
+                # "Inicia às" pode estar sendo digitado: não atropela.
+                hora = self.hora_hora
+                self._ler()
+                self.hora_hora = hora
 
     @rx.event
     def set_grupo(self, v):
