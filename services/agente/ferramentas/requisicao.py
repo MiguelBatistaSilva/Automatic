@@ -149,6 +149,17 @@ def requisicoes_coladas(mensagem: str) -> "Acao | None":
     return r if isinstance(r, Acao) else None
 
 
+def _descartar_formulario(page, log) -> None:
+    """27/11: Requisição que abortou deixa o formulário meio preenchido na
+    tela; reabrir a mesma URL não troca a tela e as SEGUINTES falhavam
+    esperando um formulário em branco. Recarregar descarta (mesmo recurso do
+    flow_corrigir_chamado_pw)."""
+    try:
+        page.reload()
+    except Exception as e:
+        log(f"Não consegui recarregar a página: {e}", "info")
+
+
 def _exec_requisicoes(a: dict, s: Sessao) -> Resultado:
     """Mesmo laço do state/requisicao_state.py, com o mesmo checkpoint: se
     parar no meio, rodar de novo (aqui ou na página) continua de onde parou.
@@ -193,6 +204,7 @@ def _exec_requisicoes(a: dict, s: Sessao) -> Resultado:
                 erro = "o fluxo não concluiu"
             if criada is None:
                 resultado.append(f"- ❌ {i + 1}. falhou ({erro})")
+                _descartar_formulario(page, log)
                 continue
             if modo_teste:
                 resultado.append(f"- ✅ {i + 1}. preenchida (simulação, não salva)")

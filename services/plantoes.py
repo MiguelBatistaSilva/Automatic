@@ -29,6 +29,11 @@ nada. Depois de começar a criar, o bloco trava (mudar mudaria a chave do
 checkpoint e criaria em dobro) e os dias travam para todos. Erro no meio:
 "Tentar de novo" do bloco retoma pelo checkpoint. Dias passados = escala nova
 sozinha (o botão "Nova escala" saiu em 24/11).
+Programado (27/11): depois de criar, cada chamado do bloco recebe 'Atendimento
+Programado' para o dia do plantão às 08:00 (flow_programar_pw, sem início
+automático: o técnico inicia). O que já foi programado fica em
+e['blocos'][grupo]['programados'] ({índice: número}); "Tentar de novo" não
+recria nem reprograma.
 Roda na máquina de quem ligou, com o login do app.
 """
 
@@ -81,6 +86,9 @@ SEMANA = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
 SEMANA_LONGA = ("segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo")
 # "Inicia às" (19/11): os chamados saem na VÉSPERA do 1º dia, nesta hora.
 HORA_FIXA_PADRAO = {"hora": "14:00"}
+# Programado (27/11): todo chamado do plantão fica para o dia dele, às 08:00.
+HORA_PROGRAMADO = "08:00"
+MOTIVO_PROGRAMADO = "Chamado programado conforme o plantão."
 
 _CHAVE = "plantoes_escala"
 _CHAVE_SUPERVISOR = "plantao_supervisor"            # capital
@@ -277,7 +285,8 @@ def rotulo_dia(d: datetime.date) -> str:
 # qualquer bloco começa a ser criado.
 
 def _bloco_vazio() -> dict:
-    return {"fase": "", "resumo": "", "avisou_incompleto": False, "quando": ""}
+    return {"fase": "", "resumo": "", "avisou_incompleto": False, "quando": "",
+            "programados": {}}
 
 
 def _nova(dias: list[datetime.date], sentinela: "dict | None" = None) -> dict:
@@ -413,24 +422,40 @@ def referencias(e: dict, grupo: str) -> list[str]:
             for _, nome, *_ in _locais_da(e, grupo) for d in datas(e)]
 
 
-def resultados(e: dict, grupo: str) -> list[dict]:
-    """Tabela "Resultados" da página (24/11): uma linha por Requisição do
-    bloco, com o número lido do checkpoint do lote (mesma chave que a criação
-    usa: o hash do texto). Vazia antes de criar; as linhas entram com o fluxo."""
+def _criadas(e: dict, grupo: str) -> dict[int, str]:
+    """{índice: número} das Requisições já criadas do bloco, lidas do
+    checkpoint do lote (mesma chave que a criação usa: o hash do texto)."""
     from services.agente.ferramentas.requisicao import _texto_requisicoes
     from services.dados import checkpoint as cp
     from services.fluxos.flow_requisicao_pw import _chave_checkpoint
 
     reqs = requisicoes(e, grupo)
     if not reqs:
-        return []
-    feitas = {}
+        return {}
     try:
         chave = _chave_checkpoint(_texto_requisicoes(reqs))
-        feitas = {l["index"]: l for l in cp.status_linhas(chave)
-                  if l.get("status") == cp.STATUS_CONCLUIDO}
+        return {l["index"]: l.get("numero", "") for l in cp.status_linhas(chave)
+                if l.get("status") == cp.STATUS_CONCLUIDO}
     except Exception:
         log.exception("Plantões: falha ao ler o checkpoint")
+        return {}
+
+
+def _dias_das_linhas(e: dict, grupo: str) -> list[datetime.date]:
+    """O dia de cada Requisição, na ordem do montar (local por local, todos
+    os dias de cada um)."""
+    return [d for _ in _locais_da(e, grupo) for d in datas(e)]
+
+
+def resultados(e: dict, grupo: str) -> list[dict]:
+    """Tabela "Resultados" da página (24/11): uma linha por Requisição do
+    bloco, com o número lido do checkpoint do lote. Vazia antes de criar; as
+    linhas entram com o fluxo. Desde 27/11 mostra também se foi programada."""
+    reqs = requisicoes(e, grupo)
+    if not reqs:
+        return []
+    feitas = _criadas(e, grupo)
+    programados = e["blocos"][grupo].get("programados") or {}
     # As linhas ENTRAM conforme o fluxo anda (como na Requisição de Serviço):
     # antes de criar, vazia. O laço é em ordem, então uma linha sem número
     # ANTES da última criada já foi tentada e falhou; no fim (concluído/erro),
@@ -446,8 +471,13 @@ def resultados(e: dict, grupo: str) -> list[dict]:
     for i, (ref, r) in enumerate(zip(referencias(e, grupo), reqs)):
         if i >= ate and i not in feitas:
             continue
-        if i in feitas:
-            status, numero, cor = "Criado", feitas[i].get("numero", ""), "green"
+        if str(i) in programados:
+            status, numero, cor = "Programado", feitas.get(i) or programados[str(i)], "green"
+        elif i in feitas:
+            # Criado e ainda sem a programação: no fim, é pendência.
+            fim = fase in (CONCLUIDO, ERRO)
+            status = "Criado, não programado" if fim else "Criado"
+            numero, cor = feitas[i], ("orange" if fim else "")
         else:
             status, numero, cor = "Não criado", "--", "red"
         out.append({"local": ref, "tecnico": r.get("usuario_atribuido") or "--",
@@ -680,7 +710,11 @@ def _criar(e: dict, grupo: str) -> None:
     sessao = Sessao(matricula, senha, lambda m, t="info": registrar(grupo, m, t))
     try:
         res = requisicao._exec_requisicoes(acao.args, sessao)
-        fase, texto = (CONCLUIDO if res.ok else ERRO), res.texto
+        # Programa o que foi criado, mesmo se a criação parou no meio.
+        prog, criados = _programar(e, grupo, sessao)
+        texto = (f"{res.texto}\n\n**Atendimento Programado** — {prog} de {criados}, "
+                 f"às {HORA_PROGRAMADO} do dia de cada plantão.")
+        fase = CONCLUIDO if res.ok and prog == criados else ERRO
     except Exception as ex:
         fase, texto = ERRO, f"❌ {ex or type(ex).__name__}"
         registrar(grupo, f"Erro: {ex or type(ex).__name__}", "error")
@@ -691,6 +725,47 @@ def _criar(e: dict, grupo: str) -> None:
     _concluir(grupo, fase, texto)
     dias = ", ".join(rotulo_dia(d) for d in datas(e))
     _telegram(dono, f"🛡️ Plantões Judiciários · {NOME_GRUPO[grupo]} ({dias})\n\n{texto}")
+
+
+def _programados(grupo: str) -> dict:
+    return dict(estado()["blocos"][grupo].get("programados") or {})
+
+
+def _marcar_programado(grupo: str, i: int, numero: str) -> None:
+    with db.transacao() as con:
+        e = _ler(con)
+        e["blocos"][grupo].setdefault("programados", {})[str(i)] = numero
+        _gravar(con, e)
+
+
+def _programar(e: dict, grupo: str, sessao) -> tuple[int, int]:
+    """'Atendimento Programado' em cada chamado criado do bloco, para o dia
+    dele às 08:00. Pula os já programados. Devolve (programados, criados)."""
+    from services.fluxos.flow_programar_pw import programar_atendimento
+
+    criadas = _criadas(e, grupo)
+    dias = _dias_das_linhas(e, grupo)
+    feitos = _programados(grupo)
+    pendentes = [i for i in sorted(criadas) if str(i) not in feitos and criadas[i]]
+    if pendentes:
+        registrar(grupo, f"Programando {len(pendentes)} chamado(s) para as "
+                         f"{HORA_PROGRAMADO} do dia de cada plantão.", "status")
+        page = sessao.pagina()
+    for i in pendentes:
+        numero, dia = criadas[i], f"{dias[i]:%d/%m}"
+        registrar(grupo, f"Programando {numero} para {dia} às {HORA_PROGRAMADO}...", "status")
+        try:
+            ok, _ = programar_atendimento(page, sessao.log, numero, dia,
+                                          HORA_PROGRAMADO, MOTIVO_PROGRAMADO)
+        except Exception as ex:
+            ok = False
+            registrar(grupo, f"Erro: {ex or type(ex).__name__}", "error")
+        if ok:
+            _marcar_programado(grupo, i, numero)
+        else:
+            registrar(grupo, f"{numero}: não foi programado. Confira no Assyst.", "error")
+    feitos = _programados(grupo)
+    return sum(1 for i in criadas if str(i) in feitos), len(criadas)
 
 
 def _avisar_incompleto(e: dict, grupo: str) -> None:

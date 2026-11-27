@@ -258,6 +258,13 @@ class RequisicaoState(FlowRunnerState, rx.State):  # mixin + rx.State: logs/roda
                                   else "✗ Falhou")
                         erro, mostrado = True, "--"
                         usuario = colado  # falhou antes de dar para ler o nome
+                        if not caiu:
+                            # 27/11: descarta o formulario meio preenchido; sem
+                            # isso as SEGUINTES falhavam esperando a tela em branco.
+                            try:
+                                page.reload()
+                            except Exception:
+                                pass
                     else:
                         status, erro, mostrado = "✓ Criada", False, resultado.numero
                         usuario = resultado.usuario

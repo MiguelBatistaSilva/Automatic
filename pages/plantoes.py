@@ -287,7 +287,7 @@ def _linha_resultado(r: rx.Var) -> rx.Component:
         rx.table.cell(r.numero, font_weight="bold"),
         rx.table.cell(
             r.status,
-            color=rx.match(r.cor, ("green", "#16A34A"), ("red", "#DC2626"), "#6B7280"),
+            color=rx.match(r.cor, ("green", "#16A34A"), ("red", "#DC2626"), ("orange", "#D97706"), "#6B7280"),
             font_weight="bold",
         ),
     )

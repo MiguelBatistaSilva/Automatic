@@ -636,6 +636,13 @@ def _preencher_item_b(page, log, prefixo, campo, valor: str,
         log(f"{campo.rotulo}: {atual} (ja preenchido pelo Assyst)", "success")
         return True
 
+    # 27/11: valor que NAO e tombo (ex.: 'IC NÃO LOCALIZADO', dos Plantões) vai
+    # pelo lookup comum (lista de sugestoes + clique). Pelo caminho do tombo ele
+    # resolvia com o MESMO texto digitado e a regra "so conta se mudou" (28/10)
+    # nunca aceitava: 15 s e abortava.
+    if not valor.startswith("*"):
+        return selecionar_lookup(page, log, prefixo, campo, valor)
+
     if not _esperar_editavel(page, log, sel, campo):
         return False
 

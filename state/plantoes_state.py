@@ -37,7 +37,7 @@ class ResultadoPlantao:
     local: str        # "NAC Caucaia · sáb 28/11"
     tecnico: str
     numero: str       # chamado criado ("--" se ainda não)
-    status: str       # Criado | Não criado
+    status: str       # Programado | Criado | Criado, não programado | Não criado
     cor: str
 
 
@@ -202,11 +202,13 @@ class PlantoesState(rx.State):
         import re
         cap = re.sub(r"\D", "", self.sup_capital)
         nac = re.sub(r"\D", "", self.sup_nac)
-        if not cap or not nac:
-            return rx.toast.error("Informe as duas matrículas (capital e NACs).")
+        # 27/11: cada matrícula salva sozinha. Exigir as duas impedia gravar a
+        # da capital e o bloco Capital não saía (o Interior cobra a dele).
+        if not cap and not nac:
+            return rx.toast.error("Informe ao menos uma matrícula.")
         erro = ""
         for m, e_nac in ((cap, False), (nac, True)):
-            if m != plantoes.supervisor(nac=e_nac):
+            if m and m != plantoes.supervisor(nac=e_nac):
                 erro = plantoes.definir_supervisor(m, e_nac) or erro
         self._ler()
         if erro:
